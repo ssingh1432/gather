@@ -11,6 +11,7 @@ create type public.media_type as enum ('image','video');
 
 create table public.users (
   id uuid primary key references auth.users(id) on delete cascade,
+  email text unique not null,
   username text unique not null,
   bio text default '',
   profile_photo_url text,

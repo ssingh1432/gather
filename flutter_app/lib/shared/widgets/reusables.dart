@@ -36,12 +36,13 @@ class CommunityCard extends StatelessWidget {
   final Map<String, dynamic> community;
   final VoidCallback onOpen;
   final VoidCallback onJoinLeave;
-  const CommunityCard({super.key, required this.community, required this.onOpen, required this.onJoinLeave});
+  final bool joined;
+  const CommunityCard({super.key, required this.community, required this.onOpen, required this.onJoinLeave, required this.joined});
   @override
   Widget build(BuildContext context) => ListTile(
         onTap: onOpen,
         title: Text(community['name'] ?? ''),
         subtitle: Text(community['description'] ?? ''),
-        trailing: TextButton(onPressed: onJoinLeave, child: const Text('Join/Leave')),
+        trailing: TextButton(onPressed: onJoinLeave, child: Text(joined ? 'Leave' : 'Join')),
       );
 }

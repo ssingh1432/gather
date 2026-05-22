@@ -15,9 +15,33 @@ class HomeFeedScreen extends ConsumerStatefulWidget {
 
 class _S extends ConsumerState<HomeFeedScreen> {
   int page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _guardBannedUser();
+  }
+
+  Future<void> _guardBannedUser() async {
+    final uid = SupabaseConfig.client.auth.currentUser?.id;
+    if (uid == null) return;
+    final user = await SupabaseConfig.client.from('users').select('status').eq('id', uid).maybeSingle();
+    if (user?['status'] == 'banned' && mounted) {
+      await SupabaseConfig.client.auth.signOut();
+      if (mounted) context.go('/login');
+    }
+  }
+
   final repo = FeedRepository();
-  final liked = <String>{};
-  final bookmarked = <String>{};
+  Set<String> liked = <String>{};
+  Set<String> bookmarked = <String>{};
+  List<String> _lastLoadedIds = const [];
+
+  Future<void> _refreshStates(List<String> ids, String uid) async {
+    liked = await repo.likedPostIds(uid, ids);
+    bookmarked = await repo.bookmarkedPostIds(uid, ids);
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext c) {
@@ -26,44 +50,38 @@ class _S extends ConsumerState<HomeFeedScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Home')),
       body: feed.when(
-        data: (posts) => RefreshIndicator(
-          onRefresh: () async => ref.refresh(homeFeedProvider(page)),
-          child: ListView(
-            children: [
-              if (posts.isEmpty) const ListTile(title: Text('No posts yet')),
-              ...posts.map(
-                (p) => PostCard(
-                  post: p,
-                  liked: liked.contains(p.id),
-                  bookmarked: bookmarked.contains(p.id),
-                  onLike: () async {
-                    if (uid == null) return;
-                    if (liked.contains(p.id)) {
-                      await repo.unlikePost(p.id, uid);
-                      liked.remove(p.id);
-                    } else {
-                      await repo.likePost(p.id, uid);
-                      liked.add(p.id);
-                    }
-                    setState(() {});
-                  },
-                  onComment: () => context.push('/post?id=${p.id}'),
-                  onBookmark: () async {
-                    if (uid == null) return;
-                    if (bookmarked.contains(p.id)) {
-                      await repo.unbookmarkPost(p.id, uid);
-                      bookmarked.remove(p.id);
-                    } else {
-                      await repo.bookmarkPost(p.id, uid);
-                      bookmarked.add(p.id);
-                    }
-                    setState(() {});
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
+        data: (posts) {
+          final ids = posts.map((e) => e.id).toList();
+          if (uid != null && ids.join(',') != _lastLoadedIds.join(',')) {
+            _lastLoadedIds = ids;
+            WidgetsBinding.instance.addPostFrameCallback((_) => _refreshStates(ids, uid));
+          }
+          return RefreshIndicator(
+            onRefresh: () async => ref.refresh(homeFeedProvider(page)),
+            child: ListView(
+              children: [
+                if (posts.isEmpty) const ListTile(title: Text('No posts yet')),
+                ...posts.map((p) => PostCard(post: p, liked: liked.contains(p.id), bookmarked: bookmarked.contains(p.id), onLike: () async {
+                      if (uid == null) return;
+                      if (liked.contains(p.id)) {
+                        await repo.unlikePost(p.id, uid);
+                      } else {
+                        await repo.likePost(p.id, uid);
+                      }
+                      await _refreshStates(posts.map((e) => e.id).toList(), uid);
+                    }, onComment: () => context.push('/post?id=${p.id}'), onBookmark: () async {
+                      if (uid == null) return;
+                      if (bookmarked.contains(p.id)) {
+                        await repo.unbookmarkPost(p.id, uid);
+                      } else {
+                        await repo.bookmarkPost(p.id, uid);
+                      }
+                      await _refreshStates(posts.map((e) => e.id).toList(), uid);
+                    })),
+              ],
+            ),
+          );
+        },
         error: (e, _) => Center(child: Text('Error: $e')),
         loading: () => const Center(child: CircularProgressIndicator()),
       ),
