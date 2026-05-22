@@ -1,32 +1,32 @@
-# Gather Flutter MVP
+# Flutter App (Gather)
 
-## Run app
-1. Install Flutter 3.22+.
-2. Copy `.env.example` to `.env` and fill Supabase values.
-3. Run:
-   - `flutter pub get`
-   - `flutter run`
+## Current completed features
+- Auth screens (login/signup/forgot) and auth redirect guards.
+- Feed, communities, posts, profile, search, notifications, bookmarks, reports, moderation.
+- Reusable UI: post card, community card, profile avatar.
 
-## Supabase setup
-- Uses `supabase_flutter` initialization in `lib/core/supabase_client.dart`.
-- Auth flows: signup/login/logout/reset password.
-
-## Database migration
-Apply existing schema:
+## Setup
 ```bash
-supabase db reset
-# or execute database/migrations/001_initial_schema.sql against your project
+cp .env.example .env
+flutter pub get
+flutter run
 ```
 
-## Completed MVP features
-- App structure with clean layers (core, features, shared).
-- GoRouter screen navigation for all required screens.
-- Supabase auth service and state stream providers.
-- Feed repository with chronological ordering and pagination.
-- Post interactions: like/unlike/bookmark (repository methods).
-- Baseline tests (validation/provider/mock/widget smoke).
+## Supabase migration steps
+1. Open Supabase SQL editor.
+2. Execute `../database/migrations/001_initial_schema.sql`.
+3. Verify `users`, `community_memberships`, `post_comments`, `user_follows`, `user_blocks`, `post_media` exist.
 
-## Remaining for short-video expansion
-- Video upload/transcoding pipeline.
-- Reels-style playback/feed ranking.
-- Rich moderation tooling for video reports.
+## Storage setup
+- Create `post-media` bucket (public read).
+- Allow authenticated uploads for post owners.
+
+## Remaining work
+- Improve bottom nav shell UX and route polish.
+- Add richer validation and offline behavior.
+- Expand automated integration tests.
+
+## Short-video roadmap
+- Post creation toggle for image/video.
+- Video player feed and preload strategy.
+- Creator analytics and moderation for video-specific reports.

@@ -1,13 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/supabase_client.dart';
+import '../data/repositories.dart';
 
-class AdminModerationScreen extends StatelessWidget {
-  const AdminModerationScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('AdminModerationScreen')),
-      body: const Center(child: Text('AdminModerationScreen')),
-    );
-  }
-}
+class AdminModerationScreen extends StatelessWidget { const AdminModerationScreen({super.key}); @override Widget build(BuildContext c){final uid=SupabaseConfig.client.auth.currentUser?.id;return Scaffold(appBar:AppBar(title:const Text('Moderation')),body:FutureBuilder(future:uid==null?Future.value(null):SupabaseConfig.client.from('users').select().eq('id',uid).single(),builder:(c,s){if(!s.hasData)return const Center(child:CircularProgressIndicator());final me=s.data as Map<String,dynamic>?;if(me==null || !['admin','moderator'].contains(me['role'])) return const Center(child:Text('Access denied'));return FutureBuilder(future:ModerationRepository().openReports(),builder:(c,r){if(!r.hasData)return const CircularProgressIndicator();final reports=r.data!;return ListView(children:reports.map((e)=>ListTile(title:Text(e['reason']),subtitle:Text(e['target_type']),trailing:Wrap(children:[IconButton(onPressed:()async{if(e['target_post_id']!=null) await ModerationRepository().removePost(e['target_post_id']);},icon:const Icon(Icons.delete)),IconButton(onPressed:()async{if(e['target_user_id']!=null) await ModerationRepository().banUser(e['target_user_id']);},icon:const Icon(Icons.block))]))).toList());});}));}}
