@@ -15,7 +15,9 @@ class PostCard extends StatelessWidget {
   final VoidCallback onLike;
   final VoidCallback onBookmark;
   final VoidCallback onComment;
-  const PostCard({super.key, required this.post, required this.onLike, required this.onBookmark, required this.onComment});
+  final bool liked;
+  final bool bookmarked;
+  const PostCard({super.key, required this.post, required this.onLike, required this.onBookmark, required this.onComment, this.liked = false, this.bookmarked = false});
   @override
   Widget build(BuildContext context) => Card(
         child: Padding(
@@ -24,7 +26,7 @@ class PostCard extends StatelessWidget {
             Text(post.authorUsername ?? 'Unknown', style: Theme.of(context).textTheme.titleMedium),
             if (post.textContent.isNotEmpty) Text(post.textContent),
             if (post.imageUrl != null) Padding(padding: const EdgeInsets.only(top: 8), child: Image.network(post.imageUrl!, height: 180, fit: BoxFit.cover)),
-            Row(children: [IconButton(onPressed: onLike, icon: const Icon(Icons.favorite_border)), IconButton(onPressed: onComment, icon: const Icon(Icons.comment_outlined)), IconButton(onPressed: onBookmark, icon: const Icon(Icons.bookmark_border))])
+            Row(children: [IconButton(onPressed: onLike, icon: Icon(liked ? Icons.favorite : Icons.favorite_border)), IconButton(onPressed: onComment, icon: const Icon(Icons.comment_outlined)), IconButton(onPressed: onBookmark, icon: Icon(bookmarked ? Icons.bookmark : Icons.bookmark_border))])
           ]),
         ),
       );
