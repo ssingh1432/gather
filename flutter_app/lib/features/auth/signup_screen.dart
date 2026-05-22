@@ -7,6 +7,7 @@ class SignupScreen extends ConsumerWidget {
   SignupScreen({super.key});
   final email = TextEditingController();
   final password = TextEditingController();
+  final username = TextEditingController();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -15,11 +16,12 @@ class SignupScreen extends ConsumerWidget {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(children: [
-          TextField(controller: email),
-          TextField(controller: password, obscureText: true),
+          TextField(controller: username, decoration: const InputDecoration(labelText: 'Username')),
+          TextField(controller: email, decoration: const InputDecoration(labelText: 'Email')),
+          TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
           ElevatedButton(
             onPressed: () async {
-              await ref.read(authServiceProvider).signUp(email.text.trim(), password.text.trim());
+              await ref.read(authServiceProvider).signUp(email.text.trim(), password.text.trim(), username: username.text.trim());
             },
             child: const Text('Create account'),
           )
