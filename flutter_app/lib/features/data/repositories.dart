@@ -9,41 +9,52 @@ import '../../shared/models/models.dart';
 class FeedRepository {
   SupabaseClient get _c => SupabaseConfig.client;
 
-  Future<List<PostModel>> homeFeed({int page = 0, int pageSize = 20}) async {
-    final from = page * pageSize;
-    final to = from + pageSize - 1;
-    final data = await _c
-        .from('posts')
-        .select('*, users(username), post_media(media_url)')
-        .eq('is_removed', false)
-        .order('created_at', ascending: false)
-        .range(from, to);
-    return (data as List).map((e) => PostModel.fromMap(e)).toList();
+  Future<List<PostModel>> homeFeed(String userId, {int page = 0, int pageSize = 20}) async {
+    final memberships = await _c.from('community_memberships').select('community_id').eq('user_id', userId);
+    final follows = await _c.from('user_follows').select('following_id').eq('follower_id', userId);
+    final communityIds = (memberships as List).map((e) => e['community_id'].toString()).toSet();
+    final followingIds = (follows as List).map((e) => e['following_id'].toString()).toSet();
+
+    final data = await _c.from('posts').select('*, users!posts_author_id_fkey(username), post_media(media_url)').eq('is_removed', false).order('created_at', ascending: false).range(page * pageSize, page * pageSize + pageSize - 1);
+    final filtered = (data as List).where((e) {
+      final authorId = e['author_id']?.toString();
+      final communityId = e['community_id']?.toString();
+      return authorId == userId || followingIds.contains(authorId) || (communityId != null && communityIds.contains(communityId));
+    }).toList();
+    return filtered.map((e) => PostModel.fromMap(e)).toList();
   }
 
   Future<PostModel> getPost(String postId) async {
-    final data = await _c.from('posts').select('*, users(username), post_media(media_url)').eq('id', postId).single();
+    final data = await _c.from('posts').select('*, users!posts_author_id_fkey(username), post_media(media_url)').eq('id', postId).single();
     return PostModel.fromMap(data);
   }
 
   Future<List<Map<String, dynamic>>> comments(String postId) async =>
-      ((await _c.from('post_comments').select('*, users(username)').eq('post_id', postId).order('created_at')) as List).cast<Map<String, dynamic>>();
+      ((await _c.from('post_comments').select('*, users!post_comments_user_id_fkey(username)').eq('post_id', postId).order('created_at')) as List).cast<Map<String, dynamic>>();
 
-  Future<void> addComment(String postId, String userId, String content) =>
-      _c.from('post_comments').insert({'post_id': postId, 'author_id': userId, 'content': content});
+  Future<void> addComment(String postId, String userId, String content) => _c.from('post_comments').insert({'post_id': postId, 'user_id': userId, 'content': content});
 
   Future<List<PostModel>> communityFeed(String communityId, {int page = 0, int pageSize = 20}) async {
-    final data = await _c.from('posts').select('*, users(username), post_media(media_url)').eq('community_id', communityId).order('created_at', ascending: false).range(page * pageSize, page * pageSize + pageSize - 1);
+    final data = await _c.from('posts').select('*, users!posts_author_id_fkey(username), post_media(media_url)').eq('community_id', communityId).order('created_at', ascending: false).range(page * pageSize, page * pageSize + pageSize - 1);
     return (data as List).map((e) => PostModel.fromMap(e)).toList();
   }
 
-  Future<void> likePost(String postId, String userId) => _c.from('post_likes').insert({'post_id': postId, 'user_id': userId});
-  Future<void> unlikePost(String postId, String userId) => _c.from('post_likes').delete().match({'post_id': postId, 'user_id': userId});
-  Future<void> bookmarkPost(String postId, String userId) => _c.from('bookmarks').insert({'post_id': postId, 'user_id': userId});
-  Future<void> unbookmarkPost(String postId, String userId) => _c.from('bookmarks').delete().match({'post_id': postId, 'user_id': userId});
+  Future<Set<String>> likedPostIds(String userId, List<String> postIds) async {
+    if (postIds.isEmpty) return {};
+    final data = await _c.from('post_likes').select('post_id').eq('user_id', userId).inFilter('post_id', postIds);
+    return (data as List).map((e) => e['post_id'].toString()).toSet();
+  }
 
-  Future<void> createNotification({required String recipientId, required String actorId, required String type, String? postId}) =>
-      _c.from('notifications').insert({'recipient_id': recipientId, 'actor_id': actorId, 'type': type, 'post_id': postId});
+  Future<Set<String>> bookmarkedPostIds(String userId, List<String> postIds) async {
+    if (postIds.isEmpty) return {};
+    final data = await _c.from('bookmarks').select('post_id').eq('user_id', userId).inFilter('post_id', postIds);
+    return (data as List).map((e) => e['post_id'].toString()).toSet();
+  }
+
+  Future<void> likePost(String postId, String userId) => _c.from('post_likes').upsert({'post_id': postId, 'user_id': userId});
+  Future<void> unlikePost(String postId, String userId) => _c.from('post_likes').delete().match({'post_id': postId, 'user_id': userId});
+  Future<void> bookmarkPost(String postId, String userId) => _c.from('bookmarks').upsert({'post_id': postId, 'user_id': userId});
+  Future<void> unbookmarkPost(String postId, String userId) => _c.from('bookmarks').delete().match({'post_id': postId, 'user_id': userId});
 }
 
 class CommunityRepository {
@@ -55,32 +66,45 @@ class CommunityRepository {
     return (data as List).cast<Map<String, dynamic>>();
   }
 
-  Future<bool> isJoined(String communityId, String userId) async =>
-      (await _c.from('community_memberships').select('community_id').match({'community_id': communityId, 'user_id': userId}).maybeSingle()) != null;
+  Future<bool> isJoined(String communityId, String userId) async => (await _c.from('community_memberships').select('community_id').match({'community_id': communityId, 'user_id': userId}).maybeSingle()) != null;
+  Future<Map<String, bool>> joinedStates(List<String> communityIds, String userId) async {
+    if (communityIds.isEmpty) return {};
+    final rows = await _c.from('community_memberships').select('community_id').eq('user_id', userId).inFilter('community_id', communityIds);
+    final joined = (rows as List).map((e) => e['community_id'].toString()).toSet();
+    return {for (final id in communityIds) id: joined.contains(id)};
+  }
 
   Future<Map<String, dynamic>> createCommunity(Map<String, dynamic> payload) async => await _c.from('communities').insert(payload).select().single();
-  Future<void> joinCommunity(String communityId, String userId) => _c.from('community_memberships').insert({'community_id': communityId, 'user_id': userId});
+  Future<void> joinCommunity(String communityId, String userId) => _c.from('community_memberships').upsert({'community_id': communityId, 'user_id': userId});
   Future<void> leaveCommunity(String communityId, String userId) => _c.from('community_memberships').delete().match({'community_id': communityId, 'user_id': userId});
 }
 
-class ProfileRepository { SupabaseClient get _c => SupabaseConfig.client;
+class ProfileRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
   Future<Map<String, dynamic>?> loadProfile(String userId) async => await _c.from('users').select().eq('id', userId).maybeSingle();
   Future<int> followers(String userId) async => await _c.from('user_follows').count(CountOption.exact).eq('following_id', userId);
   Future<int> following(String userId) async => await _c.from('user_follows').count(CountOption.exact).eq('follower_id', userId);
   Future<void> updateProfile(String userId, Map<String, dynamic> payload) => _c.from('users').update(payload).eq('id', userId);
-  Future<void> follow(String targetId, String userId) => _c.from('user_follows').insert({'following_id': targetId, 'follower_id': userId});
+  Future<void> follow(String targetId, String userId) => _c.from('user_follows').upsert({'following_id': targetId, 'follower_id': userId});
   Future<void> unfollow(String targetId, String userId) => _c.from('user_follows').delete().match({'following_id': targetId, 'follower_id': userId});
-  Future<void> block(String targetId, String userId) => _c.from('user_blocks').insert({'blocked_id': targetId, 'blocker_id': userId});
+  Future<void> block(String targetId, String userId) => _c.from('user_blocks').upsert({'blocked_id': targetId, 'blocker_id': userId});
 }
 
-class PostRepository { SupabaseClient get _c => SupabaseConfig.client;
+class PostRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
   Future<void> createPost(Map<String, dynamic> payload) => _c.from('posts').insert(payload);
   Future<void> addComment(Map<String, dynamic> payload) => _c.from('post_comments').insert(payload);
-  Future<String?> uploadPostImage(String userId, XFile file) async { final path = '$userId/${DateTime.now().millisecondsSinceEpoch}_${file.name}'; await _c.storage.from('post-media').upload(path, File(file.path)); return _c.storage.from('post-media').getPublicUrl(path); }
+  Future<String?> uploadPostImage(String userId, XFile file) async {
+    final path = '$userId/${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+    await _c.storage.from('post-media').upload(path, File(file.path));
+    return _c.storage.from('post-media').getPublicUrl(path);
+  }
+
   Future<void> addPostMedia(String postId, String mediaUrl) => _c.from('post_media').insert({'post_id': postId, 'media_type': 'image', 'media_url': mediaUrl});
 }
 
-class ModerationRepository { SupabaseClient get _c => SupabaseConfig.client;
+class ModerationRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
   Future<void> report(Map<String, dynamic> payload) => _c.from('reports').insert(payload);
   Future<List<Map<String, dynamic>>> openReports() async => ((await _c.from('reports').select().eq('status', 'open')) as List).cast<Map<String, dynamic>>();
   Future<void> removePost(String postId) => _c.from('posts').update({'is_removed': true}).eq('id', postId);

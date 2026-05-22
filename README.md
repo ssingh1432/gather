@@ -9,7 +9,7 @@
 - Search, notifications, bookmarks, reports, admin moderation tools.
 
 ## Setup
-1. Copy `flutter_app/.env.example` to `flutter_app/.env` and fill Supabase URL/key.
+1. Copy `flutter_app/.env.example` to `flutter_app/.env` and set `SUPABASE_URL` + `SUPABASE_ANON_KEY`.
 2. `cd flutter_app && flutter pub get && flutter run`.
 
 ## Supabase migration
@@ -18,7 +18,7 @@
 
 ## Storage bucket setup
 - Create public bucket named `post-media`.
-- Grant authenticated upload/read via Supabase policies.
+- Apply explicit `storage.objects` policies documented in `flutter_app/README.md`.
 
 ## Remaining work
 - Rich comments UX, realtime updates, robust optimistic state.

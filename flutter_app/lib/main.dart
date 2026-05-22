@@ -8,7 +8,11 @@ import 'core/supabase_client.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (_) {
+    // Allow startup without a local .env (e.g. CI/tests).
+  }
   if (AppEnv.supabaseUrl.isNotEmpty && AppEnv.supabaseAnonKey.isNotEmpty) {
     await SupabaseConfig.initialize();
   }
