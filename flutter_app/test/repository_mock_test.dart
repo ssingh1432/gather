@@ -1,13 +1,21 @@
 import 'package:flutter_test/flutter_test.dart';
-
-class FakeFeedRepository {
-  Future<List<String>> homeFeed() async => ['post_1', 'post_2'];
-}
+import 'package:gather_app/shared/models/models.dart';
 
 void main() {
-  test('repository mock returns list', () async {
-    final repo = FakeFeedRepository();
-    final posts = await repo.homeFeed();
-    expect(posts.length, 2);
+  test('PostModel.fromMap parses schema-aligned fields', () {
+    final post = PostModel.fromMap({
+      'id': 'p1',
+      'author_id': 'u1',
+      'text_content': 'hello',
+      'created_at': '2026-01-01T00:00:00Z',
+      'users': {'username': 'alice'},
+      'post_media': [
+        {'media_url': 'https://img'}
+      ]
+    });
+    expect(post.authorId, 'u1');
+    expect(post.textContent, 'hello');
+    expect(post.authorUsername, 'alice');
+    expect(post.imageUrl, 'https://img');
   });
 }

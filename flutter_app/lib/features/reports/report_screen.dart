@@ -1,13 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/supabase_client.dart';
 
-class ReportScreen extends StatelessWidget {
-  const ReportScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('ReportScreen')),
-      body: const Center(child: Text('ReportScreen')),
-    );
-  }
-}
+class ReportScreen extends StatefulWidget { const ReportScreen({super.key}); @override State<ReportScreen> createState()=>_R(); }
+class _R extends State<ReportScreen>{String type='post';final id=TextEditingController(),reason=TextEditingController();String? msg;@override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Report')),body:Padding(padding:const EdgeInsets.all(16),child:Column(children:[DropdownButton<String>(value:type,items:const [DropdownMenuItem(value:'post',child:Text('Post')),DropdownMenuItem(value:'user',child:Text('User'))],onChanged:(v)=>setState(()=>type=v!)),TextField(controller:id,decoration:const InputDecoration(labelText:'Target ID')),TextField(controller:reason,decoration:const InputDecoration(labelText:'Reason')),ElevatedButton(onPressed:()async{final uid=SupabaseConfig.client.auth.currentUser?.id;if(uid==null)return;await SupabaseConfig.client.from('reports').insert({'reporter_id':uid,'target_type':type,'target_post_id':type=='post'?id.text.trim():null,'target_user_id':type=='user'?id.text.trim():null,'reason':reason.text.trim()});setState(()=>msg='Report submitted');}, child:const Text('Submit')),if(msg!=null) Text(msg!)])));}

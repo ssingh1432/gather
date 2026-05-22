@@ -1,13 +1,4 @@
 import 'package:flutter/material.dart';
+import '../../core/supabase_client.dart';
 
-class BookmarksScreen extends StatelessWidget {
-  const BookmarksScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('BookmarksScreen')),
-      body: const Center(child: Text('BookmarksScreen')),
-    );
-  }
-}
+class BookmarksScreen extends StatelessWidget { const BookmarksScreen({super.key}); @override Widget build(BuildContext c){final uid=SupabaseConfig.client.auth.currentUser?.id;return Scaffold(appBar:AppBar(title:const Text('Bookmarks')),body:uid==null?const Center(child:Text('Login required')):FutureBuilder(future:SupabaseConfig.client.from('bookmarks').select('posts(id,text_content)').eq('user_id',uid),builder:(c,s){if(!s.hasData)return const Center(child:CircularProgressIndicator());final b=s.data as List;if(b.isEmpty)return const Center(child:Text('No bookmarks'));return ListView(children:b.map((e)=>ListTile(title:Text(e['posts']['text_content']??''))).toList());}));}}

@@ -1,13 +1,4 @@
 import 'package:flutter/material.dart';
+import '../../core/supabase_client.dart';
 
-class NotificationsScreen extends StatelessWidget {
-  const NotificationsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('NotificationsScreen')),
-      body: const Center(child: Text('NotificationsScreen')),
-    );
-  }
-}
+class NotificationsScreen extends StatelessWidget { const NotificationsScreen({super.key}); @override Widget build(BuildContext context){final uid=SupabaseConfig.client.auth.currentUser?.id;return Scaffold(appBar:AppBar(title:const Text('Notifications')),body:uid==null?const Center(child:Text('Login required')):FutureBuilder(future:SupabaseConfig.client.from('notifications').select().eq('recipient_id', uid).order('created_at',ascending:false),builder:(c,s){if(!s.hasData)return const Center(child:CircularProgressIndicator());final n=s.data as List;if(n.isEmpty)return const Center(child:Text('No notifications'));return ListView(children:n.map((e)=>ListTile(title:Text(e['type']),trailing:TextButton(onPressed:()async=>SupabaseConfig.client.from('notifications').update({'is_read':true}).eq('id',e['id']), child:const Text('Mark read')))).toList());}));}}
