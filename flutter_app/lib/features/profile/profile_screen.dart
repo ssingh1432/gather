@@ -24,7 +24,7 @@ class _PS extends State<ProfileScreen> {
   }
 
   Future<void> load() async {
-    final uid = SupabaseConfig.client.auth.currentUser?.id;
+    final uid = SupabaseConfig.currentUserId;
     if (uid == null) return;
     final repo = ProfileRepository();
     profile = await repo.loadProfile(uid);
@@ -50,7 +50,8 @@ class _PS extends State<ProfileScreen> {
                   TextField(controller: p, decoration: const InputDecoration(labelText: 'Photo URL')),
                   ElevatedButton(
                       onPressed: () async {
-                        final uid = SupabaseConfig.client.auth.currentUser!.id;
+                        final uid = SupabaseConfig.currentUserId;
+                        if (uid == null) return;
                         await ProfileRepository().updateProfile(uid, {'username': u.text.trim(), 'bio': b.text.trim(), 'profile_photo_url': p.text.trim()});
                       },
                       child: const Text('Save')),

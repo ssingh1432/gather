@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gather_app/features/auth/forgot_password_screen.dart';
 import 'package:gather_app/features/auth/login_screen.dart';
@@ -12,15 +13,15 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
     expect(find.text('Login'), findsOneWidget);
 
-    await tester.pumpWidget(MaterialApp(home: SignupScreen()));
+    await tester.pumpWidget(const MaterialApp(home: SignupScreen()));
     expect(find.text('Signup'), findsOneWidget);
 
-    await tester.pumpWidget(ForgotPasswordScreen());
+    await tester.pumpWidget(const MaterialApp(home: ForgotPasswordScreen()));
     expect(find.text('Forgot Password'), findsWidgets);
   });
 
   testWidgets('HomeFeedScreen smoke test', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: HomeFeedScreen()));
+    await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: HomeFeedScreen())));
     expect(find.text('Home'), findsOneWidget);
   });
 

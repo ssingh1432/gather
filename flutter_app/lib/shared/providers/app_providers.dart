@@ -11,7 +11,7 @@ final authStateProvider = StreamProvider<AuthState>((ref) => ref.watch(authServi
 final feedRepositoryProvider = Provider((_) => FeedRepository());
 
 final homeFeedProvider = FutureProvider.family<List<PostModel>, int>((ref, page) async {
-  final uid = SupabaseConfig.client.auth.currentUser?.id;
+  final uid = SupabaseConfig.currentUserId;
   if (uid == null) return [];
   return ref.watch(feedRepositoryProvider).homeFeed(uid, page: page);
 });
