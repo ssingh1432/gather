@@ -1,27 +1,22 @@
 # Flutter App (Gather)
 
-## Setup
-1. Copy `.env.example` to `.env` in `flutter_app/`.
+## Local run
+1. Copy `.env.example` to `.env`.
 2. Set:
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
 3. Run:
 ```bash
 flutter pub get
+flutter analyze
+flutter test
 flutter run
 ```
 
-> App startup is resilient if `.env` is missing, but Supabase features need both values.
-
-## Supabase migration steps
-1. Open Supabase SQL editor.
-2. Execute `../database/migrations/001_initial_schema.sql`.
-3. Verify core tables exist: `users`, `posts`, `post_comments`, `community_memberships`, `user_follows`, `bookmarks`, `post_likes`, `post_media`.
-
-## Storage setup (`post-media`)
-1. In Supabase Storage, create bucket `post-media`.
-2. Make bucket public for read.
-3. Add policies on `storage.objects`:
+## Supabase setup (MVP)
+1. Run `../database/migrations/001_initial_schema.sql`.
+2. Create public bucket `post-media`.
+3. Apply the exact policies:
 
 ```sql
 create policy "post_media_public_read"
@@ -49,3 +44,7 @@ for delete
 to authenticated
 using (bucket_id = 'post-media');
 ```
+
+## Status
+- Completed: auth, feed, communities, post detail comments, profile edit, bookmarks, report flow, admin moderation actions.
+- Remaining for production: CI/CD, staged environment promotion, e2e coverage, abuse prevention, observability.

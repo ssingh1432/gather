@@ -25,7 +25,7 @@ class FeedRepository {
   }
 
   Future<PostModel> getPost(String postId) async {
-    final data = await _c.from('posts').select('*, users!posts_author_id_fkey(username), post_media(media_url)').eq('id', postId).single();
+    final data = await _c.from('posts').select('*, users!posts_author_id_fkey(username), post_media(media_url)').eq('id', postId).eq('is_removed', false).single();
     return PostModel.fromMap(data);
   }
 
@@ -35,7 +35,7 @@ class FeedRepository {
   Future<void> addComment(String postId, String userId, String content) => _c.from('post_comments').insert({'post_id': postId, 'user_id': userId, 'content': content});
 
   Future<List<PostModel>> communityFeed(String communityId, {int page = 0, int pageSize = 20}) async {
-    final data = await _c.from('posts').select('*, users!posts_author_id_fkey(username), post_media(media_url)').eq('community_id', communityId).order('created_at', ascending: false).range(page * pageSize, page * pageSize + pageSize - 1);
+    final data = await _c.from('posts').select('*, users!posts_author_id_fkey(username), post_media(media_url)').eq('community_id', communityId).eq('is_removed', false).order('created_at', ascending: false).range(page * pageSize, page * pageSize + pageSize - 1);
     return (data as List).map((e) => PostModel.fromMap(e)).toList();
   }
 
