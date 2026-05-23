@@ -1,41 +1,56 @@
-# Deployment Guide
+# Deployment Guide (MVP)
 
-## 1. Supabase setup
-1. Create a new Supabase project.
-2. Run `database/migrations/001_initial_schema.sql` in SQL editor.
-3. Create storage buckets:
-   - `profile-photos` (private with signed URLs)
-   - `post-media` (private with signed URLs)
-   - `community-images` (private with signed URLs)
-4. Configure auth settings:
-   - Enable email/password.
-   - Set redirect URL for password reset.
+## 1) Supabase project bootstrap
+1. Create project.
+2. Run `database/migrations/001_initial_schema.sql`.
+3. Create **public** storage bucket: `post-media`.
+4. Apply storage policies:
 
-## 2. Secrets & env
-Flutter `.env` / build vars:
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `FCM_SENDER_ID` / Firebase config values
-- `ANALYTICS_PROVIDER`
+```sql
+create policy "post_media_public_read"
+on storage.objects
+for select
+to public
+using (bucket_id = 'post-media');
 
-## 3. Flutter build
-- Android: `flutter build appbundle --release`
-- iOS: `flutter build ipa --release`
-- Web (optional admin panel): `flutter build web --release`
+create policy "post_media_auth_upload"
+on storage.objects
+for insert
+to authenticated
+with check (bucket_id = 'post-media');
 
-## 4. Push notifications
-1. Create Firebase project.
-2. Add Android/iOS app identifiers.
-3. Configure FCM tokens in app and save token per user device.
-4. Use Supabase Edge Function / background worker to dispatch push on new notifications.
+create policy "post_media_auth_update"
+on storage.objects
+for update
+to authenticated
+using (bucket_id = 'post-media')
+with check (bucket_id = 'post-media');
 
-## 5. Monitoring
-- Enable Supabase logs and query performance monitoring.
-- Configure analytics dashboards for DAU/retention/community engagement.
-- Add crash reporting (Firebase Crashlytics or Sentry).
+create policy "post_media_auth_delete"
+on storage.objects
+for delete
+to authenticated
+using (bucket_id = 'post-media');
+```
 
-## 6. Release process
-1. Run tests from checklist.
-2. Apply migrations to staging.
-3. Smoke test auth/feed/post/moderation.
-4. Promote to production.
+## 2) App environment
+Create `flutter_app/.env`:
+- `SUPABASE_URL=...`
+- `SUPABASE_ANON_KEY=...`
+
+## 3) Local verification before hosting
+From `flutter_app/` run:
+1. `flutter pub get`
+2. `flutter analyze`
+3. `flutter test`
+4. `flutter run`
+
+## 4) Completed vs remaining
+Completed now:
+- Core auth/feed/community/post/profile/moderation flows wired to Supabase.
+- Removed post filtering in feed/community/bookmark views.
+
+Still required before production hosting:
+- Automated CI pipeline and gated release checklist.
+- Seeded staging data + integration/e2e suites.
+- Incident monitoring, backup/restore drills, and scale testing.

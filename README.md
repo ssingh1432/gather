@@ -1,31 +1,59 @@
 # Gather MVP
 
 ## Completed features
-- Supabase-backed auth and guarded routing.
-- Home feed with pagination/reload and post cards.
-- Communities list/search/join and community posting.
-- Create community and create post (with optional image upload to `post_media`).
-- Profile edit/logout, user profile follow/block.
-- Search, notifications, bookmarks, reports, admin moderation tools.
+- Auth flow (signup/login/forgot password/logout) with Supabase.
+- Home feed with chronological ordering, removed-post filtering, and like/bookmark/comment actions.
+- Communities list/search/join/leave and community detail posting.
+- Post detail + comments.
+- Profile view/edit and social follow/block primitives.
+- Reporting + admin moderation actions (remove post, ban user, resolve report, refresh list).
 
-## Setup
-1. Copy `flutter_app/.env.example` to `flutter_app/.env` and set `SUPABASE_URL` + `SUPABASE_ANON_KEY`.
-2. `cd flutter_app && flutter pub get && flutter run`.
+## Local run steps
+1. Install Flutter SDK (stable channel) and verify with `flutter --version`.
+2. Copy env file: `cp flutter_app/.env.example flutter_app/.env`.
+3. Fill `.env` with `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
+4. From `flutter_app/` run:
+   - `flutter pub get`
+   - `flutter analyze`
+   - `flutter test`
+   - `flutter run`
 
-## Supabase migration
-- Run SQL in `database/migrations/001_initial_schema.sql`.
-- Ensure tables exactly match schema (users, community_memberships, post_comments, user_follows, user_blocks, post_media, etc).
+## Supabase setup
+1. Create a Supabase project.
+2. Run migration: `database/migrations/001_initial_schema.sql`.
+3. Create one public Storage bucket named `post-media`.
+4. Apply the SQL policies below exactly.
 
-## Storage bucket setup
-- Create public bucket named `post-media`.
-- Apply explicit `storage.objects` policies documented in `flutter_app/README.md`.
+## Storage policy SQL (MVP)
+```sql
+create policy "post_media_public_read"
+on storage.objects
+for select
+to public
+using (bucket_id = 'post-media');
 
-## Remaining work
-- Rich comments UX, realtime updates, robust optimistic state.
-- Better moderation workflows and report resolution actions.
-- Production-ready integration and e2e tests.
+create policy "post_media_auth_upload"
+on storage.objects
+for insert
+to authenticated
+with check (bucket_id = 'post-media');
 
-## Future short-video expansion
-- Extend `post_media.media_type` for `video` posting UX.
-- Add transcoding pipeline and adaptive streaming manifests.
-- Add video feed ranking and watch-time analytics.
+create policy "post_media_auth_update"
+on storage.objects
+for update
+to authenticated
+using (bucket_id = 'post-media')
+with check (bucket_id = 'post-media');
+
+create policy "post_media_auth_delete"
+on storage.objects
+for delete
+to authenticated
+using (bucket_id = 'post-media');
+```
+
+## Remaining production tasks
+- CI pipeline for format/analyze/test on every PR.
+- Full integration/e2e tests against seeded Supabase test data.
+- Rate limiting/abuse protection and advanced moderation tooling.
+- Push notifications and analytics hardening.
