@@ -11,7 +11,11 @@ Future<void> main() async {
   try {
     await dotenv.load(fileName: '.env');
   } catch (_) {
-    // Allow startup without a local .env (e.g. CI/tests).
+    try {
+      await dotenv.load(fileName: '.env.example');
+    } catch (_) {
+      // Allow startup without a local .env (e.g. CI/tests).
+    }
   }
   if (AppEnv.supabaseUrl.isNotEmpty && AppEnv.supabaseAnonKey.isNotEmpty) {
     await SupabaseConfig.initialize();
