@@ -23,11 +23,13 @@ class _S extends ConsumerState<HomeFeedScreen> {
   }
 
   Future<void> _guardBannedUser() async {
-    final uid = SupabaseConfig.client.auth.currentUser?.id;
+    final uid = SupabaseConfig.currentUserId;
     if (uid == null) return;
-    final user = await SupabaseConfig.client.from('users').select('status').eq('id', uid).maybeSingle();
+    final client = SupabaseConfig.maybeClient;
+    if (client == null) return;
+    final user = await client.from('users').select('status').eq('id', uid).maybeSingle();
     if (user?['status'] == 'banned' && mounted) {
-      await SupabaseConfig.client.auth.signOut();
+      await client.auth.signOut();
       if (mounted) context.go('/login');
     }
   }
@@ -45,7 +47,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
 
   @override
   Widget build(BuildContext c) {
-    final uid = SupabaseConfig.client.auth.currentUser?.id;
+    final uid = SupabaseConfig.currentUserId;
     final feed = ref.watch(homeFeedProvider(page));
     return Scaffold(
       appBar: AppBar(title: const Text('Home')),

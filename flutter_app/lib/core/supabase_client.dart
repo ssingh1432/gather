@@ -11,4 +11,14 @@ class SupabaseConfig {
   }
 
   static SupabaseClient get client => Supabase.instance.client;
+
+  static SupabaseClient? get maybeClient {
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String? get currentUserId => maybeClient?.auth.currentUser?.id;
 }

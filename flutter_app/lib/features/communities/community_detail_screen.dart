@@ -147,3 +147,5 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
           )
         ]),
       );
+
+}

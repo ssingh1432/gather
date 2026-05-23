@@ -18,7 +18,7 @@ class _C extends State<CommunitiesScreen> {
   Map<String, bool> joined = {};
 
   Future<void> _loadJoined(List<Map<String, dynamic>> communities) async {
-    final uid = SupabaseConfig.client.auth.currentUser?.id;
+    final uid = SupabaseConfig.currentUserId;
     if (uid == null) return;
     joined = await repo.joinedStates(communities.map((e) => e['id'].toString()).toList(), uid);
     if (mounted) setState(() {});
@@ -48,7 +48,7 @@ class _C extends State<CommunitiesScreen> {
                             joined: joined[e['id'].toString()] ?? false,
                             onOpen: () => context.push('/community?id=${e['id']}'),
                             onJoinLeave: () async {
-                              final uid = SupabaseConfig.client.auth.currentUser?.id;
+                              final uid = SupabaseConfig.currentUserId;
                               if (uid == null) return;
                               final isJoined = joined[e['id'].toString()] ?? false;
                               if (isJoined) {
