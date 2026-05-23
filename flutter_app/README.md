@@ -48,3 +48,16 @@ using (bucket_id = 'post-media');
 ## Status
 - Completed: auth, feed, communities, post detail comments, profile edit, bookmarks, report flow, admin moderation actions.
 - Remaining for production: CI/CD, staged environment promotion, e2e coverage, abuse prevention, observability.
+
+
+## Local Supabase Test Checklist
+- [ ] `flutter pub get` completes successfully.
+- [ ] `flutter analyze` returns no issues.
+- [ ] `flutter test` passes all tests.
+- [ ] Community detail screen: can create post, like/unlike, comment navigation, bookmark/unbookmark.
+- [ ] Admin moderation: remove post and ban user both resolve reports and refresh the report list.
+- [ ] Storage bucket is public `post-media` and upload/read works with configured policies.
+- [ ] Signup inserts/updates `users` table row with `id`, `email`, `username`, `status`.
+- [ ] Comment inserts target `post_comments.user_id` (not `author_id`).
+- [ ] Removed posts (`is_removed = true`) do not appear in feed/community/post-detail queries.
+- [ ] Banned users are signed out and prevented from logging in.

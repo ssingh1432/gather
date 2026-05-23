@@ -22,6 +22,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   Set<String> bookmarked = <String>{};
   List<PostModel> _posts = const [];
   bool _loading = true;
+  bool _posting = false;
   String? _error;
 
   @override
@@ -48,7 +49,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
         bookmarked = <String>{};
       }
     } catch (e) {
-      _error = '$e';
+      _error = 'Failed to load community posts. Please try again.\n$e';
     } finally {
       if (mounted) {
         setState(() {
@@ -67,14 +68,41 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
             child: TextField(controller: postCtrl, decoration: const InputDecoration(labelText: 'Create post text')),
           ),
           ElevatedButton(
-            onPressed: () async {
-              final uid = SupabaseConfig.client.auth.currentUser?.id;
-              if (uid == null || postCtrl.text.trim().isEmpty) return;
-              await PostRepository().createPost({'author_id': uid, 'community_id': widget.communityId, 'text_content': postCtrl.text.trim()});
-              postCtrl.clear();
-              await _load();
-            },
-            child: const Text('Post'),
+            onPressed: _posting
+                ? null
+                : () async {
+                    final uid = SupabaseConfig.client.auth.currentUser?.id;
+                    if (uid == null) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in to create a post.')));
+                      }
+                      return;
+                    }
+                    if (postCtrl.text.trim().isEmpty) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post text cannot be empty.')));
+                      }
+                      return;
+                    }
+                    setState(() => _posting = true);
+                    try {
+                      await PostRepository().createPost({'author_id': uid, 'community_id': widget.communityId, 'text_content': postCtrl.text.trim()});
+                      postCtrl.clear();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post published.')));
+                      }
+                      await _load();
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to publish post: $e')));
+                      }
+                    } finally {
+                      if (mounted) setState(() => _posting = false);
+                    }
+                  },
+            child: _posting
+                ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('Post'),
           ),
           Expanded(
             child: _loading
