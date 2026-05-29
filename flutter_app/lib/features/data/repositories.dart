@@ -9,6 +9,17 @@ import '../../shared/models/models.dart';
 class FeedRepository {
   SupabaseClient get _c => SupabaseConfig.client;
 
+
+  Future<List<PostModel>> publicFeed({int page = 0, int pageSize = 20}) async {
+    final data = await _c
+        .from('posts')
+        .select('*, users!posts_author_id_fkey(username), post_media(media_url)')
+        .eq('is_removed', false)
+        .order('created_at', ascending: false)
+        .range(page * pageSize, page * pageSize + pageSize - 1);
+    return (data as List).map((e) => PostModel.fromMap(e)).toList();
+  }
+
   Future<List<PostModel>> homeFeed(String userId, {int page = 0, int pageSize = 20}) async {
     final memberships = await _c.from('community_memberships').select('community_id').eq('user_id', userId);
     final follows = await _c.from('user_follows').select('following_id').eq('follower_id', userId);

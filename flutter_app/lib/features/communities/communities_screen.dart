@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/supabase_client.dart';
 import '../../features/data/repositories.dart';
+import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
 
 class CommunitiesScreen extends StatefulWidget {
@@ -22,7 +23,17 @@ class _C extends State<CommunitiesScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Communities')),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/create-community'),
+        onPressed: () {
+          if (SupabaseConfig.currentUserId == null) {
+            redirectToLogin(
+              context,
+              redirect: '/create-community',
+              message: 'Please log in or create an account to create a community.',
+            );
+            return;
+          }
+          context.push('/create-community');
+        },
         child: const Icon(Icons.add),
       ),
       body: Column(children: [

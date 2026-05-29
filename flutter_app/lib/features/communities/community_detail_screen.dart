@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/supabase_client.dart';
 import '../../features/data/repositories.dart';
 import '../../shared/models/models.dart';
+import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
 
 class CommunityDetailScreen extends StatefulWidget {
@@ -73,9 +74,11 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                 : () async {
                     final uid = SupabaseConfig.client.auth.currentUser?.id;
                     if (uid == null) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in to create a post.')));
-                      }
+                      redirectToLogin(
+                        context,
+                        redirect: '/community?id=${widget.communityId}',
+                        message: 'Please log in or create an account to create a post.',
+                      );
                       return;
                     }
                     if (postCtrl.text.trim().isEmpty) {
@@ -121,7 +124,14 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                                         bookmarked: bookmarked.contains(p.id),
                                         onLike: () async {
                                           final uid = SupabaseConfig.client.auth.currentUser?.id;
-                                          if (uid == null) return;
+                                          if (uid == null) {
+                                            redirectToLogin(
+                                              context,
+                                              redirect: '/community?id=${widget.communityId}',
+                                              message: 'Please log in or create an account to like posts.',
+                                            );
+                                            return;
+                                          }
                                           if (liked.contains(p.id)) {
                                             await repo.unlikePost(p.id, uid);
                                           } else {
@@ -129,10 +139,28 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                                           }
                                           await _load();
                                         },
-                                        onComment: () => context.push('/post?id=${p.id}'),
+                                        onComment: () {
+                                          final uid = SupabaseConfig.client.auth.currentUser?.id;
+                                          if (uid == null) {
+                                            redirectToLogin(
+                                              context,
+                                              redirect: '/post?id=${p.id}',
+                                              message: 'Please log in or create an account to comment.',
+                                            );
+                                            return;
+                                          }
+                                          context.push('/post?id=${p.id}');
+                                        },
                                         onBookmark: () async {
                                           final uid = SupabaseConfig.client.auth.currentUser?.id;
-                                          if (uid == null) return;
+                                          if (uid == null) {
+                                            redirectToLogin(
+                                              context,
+                                              redirect: '/community?id=${widget.communityId}',
+                                              message: 'Please log in or create an account to save posts.',
+                                            );
+                                            return;
+                                          }
                                           if (bookmarked.contains(p.id)) {
                                             await repo.unbookmarkPost(p.id, uid);
                                           } else {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
@@ -17,6 +18,24 @@ class _P extends State<CreatePostScreen> {
   XFile? image;
   bool loading = false;
   String? err;
+
+  @override
+  void initState() {
+    super.initState();
+    if (SupabaseConfig.currentUserId == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.go('/login?redirect=${Uri.encodeComponent(_redirectLocation)}');
+        }
+      });
+    }
+  }
+
+  String get _redirectLocation {
+    final communityId = widget.communityId;
+    if (communityId == null || communityId.isEmpty) return '/create-post';
+    return '/create-post?communityId=${Uri.encodeComponent(communityId)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +64,10 @@ class _P extends State<CreatePostScreen> {
                   ? null
                   : () async {
                 final uid = SupabaseConfig.client.auth.currentUser?.id;
-                if (uid == null) return;
+                if (uid == null) {
+                  context.go('/login?redirect=${Uri.encodeComponent(_redirectLocation)}');
+                  return;
+                }
 
                 if (text.text.trim().isEmpty && image == null) {
                   setState(() => err = 'Add text or image');

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/supabase_client.dart';
 import '../data/repositories.dart';
@@ -15,6 +16,18 @@ class _CC extends State<CreateCommunityScreen> {
   final img = TextEditingController();
   String? err;
   bool loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (SupabaseConfig.currentUserId == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.go('/login?redirect=${Uri.encodeComponent('/create-community')}');
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +60,10 @@ class _CC extends State<CreateCommunityScreen> {
                   return;
                 }
                 final uid = SupabaseConfig.client.auth.currentUser?.id;
-                if (uid == null) return;
+                if (uid == null) {
+                  context.go('/login?redirect=${Uri.encodeComponent('/create-community')}');
+                  return;
+                }
 
                 setState(() => loading = true);
 

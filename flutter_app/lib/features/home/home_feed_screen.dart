@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/supabase_client.dart';
 import '../../features/data/repositories.dart';
 import '../../shared/providers/app_providers.dart';
+import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
 
 class HomeFeedScreen extends ConsumerStatefulWidget {
@@ -64,15 +65,39 @@ class _S extends ConsumerState<HomeFeedScreen> {
               children: [
                 if (posts.isEmpty) const ListTile(title: Text('No posts yet')),
                 ...posts.map((p) => PostCard(post: p, liked: liked.contains(p.id), bookmarked: bookmarked.contains(p.id), onLike: () async {
-                      if (uid == null) return;
+                      if (uid == null) {
+                        redirectToLogin(
+                          context,
+                          redirect: '/',
+                          message: 'Please log in or create an account to like posts.',
+                        );
+                        return;
+                      }
                       if (liked.contains(p.id)) {
                         await repo.unlikePost(p.id, uid);
                       } else {
                         await repo.likePost(p.id, uid);
                       }
                       await _refreshStates(posts.map((e) => e.id).toList(), uid);
-                    }, onComment: () => context.push('/post?id=${p.id}'), onBookmark: () async {
-                      if (uid == null) return;
+                    }, onComment: () {
+                      if (uid == null) {
+                        redirectToLogin(
+                          context,
+                          redirect: '/post?id=${p.id}',
+                          message: 'Please log in or create an account to comment.',
+                        );
+                        return;
+                      }
+                      context.push('/post?id=${p.id}');
+                    }, onBookmark: () async {
+                      if (uid == null) {
+                        redirectToLogin(
+                          context,
+                          redirect: '/',
+                          message: 'Please log in or create an account to save posts.',
+                        );
+                        return;
+                      }
                       if (bookmarked.contains(p.id)) {
                         await repo.unbookmarkPost(p.id, uid);
                       } else {
