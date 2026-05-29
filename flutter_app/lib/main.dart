@@ -8,18 +8,23 @@ import 'core/supabase_client.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables
   try {
     await dotenv.load(fileName: '.env');
   } catch (_) {
     try {
       await dotenv.load(fileName: '.env.example');
-    } catch (_) {
-      // Allow startup without a local .env (e.g. CI/tests).
-    }
+    } catch (_) {}
   }
+
+  // Initialize Supabase
   if (AppEnv.supabaseUrl.isNotEmpty && AppEnv.supabaseAnonKey.isNotEmpty) {
     await SupabaseConfig.initialize();
+  } else {
+    debugPrint("⚠️ Supabase URL or Anon Key is missing in .env");
   }
+
   runApp(const ProviderScope(child: GatherApp()));
 }
 
