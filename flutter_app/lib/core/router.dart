@@ -22,9 +22,18 @@ import 'supabase_client.dart';
 final appRouter = GoRouter(
   redirect: (context, state) {
     final authed = SupabaseConfig.client.auth.currentUser != null;
-    final onAuth = ['/login', '/signup', '/forgot'].contains(state.uri.path);
-    if (!authed && !onAuth) return '/login';
-    if (authed && onAuth) return '/';
+    final path = state.uri.path;
+    final onAuth = _authRoutes.contains(path);
+    final protected = _protectedRoutes.contains(path);
+
+    if (!authed && protected) {
+      return _loginLocation(redirect: state.uri.toString());
+    }
+
+    if (authed && onAuth) {
+      return _safeRedirect(state.uri.queryParameters['redirect']) ?? '/';
+    }
+
     return null;
   },
   routes: [
@@ -38,8 +47,9 @@ final appRouter = GoRouter(
         GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
       ],
     ),
-    GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-    GoRoute(path: '/signup', builder: (_, __) => SignupScreen()),
+    GoRoute(path: '/login', builder: (_, s) => LoginScreen(redirect: s.uri.queryParameters['redirect'])),
+    GoRoute(path: '/signup', builder: (_, s) => SignupScreen(redirect: s.uri.queryParameters['redirect'])),
+    GoRoute(path: '/register', builder: (_, s) => SignupScreen(redirect: s.uri.queryParameters['redirect'])),
     GoRoute(path: '/forgot', builder: (_, __) => ForgotPasswordScreen()),
     GoRoute(path: '/community', builder: (_, s) => CommunityDetailScreen(communityId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/create-community', builder: (_, __) => const CreateCommunityScreen()),
@@ -82,4 +92,27 @@ class MainNav extends StatelessWidget {
       ),
     );
   }
+}
+
+const _authRoutes = {'/login', '/signup', '/register', '/forgot'};
+const _protectedRoutes = {
+  '/create-post',
+  '/create-community',
+  '/profile',
+  '/bookmarks',
+  '/notifications',
+  '/report',
+  '/admin',
+};
+
+String _loginLocation({required String redirect}) =>
+    '/login?redirect=${Uri.encodeComponent(redirect)}';
+
+String? _safeRedirect(String? redirect) {
+  if (redirect == null || redirect.isEmpty) return null;
+  final uri = Uri.tryParse(redirect);
+  if (uri == null || !uri.hasAbsolutePath || uri.hasScheme || uri.hasAuthority) {
+    return null;
+  }
+  return uri.toString();
 }

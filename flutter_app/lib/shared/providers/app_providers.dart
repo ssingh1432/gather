@@ -11,7 +11,11 @@ final authStateProvider = StreamProvider<AuthState>((ref) => ref.watch(authServi
 final feedRepositoryProvider = Provider((_) => FeedRepository());
 
 final homeFeedProvider = FutureProvider.family<List<PostModel>, int>((ref, page) async {
-  final uid = SupabaseConfig.currentUserId;
-  if (uid == null) return [];
-  return ref.watch(feedRepositoryProvider).homeFeed(uid, page: page);
+  final client = SupabaseConfig.maybeClient;
+  if (client == null) return [];
+
+  final uid = client.auth.currentUser?.id;
+  final repo = ref.watch(feedRepositoryProvider);
+  if (uid == null) return repo.publicFeed(page: page);
+  return repo.homeFeed(uid, page: page);
 });

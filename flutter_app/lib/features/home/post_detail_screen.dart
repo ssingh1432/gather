@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/repositories.dart';
 import '../../core/supabase_client.dart';
+import '../../shared/widgets/auth_redirects.dart';
 
 class PostDetailScreen extends StatefulWidget {
   const PostDetailScreen({super.key, required this.postId});
@@ -35,7 +36,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 ElevatedButton(
                   onPressed: () async {
                     final uid = SupabaseConfig.client.auth.currentUser?.id;
-                    if (uid == null || commentCtrl.text.trim().isEmpty) return;
+                    if (uid == null) {
+                      redirectToLogin(
+                        context,
+                        redirect: '/post?id=${widget.postId}',
+                        message: 'Please log in or create an account to comment.',
+                      );
+                      return;
+                    }
+                    if (commentCtrl.text.trim().isEmpty) return;
                     await repo.addComment(widget.postId, uid, commentCtrl.text.trim());
                     setState(() => commentCtrl.clear());
                   },
