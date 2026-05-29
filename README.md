@@ -53,7 +53,8 @@ using (bucket_id = 'post-media');
 ```
 
 ## Remaining production tasks
-- CI pipeline for format/analyze/test on every PR.
+- CI pipeline for format/analyze/test on every PR. See `.github/workflows/flutter-ci.yml`.
+- Staging release gate/checklist before inviting testers. See `docs/STAGING_RELEASE_CHECKLIST.md`.
 - Full integration/e2e tests against seeded Supabase test data.
 - Rate limiting/abuse protection and advanced moderation tooling.
 - Push notifications and analytics hardening.
