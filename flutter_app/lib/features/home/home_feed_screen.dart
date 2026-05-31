@@ -64,7 +64,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
             child: ListView(
               children: [
                 if (posts.isEmpty) const ListTile(title: Text('No posts yet')),
-                ...posts.map((p) => PostCard(post: p, liked: liked.contains(p.id), bookmarked: bookmarked.contains(p.id), onLike: () async {
+                ...posts.map((p) => PostCard(post: p, liked: liked.contains(p.id) || p.isLiked, bookmarked: bookmarked.contains(p.id) || p.isBookmarked, onLike: () async {
                       if (uid == null) {
                         redirectToLogin(
                           context,
@@ -73,12 +73,13 @@ class _S extends ConsumerState<HomeFeedScreen> {
                         );
                         return;
                       }
-                      if (liked.contains(p.id)) {
+                      if (liked.contains(p.id) || p.isLiked) {
                         await repo.unlikePost(p.id, uid);
                       } else {
                         await repo.likePost(p.id, uid);
                       }
                       await _refreshStates(posts.map((e) => e.id).toList(), uid);
+                      ref.invalidate(homeFeedProvider(page));
                     }, onComment: () {
                       if (uid == null) {
                         redirectToLogin(
@@ -98,12 +99,13 @@ class _S extends ConsumerState<HomeFeedScreen> {
                         );
                         return;
                       }
-                      if (bookmarked.contains(p.id)) {
+                      if (bookmarked.contains(p.id) || p.isBookmarked) {
                         await repo.unbookmarkPost(p.id, uid);
                       } else {
                         await repo.bookmarkPost(p.id, uid);
                       }
                       await _refreshStates(posts.map((e) => e.id).toList(), uid);
+                      ref.invalidate(homeFeedProvider(page));
                     })),
               ],
             ),

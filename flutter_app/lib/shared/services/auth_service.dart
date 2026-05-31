@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
+import 'push_notification_service.dart';
 
 class AuthService {
   SupabaseClient get _client => SupabaseConfig.client;
@@ -30,6 +31,9 @@ class AuthService {
     return res;
   }
 
-  Future<void> signOut() => _client.auth.signOut();
+  Future<void> signOut() async {
+    await PushNotificationService.instance.clearTokenForCurrentUser();
+    await _client.auth.signOut();
+  }
   Future<void> resetPassword(String email) => _client.auth.resetPasswordForEmail(email);
 }

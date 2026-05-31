@@ -21,18 +21,12 @@ class FeedRepository {
   }
 
   Future<List<PostModel>> homeFeed(String userId, {int page = 0, int pageSize = 20}) async {
-    final memberships = await _c.from('community_memberships').select('community_id').eq('user_id', userId);
-    final follows = await _c.from('user_follows').select('following_id').eq('follower_id', userId);
-    final communityIds = (memberships as List).map((e) => e['community_id'].toString()).toSet();
-    final followingIds = (follows as List).map((e) => e['following_id'].toString()).toSet();
-
-    final data = await _c.from('posts').select('*, users!posts_author_id_fkey(username), post_media(media_url)').eq('is_removed', false).order('created_at', ascending: false).range(page * pageSize, page * pageSize + pageSize - 1);
-    final filtered = (data as List).where((e) {
-      final authorId = e['author_id']?.toString();
-      final communityId = e['community_id']?.toString();
-      return authorId == userId || followingIds.contains(authorId) || (communityId != null && communityIds.contains(communityId));
-    }).toList();
-    return filtered.map((e) => PostModel.fromMap(e)).toList();
+    final data = await _c.rpc('get_home_feed', params: {
+      'user_id': userId,
+      'page_size': pageSize,
+      'page_offset': page * pageSize,
+    });
+    return (data as List).map((e) => PostModel.fromMap(e as Map<String, dynamic>)).toList();
   }
 
   Future<PostModel> getPost(String postId) async {
@@ -45,9 +39,14 @@ class FeedRepository {
 
   Future<void> addComment(String postId, String userId, String content) => _c.from('post_comments').insert({'post_id': postId, 'user_id': userId, 'content': content});
 
-  Future<List<PostModel>> communityFeed(String communityId, {int page = 0, int pageSize = 20}) async {
-    final data = await _c.from('posts').select('*, users!posts_author_id_fkey(username), post_media(media_url)').eq('community_id', communityId).eq('is_removed', false).order('created_at', ascending: false).range(page * pageSize, page * pageSize + pageSize - 1);
-    return (data as List).map((e) => PostModel.fromMap(e)).toList();
+  Future<List<PostModel>> communityFeed(String communityId, {String? userId, int page = 0, int pageSize = 20}) async {
+    final data = await _c.rpc('get_community_feed', params: {
+      'community_id': communityId,
+      'user_id': userId,
+      'page_size': pageSize,
+      'page_offset': page * pageSize,
+    });
+    return (data as List).map((e) => PostModel.fromMap(e as Map<String, dynamic>)).toList();
   }
 
   Future<Set<String>> likedPostIds(String userId, List<String> postIds) async {
