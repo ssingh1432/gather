@@ -45,10 +45,11 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
     }
   }
 
-  Future<void> _actOnReport(Map<String, dynamic> report, Future<void> Function() action, String successMessage) async {
+  Future<void> _actOnReport(Map<String, dynamic> report, Future<void> Function(String reportId) action, String successMessage) async {
     try {
-      await action();
-      await repo.resolveReport(report['id'].toString());
+      final reportId = report['id'].toString();
+      await action(reportId);
+      await repo.resolveReport(reportId);
       await _loadReports();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(successMessage)));
     } catch (e) {
@@ -78,14 +79,22 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
                               IconButton(
                                 onPressed: e['target_post_id'] == null
                                     ? null
-                                    : () => _actOnReport(e, () => repo.removePost(e['target_post_id'].toString()), 'Post removed and report resolved'),
+                                    : () => _actOnReport(
+                                          e,
+                                          (reportId) => repo.removePost(e['target_post_id'].toString(), reportId: reportId),
+                                          'Post removed and report resolved',
+                                        ),
                                 icon: const Icon(Icons.delete),
                               ),
                               IconButton(
                                 onPressed: e['target_user_id'] == null
                                     ? null
-                                    : () => _actOnReport(e, () => repo.banUser(e['target_user_id'].toString()), 'User banned and report resolved'),
-                                icon: const Icon(Icons.block),
+                                    : () => _actOnReport(
+                                          e,
+                                          (reportId) => repo.suspendUser(e['target_user_id'].toString(), reportId: reportId),
+                                          'User suspended and report resolved',
+                                        ),
+                                icon: const Icon(Icons.pause_circle),
                               )
                             ],
                           ),
