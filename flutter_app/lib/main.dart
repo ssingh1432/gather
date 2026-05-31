@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/env.dart';
 import 'core/router.dart';
 import 'core/supabase_client.dart';
+import 'shared/services/push_notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +22,7 @@ Future<void> main() async {
   // Initialize Supabase
   if (AppEnv.supabaseUrl.isNotEmpty && AppEnv.supabaseAnonKey.isNotEmpty) {
     await SupabaseConfig.initialize();
+    await PushNotificationService.instance.initialize();
   } else {
     debugPrint("⚠️ Supabase URL or Anon Key is missing in .env");
   }

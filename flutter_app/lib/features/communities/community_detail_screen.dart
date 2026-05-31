@@ -39,7 +39,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
     });
     try {
       final uid = SupabaseConfig.client.auth.currentUser?.id;
-      final posts = await repo.communityFeed(widget.communityId);
+      final posts = await repo.communityFeed(widget.communityId, userId: uid);
       _posts = posts;
       final ids = posts.map((e) => e.id).toList();
       if (uid != null) {
@@ -120,8 +120,8 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                               children: _posts
                                   .map((p) => PostCard(
                                         post: p,
-                                        liked: liked.contains(p.id),
-                                        bookmarked: bookmarked.contains(p.id),
+                                        liked: liked.contains(p.id) || p.isLiked,
+                                        bookmarked: bookmarked.contains(p.id) || p.isBookmarked,
                                         onLike: () async {
                                           final uid = SupabaseConfig.client.auth.currentUser?.id;
                                           if (uid == null) {
@@ -132,7 +132,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                                             );
                                             return;
                                           }
-                                          if (liked.contains(p.id)) {
+                                          if (liked.contains(p.id) || p.isLiked) {
                                             await repo.unlikePost(p.id, uid);
                                           } else {
                                             await repo.likePost(p.id, uid);
@@ -161,7 +161,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                                             );
                                             return;
                                           }
-                                          if (bookmarked.contains(p.id)) {
+                                          if (bookmarked.contains(p.id) || p.isBookmarked) {
                                             await repo.unbookmarkPost(p.id, uid);
                                           } else {
                                             await repo.bookmarkPost(p.id, uid);
