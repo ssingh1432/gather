@@ -77,20 +77,17 @@ class _P extends State<CreatePostScreen> {
                 setState(() => loading = true);
 
                 try {
-                  final created = await SupabaseConfig.client
-                      .from('posts')
-                      .insert({
+                  final postRepository = PostRepository();
+                  final created = await postRepository.createPost({
                     'author_id': uid,
                     'community_id': widget.communityId,
                     'text_content': text.text.trim(),
-                  })
-                      .select()
-                      .single();
+                  });
 
                   if (image != null) {
-                    final url = await PostRepository().uploadPostImage(uid, image!);
+                    final url = await postRepository.uploadPostImage(uid, image!);
                     if (url != null) {
-                      await PostRepository().addPostMedia(created['id'], url);
+                      await postRepository.addPostMedia(created['id'], url);
                     }
                   }
                 } catch (e) {

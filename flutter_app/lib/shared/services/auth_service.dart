@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
+import 'analytics_service.dart';
 import 'push_notification_service.dart';
 
 class AuthService {
@@ -14,6 +15,8 @@ class AuthService {
     final uid = res.user?.id;
     if (uid != null) {
       await _client.from('users').upsert({'id': uid, 'email': email, 'username': username, 'status': 'active'});
+      AnalyticsService.instance.userSignedUp();
+      AnalyticsService.instance.dailyActiveUser();
     }
     return res;
   }
@@ -23,10 +26,12 @@ class AuthService {
     final uid = res.user?.id;
     if (uid != null) {
       final user = await _client.from('users').select('status').eq('id', uid).maybeSingle();
-      if (user?['status'] == 'banned') {
+      if (user?['status'] == 'banned' || user?['status'] == 'suspended') {
         await signOut();
-        throw Exception('Account banned');
+        throw Exception('Account not active');
       }
+      AnalyticsService.instance.userLoggedIn();
+      AnalyticsService.instance.dailyActiveUser();
     }
     return res;
   }
