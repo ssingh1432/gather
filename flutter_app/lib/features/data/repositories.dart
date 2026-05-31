@@ -1,11 +1,10 @@
-import 'dart:io';
-
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
 import '../../shared/models/models.dart';
 import '../../shared/services/analytics_service.dart';
+import '../../shared/services/media_upload_service.dart';
 
 class FeedRepository {
   SupabaseClient get _c => SupabaseConfig.client;
@@ -122,13 +121,16 @@ class PostRepository {
     final postId = payload['post_id']?.toString();
     if (postId != null) AnalyticsService.instance.commentCreated(postId: postId);
   }
-  Future<String?> uploadPostImage(String userId, XFile file) async {
-    final path = '$userId/${DateTime.now().millisecondsSinceEpoch}_${file.name}';
-    await _c.storage.from('post-media').upload(path, File(file.path));
-    return _c.storage.from('post-media').getPublicUrl(path);
+  Future<UploadedPostImage> uploadPostImage(String postId, XFile file) async {
+    final mediaService = MediaUploadService();
+    final prepared = await mediaService.preparePostImage(file);
+    return mediaService.uploadPostImage(postId: postId, image: prepared);
   }
 
-  Future<void> addPostMedia(String postId, String mediaUrl) => _c.from('post_media').insert({'post_id': postId, 'media_type': 'image', 'media_url': mediaUrl});
+  Future<void> addPostMedia(String postId, String mediaUrl) async {
+    await _c.from('post_media').delete().eq('post_id', postId).eq('media_type', 'image');
+    await _c.from('post_media').insert({'post_id': postId, 'media_type': 'image', 'media_url': mediaUrl});
+  }
 }
 
 class ModerationRepository {

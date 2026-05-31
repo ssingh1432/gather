@@ -18,6 +18,9 @@ dependencies:
   firebase_core: ^3.12.1
   firebase_messaging: ^15.2.5
   flutter_dotenv: ^5.2.1
+  flutter_image_compress: ^2.4.0
+  path: ^1.9.0
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:
