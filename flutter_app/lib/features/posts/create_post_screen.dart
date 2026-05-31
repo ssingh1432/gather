@@ -18,6 +18,7 @@ class _P extends State<CreatePostScreen> {
   XFile? image;
   bool loading = false;
   String? err;
+  String? _pendingPostId;
 
   @override
   void initState() {
@@ -57,7 +58,11 @@ class _P extends State<CreatePostScreen> {
               },
               child: Text(image == null ? 'Pick image' : 'Image selected'),
             ),
-            if (err != null) Text(err!, style: const TextStyle(color: Colors.red)),
+            if (err != null) ...[
+              Text(err!, style: const TextStyle(color: Colors.red)),
+              const SizedBox(height: 8),
+              const Text('You can press Publish again to retry the same post upload.'),
+            ],
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: loading
@@ -78,24 +83,27 @@ class _P extends State<CreatePostScreen> {
 
                 try {
                   final postRepository = PostRepository();
-                  final created = await postRepository.createPost({
+                  // Keep the post id after a failed image upload so tapping
+                  // Publish again retries the same storage paths instead of
+                  // creating duplicate posts or orphaned media.
+                  _pendingPostId ??= (await postRepository.createPost({
                     'author_id': uid,
                     'community_id': widget.communityId,
                     'text_content': text.text.trim(),
-                  });
+                  }))['id'].toString();
 
                   if (image != null) {
-                    final url = await postRepository.uploadPostImage(uid, image!);
-                    if (url != null) {
-                      await postRepository.addPostMedia(created['id'], url);
-                    }
+                    final uploaded = await postRepository.uploadPostImage(_pendingPostId!, image!);
+                    await postRepository.addPostMedia(_pendingPostId!, uploaded.originalUrl);
                   }
+                  if (mounted) Navigator.of(context).pop();
                 } catch (e) {
-                  setState(() => err = e.toString());
+                  if (mounted) {
+                    setState(() => err = 'Upload failed. Please check your connection and retry. $e');
+                  }
                 } finally {
                   if (mounted) {
                     setState(() => loading = false);
-                    Navigator.of(context).pop();
                   }
                 }
               },

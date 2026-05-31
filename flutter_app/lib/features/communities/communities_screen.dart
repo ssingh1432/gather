@@ -18,6 +18,14 @@ class _C extends State<CommunitiesScreen> {
   late Future<List<Map<String, dynamic>>> f = repo.listCommunities();
   Map<String, bool> joined = {};
 
+  void _retry() => setState(() => f = repo.listCommunities(q.text.trim()));
+
+  @override
+  void dispose() {
+    q.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -25,11 +33,7 @@ class _C extends State<CommunitiesScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           if (SupabaseConfig.currentUserId == null) {
-            redirectToLogin(
-              context,
-              redirect: '/create-community',
-              message: 'Please log in or create an account to create a community.',
-            );
+            redirectToLogin(context, redirect: '/create-community', message: 'Please log in or create an account to create a community.');
             return;
           }
           context.push('/create-community');
@@ -43,10 +47,7 @@ class _C extends State<CommunitiesScreen> {
             controller: q,
             decoration: InputDecoration(
               hintText: 'Search',
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.search),
-                onPressed: () => setState(() => f = repo.listCommunities(q.text.trim())),
-              ),
+              suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _retry),
             ),
           ),
         ),
@@ -54,21 +55,27 @@ class _C extends State<CommunitiesScreen> {
           child: FutureBuilder(
             future: f,
             builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const FeedSkeletonList(itemCount: 4);
               }
-              final data = snapshot.data!;
+              if (snapshot.hasError) {
+                return ErrorRetryState(title: 'Unable to load communities', message: 'Network failure. Check your connection and try again.', onRetry: _retry);
+              }
+              final data = snapshot.data ?? const <Map<String, dynamic>>[];
+              if (data.isEmpty) {
+                return const EmptyState(icon: Icons.groups_outlined, title: 'No communities', message: 'Try a different search or create the first community.');
+              }
               return ListView(
                 children: data
                     .map((e) => CommunityCard(
-                  community: e,
-                  joined: joined[e['id'].toString()] ?? false,
-                  onOpen: () => context.push('/community?id=${e['id']}'),
-                  onJoinLeave: () async {
-                    // Join/Leave logic can be improved later
-                    setState(() => f = repo.listCommunities(q.text.trim()));
-                  },
-                ))
+                          community: e,
+                          joined: joined[e['id'].toString()] ?? false,
+                          onOpen: () => context.push('/community?id=${e['id']}'),
+                          onJoinLeave: () async {
+                            // Existing join/leave behavior is preserved; refresh only this list.
+                            _retry();
+                          },
+                        ))
                     .toList(),
               );
             },

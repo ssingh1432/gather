@@ -18,6 +18,7 @@ void main() {
     expect(model.id, 'p1');
     expect(model.authorUsername, 'alice');
     expect(model.imageUrl, 'https://example.com/a.png');
+    expect(model.displayImageUrl, 'https://example.com/a.png');
     expect(model.communityId, 'c1');
   });
 
@@ -37,9 +38,22 @@ void main() {
 
     expect(model.authorUsername, 'bob');
     expect(model.imageUrl, 'https://example.com/b.png');
+    expect(model.displayImageUrl, 'https://example.com/b.png');
     expect(model.likeCount, 3);
     expect(model.commentCount, 4);
     expect(model.isLiked, isTrue);
     expect(model.isBookmarked, isTrue);
+  });
+
+  test('PostModel derives structured thumbnail url for optimized uploads', () {
+    final model = PostModel.fromMap({
+      'id': 'p3',
+      'author_id': 'u3',
+      'text_content': '',
+      'created_at': '2026-01-01T00:00:00Z',
+      'image_url': 'https://example.supabase.co/storage/v1/object/public/post-media/posts/p3/original',
+    });
+
+    expect(model.displayImageUrl, 'https://example.supabase.co/storage/v1/object/public/post-media/posts/p3/thumb');
   });
 }
