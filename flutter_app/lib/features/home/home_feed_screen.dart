@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/supabase_client.dart';
 import '../../features/data/repositories.dart';
 import '../../shared/models/models.dart';
+import '../../shared/services/analytics_service.dart';
+import '../../shared/services/beta_error_logging_service.dart';
 import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
 
@@ -29,6 +33,8 @@ class _S extends ConsumerState<HomeFeedScreen> {
   bool _loadingMore = false;
   bool _hasMore = true;
   String? _error;
+  Timer? _noInteractionTimer;
+  bool _feedInteracted = false;
 
   @override
   void initState() {
@@ -40,6 +46,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
 
   @override
   void dispose() {
+    _noInteractionTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -55,7 +62,8 @@ class _S extends ConsumerState<HomeFeedScreen> {
         await client.auth.signOut();
         if (mounted) context.go('/login');
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      BetaErrorLoggingService.instance.record(error, stackTrace, context: 'home_feed_banned_user_guard');
       // Feed loading owns the visible offline/error state; do not crash here.
     }
   }
@@ -81,7 +89,9 @@ class _S extends ConsumerState<HomeFeedScreen> {
       _nextPage = 1;
       _hasMore = posts.length == _pageSize;
       await _refreshStates(posts.map((e) => e.id).toList());
-    } catch (e) {
+      _scheduleNoInteractionSignal(posts.length);
+    } catch (e, stackTrace) {
+      BetaErrorLoggingService.instance.record(e, stackTrace, context: 'home_feed_initial_load');
       _error = 'Network failure. Check your connection and try again.';
     } finally {
       if (mounted) setState(() => _loadingInitial = false);
@@ -99,7 +109,8 @@ class _S extends ConsumerState<HomeFeedScreen> {
       _nextPage = page + 1;
       _hasMore = posts.length == _pageSize;
       await _refreshStates(_posts.map((e) => e.id).toList());
-    } catch (_) {
+    } catch (error, stackTrace) {
+      BetaErrorLoggingService.instance.record(error, stackTrace, context: 'home_feed_next_page', metadata: {'page': _nextPage});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -119,6 +130,22 @@ class _S extends ConsumerState<HomeFeedScreen> {
     // Start loading before the user hits the end so slow networks do not leave
     // a blank gap or force a full-screen spinner during ordinary scrolling.
     if (position.extentAfter < _preloadExtent) _loadNextPage();
+  }
+
+  void _scheduleNoInteractionSignal(int visiblePostCount) {
+    _noInteractionTimer?.cancel();
+    _feedInteracted = false;
+    AnalyticsService.instance.feedViewed(visiblePostCount: visiblePostCount);
+    _noInteractionTimer = Timer(const Duration(seconds: 20), () {
+      if (!_feedInteracted) {
+        AnalyticsService.instance.feedNoInteraction(visiblePostCount: visiblePostCount);
+      }
+    });
+  }
+
+  void _markFeedInteracted() {
+    _feedInteracted = true;
+    _noInteractionTimer?.cancel();
   }
 
   Future<void> _refreshStates(List<String> ids) async {
@@ -176,6 +203,8 @@ class _S extends ConsumerState<HomeFeedScreen> {
                                 redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to like posts.');
                                 return;
                               }
+                              _markFeedInteracted();
+                              AnalyticsService.instance.firstActionCompleted(action: 'post_liked');
                               if (liked.contains(p.id) || p.isLiked) {
                                 await repo.unlikePost(p.id, uid);
                               } else {
@@ -189,6 +218,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
                                 redirectToLogin(context, redirect: '/post?id=${p.id}', message: 'Please log in or create an account to comment.');
                                 return;
                               }
+                              _markFeedInteracted();
                               context.push('/post?id=${p.id}');
                             },
                             onBookmark: () async {
@@ -196,6 +226,8 @@ class _S extends ConsumerState<HomeFeedScreen> {
                                 redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to save posts.');
                                 return;
                               }
+                              _markFeedInteracted();
+                              AnalyticsService.instance.firstActionCompleted(action: 'post_bookmarked');
                               if (bookmarked.contains(p.id) || p.isBookmarked) {
                                 await repo.unbookmarkPost(p.id, uid);
                               } else {
