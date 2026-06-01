@@ -5,6 +5,8 @@ import '../features/admin/admin_moderation_screen.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/signup_screen.dart';
+import '../features/beta/beta_feedback_button.dart';
+import '../features/beta/beta_gate.dart';
 import '../features/bookmarks/bookmarks_screen.dart';
 import '../features/communities/communities_screen.dart';
 import '../features/communities/community_detail_screen.dart';
@@ -77,7 +79,8 @@ class MainNav extends StatelessWidget {
     const tabs = ['/', '/communities', '/create-post', '/search', '/profile'];
 
     return Scaffold(
-      body: child,
+      body: BetaGate(child: child),
+      floatingActionButton: const BetaFeedbackButton(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: index,
         onTap: (i) => context.go(tabs[i]),
@@ -96,6 +99,12 @@ class MainNav extends StatelessWidget {
 
 const _authRoutes = {'/login', '/signup', '/register', '/forgot'};
 const _protectedRoutes = {
+  '/',
+  '/communities',
+  '/community',
+  '/post',
+  '/search',
+  '/user',
   '/create-post',
   '/create-community',
   '/profile',

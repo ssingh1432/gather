@@ -147,3 +147,19 @@ class ModerationRepository {
       });
   Future<void> resolveReport(String reportId) => _c.rpc('resolve_report', params: {'report_id': reportId});
 }
+
+class BetaOpsRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
+
+  Future<List<Map<String, dynamic>>> feedback() async {
+    final rows = await _c.from('beta_feedback').select('*, users!beta_feedback_user_id_fkey(username, email)').order('created_at', ascending: false).limit(100);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> reviewFeedback(String feedbackId, {required String tag, required String status, String? notes}) => _c.rpc('review_beta_feedback', params: {
+        'feedback_id': feedbackId,
+        'feedback_tag': tag,
+        'feedback_status': status,
+        'notes': notes,
+      });
+}

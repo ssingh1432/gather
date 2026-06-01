@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
+import '../../shared/services/analytics_service.dart';
+import '../../shared/services/beta_error_logging_service.dart';
 import '../data/repositories.dart';
 
 class CreatePostScreen extends StatefulWidget {
@@ -19,10 +21,12 @@ class _P extends State<CreatePostScreen> {
   bool loading = false;
   String? err;
   String? _pendingPostId;
+  bool _published = false;
 
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.postCreationStarted(communityId: widget.communityId);
     if (SupabaseConfig.currentUserId == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -30,6 +34,19 @@ class _P extends State<CreatePostScreen> {
         }
       });
     }
+  }
+
+  @override
+  void dispose() {
+    if (!_published && (text.text.trim().isNotEmpty || image != null)) {
+      AnalyticsService.instance.postCreationAbandoned(
+        communityId: widget.communityId,
+        hadText: text.text.trim().isNotEmpty,
+        hadImage: image != null,
+      );
+    }
+    text.dispose();
+    super.dispose();
   }
 
   String get _redirectLocation {
@@ -96,8 +113,10 @@ class _P extends State<CreatePostScreen> {
                     final uploaded = await postRepository.uploadPostImage(_pendingPostId!, image!);
                     await postRepository.addPostMedia(_pendingPostId!, uploaded.originalUrl);
                   }
+                  _published = true;
                   if (mounted) Navigator.of(context).pop();
-                } catch (e) {
+                } catch (e, stackTrace) {
+                  BetaErrorLoggingService.instance.record(e, stackTrace, context: 'post_creation_submit', metadata: {'community_id': widget.communityId});
                   if (mounted) {
                     setState(() => err = 'Upload failed. Please check your connection and retry. $e');
                   }
