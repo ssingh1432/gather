@@ -1,5 +1,0 @@
-import 'package:flutter/material.dart';
-import '../../core/supabase_client.dart';
-
-class SearchScreen extends StatefulWidget { const SearchScreen({super.key}); @override State<SearchScreen> createState()=>_S(); }
-class _S extends State<SearchScreen>{final q=TextEditingController();List users=[];List communities=[];Future<void> run() async{final t=q.text.trim();users=await SupabaseConfig.client.from('users').select().ilike('username','%$t%');communities=await SupabaseConfig.client.from('communities').select().ilike('name','%$t%');setState((){});} @override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Search')),body:Column(children:[TextField(controller:q,decoration:InputDecoration(suffixIcon:IconButton(icon:const Icon(Icons.search),onPressed:run))),Expanded(child:ListView(children:[const ListTile(title:Text('Users')), ...users.map((e)=>ListTile(title:Text(e['username']))), const ListTile(title:Text('Communities')), ...communities.map((e)=>ListTile(title:Text(e['name']))) ]))]));}
