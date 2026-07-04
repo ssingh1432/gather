@@ -1,26 +1,15 @@
-import 'dart:io';
-import 'dart:math' as math;
-
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
+import 'media/post_image_preparer.dart' as preparer;
+import 'media/prepared_post_image.dart';
 
-class PreparedPostImage {
-  const PreparedPostImage({
-    required this.originalFile,
-    required this.thumbnailFile,
-    required this.contentType,
-  });
+export 'media/media_upload_exception.dart';
+export 'media/prepared_post_image.dart' show PreparedImageSet;
 
-  final File originalFile;
-  final File thumbnailFile;
-  final String contentType;
-}
-
+/// Public model returned once both storage objects for a post image have
+/// been uploaded. Identical on every platform.
 class UploadedPostImage {
   const UploadedPostImage({required this.originalUrl, required this.thumbnailUrl});
 
@@ -28,79 +17,49 @@ class UploadedPostImage {
   final String thumbnailUrl;
 }
 
+/// Platform-safe media upload service used by [FeedRepository]/
+/// `create_post_screen.dart`.
+///
+/// This file — and everything it imports directly — never imports
+/// `dart:io` or `path_provider`. Platform-specific work (temp-file
+/// compression on mobile vs. in-memory bytes on Web) lives behind
+/// [preparePostImage], which resolves to the correct implementation via a
+/// conditional import in `media/post_image_preparer.dart`. That is what
+/// fixes the `MissingPluginException: getTemporaryDirectory` crash on
+/// Flutter Web, since the Web build never links `path_provider` at all.
 class MediaUploadService {
-  static const int maxImageWidth = 1080;
-  static const int thumbnailWidth = 360;
-  static const int jpegQuality = 84;
-  static const int thumbnailQuality = 72;
   static const String bucket = 'post-media';
 
   SupabaseClient get _client => SupabaseConfig.client;
 
-  Future<PreparedPostImage> preparePostImage(XFile image) async {
-    final tempDir = await getTemporaryDirectory();
-    final token = '${DateTime.now().microsecondsSinceEpoch}_${math.Random().nextInt(1 << 32)}';
-    final originalPath = p.join(tempDir.path, 'post_original_$token.jpg');
-    final thumbnailPath = p.join(tempDir.path, 'post_thumb_$token.jpg');
-
-    final original = await FlutterImageCompress.compressAndGetFile(
-      image.path,
-      originalPath,
-      minWidth: maxImageWidth,
-      quality: jpegQuality,
-      format: CompressFormat.jpeg,
-      keepExif: false,
-    );
-    final thumbnail = await FlutterImageCompress.compressAndGetFile(
-      image.path,
-      thumbnailPath,
-      minWidth: thumbnailWidth,
-      quality: thumbnailQuality,
-      format: CompressFormat.jpeg,
-      keepExif: false,
-    );
-
-    if (original == null || thumbnail == null) {
-      throw const MediaUploadException('Could not optimize the selected image. Please try another image.');
-    }
-
-    return PreparedPostImage(
-      originalFile: File(original.path),
-      thumbnailFile: File(thumbnail.path),
-      contentType: 'image/jpeg',
-    );
-  }
+  /// Prepares [image] for upload. On mobile this compresses to temp files;
+  /// on Web it reads the raw bytes. See `media/post_image_preparer.dart`.
+  Future<PreparedImageSet> preparePostImage(XFile image) => preparer.preparePostImage(image);
 
   Future<UploadedPostImage> uploadPostImage({
     required String postId,
-    required PreparedPostImage image,
+    required PreparedImageSet image,
   }) async {
     final options = FileOptions(
       contentType: image.contentType,
       cacheControl: '31536000',
       upsert: true,
     );
+    final storage = _client.storage.from(bucket);
     final originalPath = 'posts/$postId/original';
     final thumbPath = 'posts/$postId/thumb';
 
-    // Deterministic paths plus upsert make a failed publish retry-safe: the next
-    // attempt overwrites the same objects instead of orphaning duplicate files.
-    await _client.storage.from(bucket).upload(originalPath, image.originalFile, fileOptions: options);
-    await _client.storage.from(bucket).upload(thumbPath, image.thumbnailFile, fileOptions: options);
+    // Deterministic paths plus upsert make a failed publish retry-safe: the
+    // next attempt overwrites the same objects instead of orphaning
+    // duplicate files. Each PreparedPostImage decides for itself whether to
+    // call `.upload()` (mobile, File) or `.uploadBinary()` (Web, bytes) —
+    // this call site stays identical across platforms.
+    await image.original.uploadTo(storage, originalPath, options);
+    await image.thumbnail.uploadTo(storage, thumbPath, options);
 
-    final storage = _client.storage.from(bucket);
     return UploadedPostImage(
       originalUrl: storage.getPublicUrl(originalPath),
       thumbnailUrl: storage.getPublicUrl(thumbPath),
     );
   }
-}
-
-class MediaUploadException implements Exception {
-  const MediaUploadException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }
