@@ -63,7 +63,7 @@ jobs:
         run: flutter build web --release
 
       - name: Deploy build/web to VPS
-        uses: easingthemes/ssh-deploy@v5
+        uses: easingthemes/ssh-deploy@v6
         with:
           SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
           REMOTE_HOST: ${{ secrets.VPS_HOST }}
