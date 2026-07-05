@@ -75,7 +75,7 @@ class _CC extends State<CreateCommunityScreen> {
                     'created_by': uid,
                   });
                   await CommunityRepository().joinCommunity(cty['id'], uid);
-                  if (!mounted) return;
+                  if (!context.mounted) return;
                   Navigator.pop(context);
                 } catch (e) {
                   setState(() => err = e.toString());

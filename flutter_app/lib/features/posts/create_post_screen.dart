@@ -114,7 +114,7 @@ class _P extends State<CreatePostScreen> {
                     await postRepository.addPostMedia(_pendingPostId!, uploaded.originalUrl);
                   }
                   _published = true;
-                  if (!mounted) return;
+                  if (!context.mounted) return;
                   Navigator.of(context).pop();
                 } catch (e, stackTrace) {
                   BetaErrorLoggingService.instance.record(e, stackTrace, context: 'post_creation_submit', metadata: {'community_id': widget.communityId});
