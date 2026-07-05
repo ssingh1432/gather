@@ -19,6 +19,11 @@ class BetaErrorLoggingService {
   }
 
   Future<void> _record(Object error, StackTrace? stackTrace, {String? context, Map<String, dynamic>? metadata}) async {
+    // Always surface the real error to console first — Supabase logging is
+    // best-effort and must never be the only place the error is visible.
+    debugPrint('[BetaError]${context != null ? ' [$context]' : ''} $error');
+    if (stackTrace != null) debugPrint(stackTrace.toString());
+
     final client = _client;
     final userId = client?.auth.currentUser?.id;
     if (client == null || userId == null) return;
