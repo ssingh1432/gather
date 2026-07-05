@@ -23,7 +23,7 @@ import 'supabase_client.dart';
 
 final appRouter = GoRouter(
   redirect: (context, state) {
-    final authed = SupabaseConfig.client.auth.currentUser != null;
+    final authed = SupabaseConfig.maybeClient?.auth.currentUser != null;
     final path = state.uri.path;
     final onAuth = _authRoutes.contains(path);
     final protected = _protectedRoutes.contains(path);

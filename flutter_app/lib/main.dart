@@ -33,11 +33,27 @@ Future<void> main() async {
       } catch (_) {}
     }
 
-    // Initialize Supabase
+    // Initialize Supabase and related services. Each step is isolated so a
+    // failure in one (e.g. a web-specific auth/session bug) can never
+    // prevent runApp() from being called — that was leaving the whole app
+    // as a permanently blank white screen with the real error only visible
+    // in the console.
     if (AppEnv.supabaseUrl.isNotEmpty && AppEnv.supabaseAnonKey.isNotEmpty) {
-      await SupabaseConfig.initialize();
-      await PushNotificationService.instance.initialize();
-      AnalyticsService.instance.dailyActiveUser();
+      try {
+        await SupabaseConfig.initialize();
+      } catch (error, stack) {
+        BetaErrorLoggingService.instance.record(error, stack, context: 'SupabaseConfig.initialize');
+      }
+      try {
+        await PushNotificationService.instance.initialize();
+      } catch (error, stack) {
+        BetaErrorLoggingService.instance.record(error, stack, context: 'PushNotificationService.initialize');
+      }
+      try {
+        AnalyticsService.instance.dailyActiveUser();
+      } catch (error, stack) {
+        BetaErrorLoggingService.instance.record(error, stack, context: 'AnalyticsService.dailyActiveUser');
+      }
     } else {
       debugPrint("⚠️ Supabase URL or Anon Key is missing in .env");
     }
