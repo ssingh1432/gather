@@ -36,3 +36,40 @@ jobs:
 
       - name: Run Flutter tests
         run: flutter test
+
+  deploy:
+    name: Build web and deploy to VPS
+    needs: analyze-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter_app
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build web release
+        run: flutter build web --release
+
+      - name: Deploy build/web to VPS
+        uses: easingthemes/ssh-deploy@v5
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.VPS_HOST }}
+          REMOTE_USER: ${{ secrets.VPS_USERNAME }}
+          REMOTE_PORT: ${{ secrets.VPS_PORT }}
+          SOURCE: flutter_app/build/web/
+          TARGET: /var/www/eiquoab.xyz/
+          ARGS: "-rlgoDzvc -i --delete"
+          EXCLUDE: ".well-known/, .git/"
