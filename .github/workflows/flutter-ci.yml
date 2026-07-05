@@ -70,6 +70,6 @@ jobs:
           REMOTE_USER: ${{ secrets.VPS_USERNAME }}
           REMOTE_PORT: ${{ secrets.VPS_PORT }}
           SOURCE: flutter_app/build/web/
-          TARGET: /var/www/eiquoab.xyz/
+          TARGET: /
           ARGS: "-rlgoDzvc -i --delete"
           EXCLUDE: ".well-known/, .git/"
