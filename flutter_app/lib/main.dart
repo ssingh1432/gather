@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/env.dart';
 import 'core/router.dart';
 import 'core/supabase_client.dart';
+import 'core/theme/app_theme.dart';
 import 'shared/services/analytics_service.dart';
 import 'shared/services/beta_error_logging_service.dart';
 import 'shared/services/push_notification_service.dart';
@@ -72,7 +73,7 @@ class GatherApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'Gather',
       routerConfig: appRouter,
-      theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
+      theme: AppTheme.light,
     );
   }
 }
