@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../shared/providers/app_providers.dart';
+import '../../core/responsive.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key, this.redirect});
@@ -58,7 +59,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Login')),
-      body: Padding(
+      body: ResponsiveCenter(
+        maxWidth: 420,
+        child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
@@ -91,6 +94,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: const Text("Don't have an account? Sign up"),
             ),
           ],
+        ),
         ),
       ),
     );

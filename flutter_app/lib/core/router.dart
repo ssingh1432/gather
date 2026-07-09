@@ -18,6 +18,7 @@ import '../features/posts/create_post_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/user_profile_screen.dart';
+import 'responsive.dart';
 import '../features/reports/report_screen.dart';
 import '../features/search/search_screen.dart';
 import 'supabase_client.dart';
@@ -71,28 +72,68 @@ class MainNav extends StatelessWidget {
   final Widget child;
   final String location;
 
+  static const _tabs = ['/', '/communities', '/create-post', '/search', '/profile'];
+  static const _icons = [
+    Icons.home_outlined,
+    Icons.groups_outlined,
+    Icons.add_box_outlined,
+    Icons.search,
+    Icons.person_outline,
+  ];
+  static const _labels = ['Home', 'Communities', 'Create Post', 'Search', 'Profile'];
+
+  int _indexFor(String location) {
+    if (location.startsWith('/communities')) return 1;
+    if (location.startsWith('/create-post')) return 2;
+    if (location.startsWith('/search')) return 3;
+    if (location.startsWith('/profile')) return 4;
+    return 0;
+  }
+
   @override
   Widget build(BuildContext context) {
-    int index = 0;
-    if (location.startsWith('/communities')) index = 1;
-    if (location.startsWith('/create-post')) index = 2;
-    if (location.startsWith('/search')) index = 3;
-    if (location.startsWith('/profile')) index = 4;
-    const tabs = ['/', '/communities', '/create-post', '/search', '/profile'];
+    final index = _indexFor(location);
 
+    if (Breakpoints.isDesktop(context)) {
+      return Scaffold(
+        floatingActionButton: const BetaFeedbackButton(),
+        body: Row(
+          children: [
+            NavigationRail(
+              selectedIndex: index,
+              onDestinationSelected: (i) => context.go(_tabs[i]),
+              labelType: NavigationRailLabelType.all,
+              destinations: [
+                for (int i = 0; i < _labels.length; i++)
+                  NavigationRailDestination(icon: Icon(_icons[i]), label: Text(_labels[i])),
+              ],
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(
+              child: BetaGate(
+                child: ResponsiveCenter(child: child),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Mobile & tablet: keep the familiar bottom nav; cap content width on
+    // tablet so cards/forms don't stretch uncomfortably wide before the
+    // desktop breakpoint kicks in.
     return Scaffold(
-      body: BetaGate(child: child),
+      body: BetaGate(
+        child: Breakpoints.isTablet(context) ? ResponsiveCenter(child: child) : child,
+      ),
       floatingActionButton: const BetaFeedbackButton(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: index,
-        onTap: (i) => context.go(tabs[i]),
+        onTap: (i) => context.go(_tabs[i]),
         type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.groups_outlined), label: 'Communities'),
-          BottomNavigationBarItem(icon: Icon(Icons.add_box_outlined), label: 'Create Post'),
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
+        items: [
+          for (int i = 0; i < _labels.length; i++)
+            BottomNavigationBarItem(icon: Icon(_icons[i]), label: _labels[i]),
         ],
       ),
     );

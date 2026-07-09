@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
+import '../../core/responsive.dart';
 import '../../shared/services/media_upload_service.dart';
 import '../data/repositories.dart';
 
@@ -179,7 +180,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
         ],
       ),
-      body: ListView(
+      body: ResponsiveCenter(
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           if (_error != null) ...[
@@ -263,6 +265,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
           const SizedBox(height: 32),
         ],
+        ),
       ),
     );
   }
