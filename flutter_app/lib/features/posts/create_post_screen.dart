@@ -115,7 +115,9 @@ class _P extends State<CreatePostScreen> {
                   }
                   _published = true;
                   if (!context.mounted) return;
-                  Navigator.of(context).pop();
+                  text.clear();
+                  image = null;
+                  context.go('/');
                 } catch (e, stackTrace) {
                   BetaErrorLoggingService.instance.record(e, stackTrace, context: 'post_creation_submit', metadata: {'community_id': widget.communityId});
                   if (mounted) {
