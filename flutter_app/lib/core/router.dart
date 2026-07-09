@@ -15,6 +15,7 @@ import '../features/home/home_feed_screen.dart';
 import '../features/home/post_detail_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/posts/create_post_screen.dart';
+import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/user_profile_screen.dart';
 import '../features/reports/report_screen.dart';
@@ -58,6 +59,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
     GoRoute(path: '/user', builder: (_, s) => UserProfileScreen(userId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/bookmarks', builder: (_, __) => const BookmarksScreen()),
+    GoRoute(path: '/edit-profile', builder: (_, __) => const EditProfileScreen()),
     GoRoute(path: '/post', builder: (_, s) => PostDetailScreen(postId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/report', builder: (_, __) => const ReportScreen()),
     GoRoute(path: '/admin', builder: (_, __) => const AdminModerationScreen()),
@@ -108,6 +110,7 @@ const _protectedRoutes = {
   '/create-post',
   '/create-community',
   '/profile',
+  '/edit-profile',
   '/bookmarks',
   '/notifications',
   '/report',

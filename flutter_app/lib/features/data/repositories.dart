@@ -104,6 +104,8 @@ class ProfileRepository {
   Future<void> follow(String targetId, String userId) => _c.from('user_follows').upsert({'following_id': targetId, 'follower_id': userId});
   Future<void> unfollow(String targetId, String userId) => _c.from('user_follows').delete().match({'following_id': targetId, 'follower_id': userId});
   Future<void> block(String targetId, String userId) => _c.from('user_blocks').upsert({'blocked_id': targetId, 'blocker_id': userId});
+  Future<String> uploadProfileImage(String userId, XFile file, ProfileImageKind kind) =>
+      MediaUploadService().uploadProfileImage(userId: userId, image: file, kind: kind);
 }
 
 class PostRepository {
