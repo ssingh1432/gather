@@ -24,6 +24,11 @@ class ProfileScreen extends ConsumerWidget {
         title: const Text('Profile'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Edit profile',
+            onPressed: () => context.push('/edit-profile'),
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Sign out',
             onPressed: () async {
@@ -43,13 +48,54 @@ class ProfileScreen extends ConsumerWidget {
           if (u == null) {
             return const Center(child: Text('Profile not found.'));
           }
+          final displayName = (u['display_name'] as String?)?.isNotEmpty == true
+              ? u['display_name'] as String
+              : (u['username'] ?? '');
+          final interests = ((u['interests'] as List?) ?? []).cast<String>();
+          final isProfileBare = (u['bio'] as String?)?.isEmpty != false &&
+              u['profile_photo_url'] == null &&
+              interests.isEmpty;
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text(u['username'] ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              if (isProfileBare) ...[
+                Card(
+                  color: const Color(0xFF1D9E75).withValues(alpha: 0.08),
+                  child: ListTile(
+                    leading: const Icon(Icons.person_add_alt_1, color: Color(0xFF1D9E75)),
+                    title: const Text('Complete your profile'),
+                    subtitle: const Text('Add a photo, bio, and interests so others can find you'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/edit-profile'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (u['profile_photo_url'] != null) ...[
+                CircleAvatar(radius: 40, backgroundImage: NetworkImage(u['profile_photo_url'])),
+                const SizedBox(height: 12),
+              ],
+              Text(displayName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              if (u['location'] != null) ...[
+                const SizedBox(height: 4),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.place_outlined, size: 16, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(u['location'], style: const TextStyle(color: Colors.grey)),
+                ]),
+              ],
               if ((u['bio'] as String?)?.isNotEmpty ?? false) ...[
                 const SizedBox(height: 8),
                 Text(u['bio']),
+              ],
+              if (interests.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [for (final tag in interests) Chip(label: Text(tag), visualDensity: VisualDensity.compact)],
+                ),
               ],
               const SizedBox(height: 16),
               FutureBuilder<List<int>>(

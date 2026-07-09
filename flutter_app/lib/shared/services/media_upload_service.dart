@@ -29,6 +29,7 @@ class UploadedPostImage {
 /// Flutter Web, since the Web build never links `path_provider` at all.
 class MediaUploadService {
   static const String bucket = 'post-media';
+  static const String avatarsBucket = 'avatars';
 
   SupabaseClient get _client => SupabaseConfig.client;
 
@@ -62,4 +63,29 @@ class MediaUploadService {
       thumbnailUrl: storage.getPublicUrl(thumbPath),
     );
   }
+
+  /// Uploads a profile avatar or cover photo to the `avatars` bucket, scoped
+  /// to `{userId}/{kind}` so storage RLS (folder == auth.uid()) allows it.
+  /// Reuses the same platform-safe prepare pipeline as post images.
+  Future<String> uploadProfileImage({
+    required String userId,
+    required XFile image,
+    required ProfileImageKind kind,
+  }) async {
+    final prepared = await preparePostImage(image);
+    final options = FileOptions(
+      contentType: prepared.contentType,
+      cacheControl: '31536000',
+      upsert: true,
+    );
+    final storage = _client.storage.from(avatarsBucket);
+    final path = '$userId/${kind.name}';
+
+    // Only the original is needed for profile images; skip the thumbnail
+    // upload to save a storage call.
+    await prepared.original.uploadTo(storage, path, options);
+    return storage.getPublicUrl(path);
+  }
 }
+
+enum ProfileImageKind { avatar, cover }
