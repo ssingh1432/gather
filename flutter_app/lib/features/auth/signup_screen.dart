@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase_client.dart';
+import '../../core/responsive.dart';
 import '../../shared/providers/app_providers.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
@@ -70,7 +71,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Signup')),
-      body: Padding(
+      body: ResponsiveCenter(
+        maxWidth: 420,
+        child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(children: [
           TextField(controller: username, decoration: const InputDecoration(labelText: 'Username')),
@@ -97,6 +100,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             child: const Text('Already have an account? Log in'),
           ),
         ]),
+        ),
       ),
     );
   }
