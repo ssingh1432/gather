@@ -94,28 +94,30 @@ class _P extends State<CreatePostScreen> {
       .toSet()
       .toList();
 
-  Future<void> _publish() async {
+    Future<void> _publish() async {
     final uid = SupabaseConfig.client.auth.currentUser?.id;
     if (uid == null) {
-      context.go('/login?redirect=${Uri.encodeComponent(_redirectLocation)}');
+      if (mounted) {
+        context.go('/login?redirect=${Uri.encodeComponent(_redirectLocation)}');
+      }
       return;
     }
 
     if (text.text.trim().isEmpty && image == null) {
-      setState(() => err = 'Add text or image');
+      if (mounted) setState(() => err = 'Add text or image');
       return;
     }
 
-    setState(() {
-      loading = true;
-      err = null;
-    });
+    if (mounted) {
+      setState(() {
+        loading = true;
+        err = null;
+      });
+    }
 
     try {
       final postRepository = PostRepository();
-      // Keep the post id after a failed image upload so tapping Publish
-      // again retries the same storage paths instead of creating duplicate
-      // posts or orphaned media.
+
       _pendingPostId ??= (await postRepository.createPost({
         'author_id': uid,
         'community_id': widget.communityId,
@@ -130,13 +132,20 @@ class _P extends State<CreatePostScreen> {
         final uploaded = await postRepository.uploadPostImage(_pendingPostId!, image!);
         await postRepository.addPostMedia(_pendingPostId!, uploaded.originalUrl);
       }
+
       _published = true;
-      if (!context.mounted) return;
-      text.clear();
-      image = null;
-      context.go('/');
+
+      if (mounted) {
+        text.clear();
+        image = null;
+        context.go('/');
+      }
     } catch (e, stackTrace) {
-      BetaErrorLoggingService.instance.record(e, stackTrace, context: 'post_creation_submit', metadata: {'community_id': widget.communityId});
+      BetaErrorLoggingService.instance.record(e, stackTrace, 
+        context: 'post_creation_submit', 
+        metadata: {'community_id': widget.communityId}
+      );
+
       if (mounted) {
         setState(() => err = 'Upload failed. Please check your connection and retry. $e');
       }
