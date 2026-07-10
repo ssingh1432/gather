@@ -131,7 +131,7 @@ class _P extends State<CreatePostScreen> {
         await postRepository.addPostMedia(_pendingPostId!, uploaded.originalUrl);
       }
       _published = true;
-      if (!context.mounted) return;
+      if (!mounted) return;
       text.clear();
       image = null;
       context.go('/');
