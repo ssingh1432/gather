@@ -30,16 +30,70 @@ class FeedRepository {
   }
 
   Future<PostModel> getPost(String postId) async {
-    final data = await _c.from('posts').select('*, users!posts_author_id_fkey(username), post_media(media_url)').eq('id', postId).eq('is_removed', false).single();
-    return PostModel.fromMap(data);
+    final data = await _c
+        .from('posts')
+        .select('*, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url)')
+        .eq('id', postId)
+        .eq('is_removed', false)
+        .single();
+
+    final likeCount = await _c.from('post_likes').count(CountOption.exact).eq('post_id', postId);
+    final commentCount = await _c.from('post_comments').count(CountOption.exact).eq('post_id', postId);
+
+    final merged = <String, dynamic>{
+      ...data,
+      'like_count': likeCount,
+      'comment_count': commentCount,
+    };
+
+    final replyToId = data['reply_to_post_id'];
+    if (replyToId != null) {
+      final quoted = await _c
+          .from('posts')
+          .select('id, text_content, created_at, is_removed, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url)')
+          .eq('id', replyToId)
+          .maybeSingle();
+      if (quoted == null || quoted['is_removed'] == true) {
+        merged['reply_to_removed'] = true;
+      } else {
+        final quotedMedia = quoted['post_media'] as List?;
+        final quotedAuthor = quoted['users'] as Map<String, dynamic>?;
+        merged['reply_to_author_username'] = quotedAuthor?['username'];
+        merged['reply_to_author_avatar_url'] = quotedAuthor?['profile_photo_url'];
+        merged['reply_to_text_content'] = quoted['text_content'];
+        merged['reply_to_image_url'] = (quotedMedia != null && quotedMedia.isNotEmpty) ? quotedMedia.first['media_url'] : null;
+        merged['reply_to_created_at'] = quoted['created_at'];
+        merged['reply_to_removed'] = false;
+      }
+    }
+
+    return PostModel.fromMap(merged);
   }
 
-  Future<List<Map<String, dynamic>>> comments(String postId) async =>
-      ((await _c.from('post_comments').select('*, users!post_comments_user_id_fkey(username)').eq('post_id', postId).order('created_at')) as List).cast<Map<String, dynamic>>();
+  Future<List<CommentModel>> comments(String postId) async {
+    final data = await _c
+        .from('post_comments')
+        .select('*, users!post_comments_user_id_fkey(username, profile_photo_url)')
+        .eq('post_id', postId)
+        .order('created_at');
+    return (data as List).map((e) => CommentModel.fromMap(e as Map<String, dynamic>)).toList();
+  }
 
-  Future<void> addComment(String postId, String userId, String content) async {
-    await _c.from('post_comments').insert({'post_id': postId, 'user_id': userId, 'content': content});
+  Future<void> addComment(String postId, String userId, String content, {String? parentCommentId}) async {
+    await _c.from('post_comments').insert({
+      'post_id': postId,
+      'user_id': userId,
+      'content': content,
+      if (parentCommentId != null) 'parent_comment_id': parentCommentId,
+    });
     AnalyticsService.instance.commentCreated(postId: postId);
+  }
+
+  /// Logs a share (system share sheet / copy link) so the post's share
+  /// counter goes up in the same "loop" way likes and comments do.
+  Future<void> sharePost(String postId, String userId, {String target = 'external'}) async {
+    await _c.from('post_shares').insert({'post_id': postId, 'user_id': userId, 'target': target});
+    AnalyticsService.instance.firstActionCompleted(action: 'post_shared');
   }
 
   Future<List<PostModel>> communityFeed(String communityId, {String? userId, int page = 0, int pageSize = 20}) async {

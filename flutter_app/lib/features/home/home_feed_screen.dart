@@ -11,6 +11,7 @@ import '../../shared/services/analytics_service.dart';
 import '../../shared/services/beta_error_logging_service.dart';
 import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
+import '../../shared/widgets/composer_prompt.dart';
 
 class HomeFeedScreen extends ConsumerStatefulWidget {
   const HomeFeedScreen({super.key});
@@ -171,9 +172,10 @@ class _S extends ConsumerState<HomeFeedScreen> {
               : _posts.isEmpty
                   ? RefreshIndicator(
                       onRefresh: _loadInitial,
-                      child: const CustomScrollView(
-                        physics: AlwaysScrollableScrollPhysics(),
-                        slivers: [
+                      child: CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: const [
+                          SliverToBoxAdapter(child: ComposerPrompt()),
                           SliverFillRemaining(
                             child: EmptyState(icon: Icons.dynamic_feed_outlined, title: 'No posts yet', message: 'Pull to refresh or check back soon.'),
                           ),
@@ -185,8 +187,10 @@ class _S extends ConsumerState<HomeFeedScreen> {
                       child: ListView.builder(
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: _posts.length + (_loadingMore ? 1 : 0),
-                        itemBuilder: (context, index) {
+                        itemCount: 1 + _posts.length + (_loadingMore ? 1 : 0),
+                        itemBuilder: (context, rawIndex) {
+                          if (rawIndex == 0) return const ComposerPrompt();
+                          final index = rawIndex - 1;
                           if (index >= _posts.length) {
                             return const Padding(
                               padding: EdgeInsets.all(16),
