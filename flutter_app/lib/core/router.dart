@@ -46,7 +46,13 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(path: '/', builder: (_, __) => const HomeFeedScreen()),
         GoRoute(path: '/communities', builder: (_, __) => const CommunitiesScreen()),
-        GoRoute(path: '/create-post', builder: (_, s) => CreatePostScreen(communityId: s.uri.queryParameters['communityId'])),
+        GoRoute(
+          path: '/create-post',
+          builder: (_, s) => CreatePostScreen(
+            communityId: s.uri.queryParameters['communityId'],
+            quotePostId: s.uri.queryParameters['quotePostId'],
+          ),
+        ),
         GoRoute(path: '/search', builder: (_, __) => const SearchScreen()),
         GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
       ],
@@ -62,7 +68,13 @@ final appRouter = GoRouter(
     GoRoute(path: '/bookmarks', builder: (_, __) => const BookmarksScreen()),
     GoRoute(path: '/edit-profile', builder: (_, __) => const EditProfileScreen()),
     GoRoute(path: '/post', builder: (_, s) => PostDetailScreen(postId: s.uri.queryParameters['id'] ?? '')),
-    GoRoute(path: '/report', builder: (_, __) => const ReportScreen()),
+    GoRoute(
+      path: '/report',
+      builder: (_, s) => ReportScreen(
+        postId: s.uri.queryParameters['postId'],
+        userId: s.uri.queryParameters['userId'],
+      ),
+    ),
     GoRoute(path: '/admin', builder: (_, __) => const AdminModerationScreen()),
   ],
 );
