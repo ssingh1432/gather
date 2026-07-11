@@ -12,6 +12,7 @@ import '../../shared/services/beta_error_logging_service.dart';
 import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
 import '../../shared/widgets/composer_prompt.dart';
+import '../../shared/widgets/people_you_may_know.dart';
 
 class HomeFeedScreen extends ConsumerStatefulWidget {
   const HomeFeedScreen({super.key});
@@ -176,6 +177,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: const [
                           SliverToBoxAdapter(child: ComposerPrompt()),
+                          SliverToBoxAdapter(child: PeopleYouMayKnow()),
                           SliverFillRemaining(
                             child: EmptyState(icon: Icons.dynamic_feed_outlined, title: 'No posts yet', message: 'Pull to refresh or check back soon.'),
                           ),
@@ -187,10 +189,11 @@ class _S extends ConsumerState<HomeFeedScreen> {
                       child: ListView.builder(
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: 1 + _posts.length + (_loadingMore ? 1 : 0),
+                        itemCount: 2 + _posts.length + (_loadingMore ? 1 : 0),
                         itemBuilder: (context, rawIndex) {
                           if (rawIndex == 0) return const ComposerPrompt();
-                          final index = rawIndex - 1;
+                          if (rawIndex == 1) return const PeopleYouMayKnow();
+                          final index = rawIndex - 2;
                           if (index >= _posts.length) {
                             return const Padding(
                               padding: EdgeInsets.all(16),

@@ -160,6 +160,44 @@ class ProfileRepository {
   Future<void> block(String targetId, String userId) => _c.from('user_blocks').upsert({'blocked_id': targetId, 'blocker_id': userId});
   Future<String> uploadProfileImage(String userId, XFile file, ProfileImageKind kind) =>
       MediaUploadService().uploadProfileImage(userId: userId, image: file, kind: kind);
+
+  /// A small, shuffled batch of people [userId] doesn't already follow (and
+  /// isn't blocked by/hasn't blocked) — backs the "You may know these
+  /// people" row on the home feed.
+  Future<List<RecommendedUser>> recommendedUsers(String userId, {int limit = 10}) async {
+    final followingRows = await _c.from('user_follows').select('following_id').eq('follower_id', userId);
+    final blockedRows = await _c.from('user_blocks').select('blocker_id, blocked_id').or('blocker_id.eq.$userId,blocked_id.eq.$userId');
+
+    final excludeIds = <String>{userId};
+    for (final row in (followingRows as List)) {
+      excludeIds.add(row['following_id'].toString());
+    }
+    for (final row in (blockedRows as List)) {
+      excludeIds.add(row['blocker_id'].toString());
+      excludeIds.add(row['blocked_id'].toString());
+    }
+
+    // Over-fetch a bit so we can shuffle client-side for variety across
+    // refreshes instead of always showing the same newest users first.
+    final data = await _c
+        .from('users')
+        .select('id, username, profile_photo_url')
+        .not('id', 'in', '(${excludeIds.join(',')})')
+        .order('created_at', ascending: false)
+        .limit(limit * 3);
+
+    final users = (data as List).map((e) => RecommendedUser.fromMap(e as Map<String, dynamic>)).toList()..shuffle();
+    return users.take(limit).toList();
+  }
+
+  /// "Add Friend" on the recommendations row. Gather's social graph is a
+  /// single-sided follow (no separate accept step), so sending a request
+  /// simply follows the person — the button just reads "Requested" until
+  /// the row refreshes.
+  Future<void> sendFriendRequest(String targetId, String userId) async {
+    await follow(targetId, userId);
+    AnalyticsService.instance.firstActionCompleted(action: 'friend_request_sent');
+  }
 }
 
 class PostRepository {

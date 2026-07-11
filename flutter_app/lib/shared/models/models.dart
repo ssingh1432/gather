@@ -128,6 +128,23 @@ class PostModel {
   }
 }
 
+/// A minimal user shape for lightweight lists (recommendations, search
+/// results) that don't need the full profile payload.
+class RecommendedUser {
+  final String id;
+  final String username;
+  final String? avatarUrl;
+
+  RecommendedUser({required this.id, required this.username, this.avatarUrl});
+
+  factory RecommendedUser.fromMap(Map<String, dynamic> map) => RecommendedUser(
+        id: map['id'].toString(),
+        username: map['username'] as String? ?? 'user',
+        avatarUrl: map['profile_photo_url'] as String?,
+      );
+}
+
+
 /// A single comment (or reply-to-comment) on a post. [parentCommentId] is
 /// null for a top-level comment; when set, the comment nests one level
 /// under the comment it replies to. [replyCount] is denormalized server
