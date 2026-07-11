@@ -7,14 +7,17 @@
 // closest, most honest equivalent is triggering the browser's normal file
 // download (same as right-click → Save As), which drops the file into the
 // person's Downloads folder.
-import 'dart:html' as html;
 
+import 'package:web/web.dart' as web;
 import 'media_download_exception.dart';
 
-Future<void> saveMediaToDevice({required String url, required bool isVideo}) async {
-  html.HttpRequest request;
+Future<void> saveMediaToDevice({
+  required String url,
+  required bool isVideo,
+}) async {
+  web.XMLHttpRequest request;
   try {
-    request = await html.HttpRequest.request(url, responseType: 'arraybuffer');
+    request = await web.fetch(url).then((response) => response as web.XMLHttpRequest);
   } catch (_) {
     throw const MediaDownloadException('Could not download this media. Please try again.');
   }
@@ -25,15 +28,17 @@ Future<void> saveMediaToDevice({required String url, required bool isVideo}) asy
   }
 
   final mimeType = isVideo ? 'video/mp4' : 'image/jpeg';
-  final blob = html.Blob([buffer], mimeType);
-  final blobUrl = html.Url.createObjectUrlFromBlob(blob);
+  final blob = web.Blob([buffer], mimeType);
+  final blobUrl = web.URL.createObjectURL(blob);
   final fileName = 'gather_${DateTime.now().millisecondsSinceEpoch}.${isVideo ? 'mp4' : 'jpg'}';
 
-  final anchor = html.AnchorElement(href: blobUrl)
+  final anchor = web.HTMLAnchorElement()
+    ..href = blobUrl
     ..download = fileName
     ..style.display = 'none';
-  html.document.body?.append(anchor);
+
+  web.document.body?.append(anchor);
   anchor.click();
   anchor.remove();
-  html.Url.revokeObjectUrl(blobUrl);
+  web.URL.revokeObjectURL(blobUrl);
 }
