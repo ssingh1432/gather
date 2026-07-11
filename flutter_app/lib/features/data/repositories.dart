@@ -13,7 +13,7 @@ class FeedRepository {
   Future<List<PostModel>> publicFeed({int page = 0, int pageSize = 20}) async {
     final data = await _c
         .from('posts')
-        .select('*, users!posts_author_id_fkey(username), post_media(media_url)')
+        .select('*, users!posts_author_id_fkey(username), post_media(media_url, media_type)')
         .eq('is_removed', false)
         .order('created_at', ascending: false)
         .range(page * pageSize, page * pageSize + pageSize - 1);
@@ -32,7 +32,7 @@ class FeedRepository {
   Future<PostModel> getPost(String postId) async {
     final data = await _c
         .from('posts')
-        .select('*, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url)')
+        .select('*, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url, media_type)')
         .eq('id', postId)
         .eq('is_removed', false)
         .single();
@@ -50,7 +50,7 @@ class FeedRepository {
     if (replyToId != null) {
       final quoted = await _c
           .from('posts')
-          .select('id, text_content, created_at, is_removed, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url)')
+          .select('id, text_content, created_at, is_removed, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url, media_type)')
           .eq('id', replyToId)
           .maybeSingle();
       if (quoted == null || quoted['is_removed'] == true) {
@@ -122,6 +122,22 @@ class FeedRepository {
   Future<void> unlikePost(String postId, String userId) => _c.from('post_likes').delete().match({'post_id': postId, 'user_id': userId});
   Future<void> bookmarkPost(String postId, String userId) => _c.from('bookmarks').upsert({'post_id': postId, 'user_id': userId});
   Future<void> unbookmarkPost(String postId, String userId) => _c.from('bookmarks').delete().match({'post_id': postId, 'user_id': userId});
+
+  /// Who liked this post — powers the "liked by" list opened from the like
+  /// count. Newest like first.
+  Future<List<RecommendedUser>> likersOf(String postId, {int limit = 50}) async {
+    final data = await _c
+        .from('post_likes')
+        .select('user_id, created_at, users!post_likes_user_id_fkey(id, username, profile_photo_url)')
+        .eq('post_id', postId)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return (data as List)
+        .map((row) => row['users'])
+        .whereType<Map<String, dynamic>>()
+        .map(RecommendedUser.fromMap)
+        .toList();
+  }
 }
 
 class CommunityRepository {
@@ -221,9 +237,19 @@ class PostRepository {
     return mediaService.uploadPostImage(postId: postId, image: prepared);
   }
 
-  Future<void> addPostMedia(String postId, String mediaUrl) async {
-    await _c.from('post_media').delete().eq('post_id', postId).eq('media_type', 'image');
-    await _c.from('post_media').insert({'post_id': postId, 'media_type': 'image', 'media_url': mediaUrl});
+  Future<String> uploadPostVideo(String postId, XFile file) async {
+    final mediaService = MediaUploadService();
+    final prepared = await mediaService.preparePostVideo(file);
+    return mediaService.uploadPostVideo(postId: postId, video: prepared);
+  }
+
+  /// [mediaType] is `'image'` or `'video'` — matches the `post_media`
+  /// table's `media_type` enum. A post carries at most one media item, so
+  /// this clears any existing row of the same type before inserting (keeps
+  /// a retried publish idempotent instead of accumulating duplicates).
+  Future<void> addPostMedia(String postId, String mediaUrl, {String mediaType = 'image'}) async {
+    await _c.from('post_media').delete().eq('post_id', postId).eq('media_type', mediaType);
+    await _c.from('post_media').insert({'post_id': postId, 'media_type': mediaType, 'media_url': mediaUrl});
   }
 }
 

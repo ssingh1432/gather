@@ -57,6 +57,7 @@ class PostModel {
   final String? feeling;
   final List<String> tags;
   final QuotedPostPreview? replyTo;
+  final String? mediaType;
 
   PostModel({
     required this.id,
@@ -78,6 +79,7 @@ class PostModel {
     this.feeling,
     this.tags = const [],
     this.replyTo,
+    this.mediaType,
   });
 
   factory PostModel.fromMap(Map<String, dynamic> map) {
@@ -106,8 +108,37 @@ class PostModel {
       feeling: map['feeling'] as String?,
       tags: ((map['tags'] as List?) ?? const []).map((e) => e.toString()).toList(),
       replyTo: QuotedPostPreview.fromMap(map),
+      mediaType: map['media_type'] as String? ?? (media != null && media.isNotEmpty ? media.first['media_type'] as String? : null),
     );
   }
+
+  bool get isVideo => mediaType == 'video';
+
+  /// Returns a copy with the given fields replaced — used to patch live
+  /// like/comment/share counts in place from realtime events without
+  /// refetching the whole post.
+  PostModel copyWith({int? likeCount, int? commentCount, int? shareCount, bool? isLiked}) => PostModel(
+        id: id,
+        authorId: authorId,
+        textContent: textContent,
+        createdAt: createdAt,
+        authorUsername: authorUsername,
+        authorAvatarUrl: authorAvatarUrl,
+        communityId: communityId,
+        imageUrl: imageUrl,
+        thumbnailUrl: thumbnailUrl,
+        likeCount: likeCount ?? this.likeCount,
+        commentCount: commentCount ?? this.commentCount,
+        shareCount: shareCount ?? this.shareCount,
+        isLiked: isLiked ?? this.isLiked,
+        isBookmarked: isBookmarked,
+        mediaUpdatedAt: mediaUpdatedAt,
+        location: location,
+        feeling: feeling,
+        tags: tags,
+        replyTo: replyTo,
+        mediaType: mediaType,
+      );
 
   String? get displayImageUrl => thumbnailUrl ?? _derivedThumbnailUrl ?? imageUrl;
 

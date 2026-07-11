@@ -9,6 +9,7 @@ import '../../features/data/repositories.dart';
 import '../../shared/models/models.dart';
 import '../../shared/services/analytics_service.dart';
 import '../../shared/services/beta_error_logging_service.dart';
+import '../../shared/services/feed_realtime_service.dart';
 import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
 import '../../shared/widgets/composer_prompt.dart';
@@ -38,19 +39,61 @@ class _S extends ConsumerState<HomeFeedScreen> {
   Timer? _noInteractionTimer;
   bool _feedInteracted = false;
 
+  final _realtime = FeedRealtimeService();
+  StreamSubscription<FeedRealtimeEvent>? _realtimeSub;
+  bool _newPostsAvailable = false;
+
   @override
   void initState() {
     super.initState();
     _guardBannedUser();
     _scrollController.addListener(_maybePreloadNextPage);
     _loadInitial();
+    _realtimeSub = _realtime.subscribe().listen(_handleRealtimeEvent);
   }
 
   @override
   void dispose() {
     _noInteractionTimer?.cancel();
     _scrollController.dispose();
+    _realtimeSub?.cancel();
+    _realtime.dispose();
     super.dispose();
+  }
+
+  /// Live like/comment/share counts patch the matching post in place;
+  /// a new post from someone else surfaces as a "New posts" pill rather
+  /// than silently reordering the list under the person's thumb.
+  void _handleRealtimeEvent(FeedRealtimeEvent event) {
+    if (!mounted) return;
+    final uid = SupabaseConfig.currentUserId;
+
+    if (event.type == FeedRealtimeEventType.newPost) {
+      if (event.authorId != null && event.authorId == uid) return;
+      setState(() => _newPostsAvailable = true);
+      return;
+    }
+
+    final postId = event.postId;
+    if (postId == null) return;
+    final index = _posts.indexWhere((p) => p.id == postId);
+    if (index == -1) return;
+
+    final post = _posts[index];
+    setState(() {
+      final updated = switch (event.type) {
+        FeedRealtimeEventType.likeCountDelta => post.copyWith(likeCount: post.likeCount + event.delta < 0 ? 0 : post.likeCount + event.delta),
+        FeedRealtimeEventType.commentCountDelta => post.copyWith(commentCount: post.commentCount + event.delta < 0 ? 0 : post.commentCount + event.delta),
+        FeedRealtimeEventType.shareCountDelta => post.copyWith(shareCount: post.shareCount + event.delta < 0 ? 0 : post.shareCount + event.delta),
+        FeedRealtimeEventType.newPost => post,
+      };
+      _posts = [..._posts.sublist(0, index), updated, ..._posts.sublist(index + 1)];
+    });
+  }
+
+  Future<void> _refreshFromRealtimeBanner() async {
+    setState(() => _newPostsAvailable = false);
+    await _loadInitial();
   }
 
   Future<void> _guardBannedUser() async {
@@ -166,8 +209,10 @@ class _S extends ConsumerState<HomeFeedScreen> {
     final uid = SupabaseConfig.currentUserId;
     return Scaffold(
       appBar: AppBar(title: const Text('Home')),
-      body: _loadingInitial
-          ? const FeedSkeletonList()
+      body: Stack(
+        children: [
+          _loadingInitial
+              ? const FeedSkeletonList()
           : _error != null
               ? ErrorRetryState(title: 'Unable to load posts', message: _error!, onRetry: _loadInitial)
               : _posts.isEmpty
@@ -247,6 +292,36 @@ class _S extends ConsumerState<HomeFeedScreen> {
                         },
                       ),
                     ),
+          if (_newPostsAvailable)
+            Positioned(
+              top: 8,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Material(
+                  elevation: 3,
+                  borderRadius: BorderRadius.circular(20),
+                  color: Theme.of(c).colorScheme.primary,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: _refreshFromRealtimeBanner,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.arrow_upward, size: 16, color: Theme.of(c).colorScheme.onPrimary),
+                          const SizedBox(width: 6),
+                          Text('New posts', style: TextStyle(color: Theme.of(c).colorScheme.onPrimary, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

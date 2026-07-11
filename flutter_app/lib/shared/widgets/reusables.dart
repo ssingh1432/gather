@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/supabase_client.dart';
 import '../../features/data/repositories.dart';
 import '../models/models.dart';
+import '../services/media_download_service.dart';
 import '../utils/time_ago.dart';
 import 'auth_redirects.dart';
 
@@ -128,6 +129,15 @@ class PostCard extends StatelessWidget {
     );
   }
 
+  void _openLikersSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => _LikersSheet(postId: post.id, likeCount: post.likeCount),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Card(
         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -151,26 +161,10 @@ class PostCard extends StatelessWidget {
               const SizedBox(height: 10),
               _QuotedPostCard(quoted: post.replyTo!),
             ],
-            if (post.displayImageUrl != null)
+            if (post.displayImageUrl != null || post.isVideo)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: CachedNetworkImage(
-                    imageUrl: post.displayImageUrl!,
-                    cacheKey: post.imageCacheKey,
-                    height: 220,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    memCacheWidth: 1080,
-                    fadeInDuration: const Duration(milliseconds: 120),
-                    placeholder: (context, url) => const SkeletonBox(height: 220),
-                    errorWidget: (context, url, error) => const SizedBox(
-                      height: 220,
-                      child: Center(child: Icon(Icons.broken_image_outlined)),
-                    ),
-                  ),
-                ),
+                child: _PostMedia(post: post, liked: liked, onLike: onLike),
               ),
             const SizedBox(height: 4),
             _PostActionBar(
@@ -181,10 +175,287 @@ class PostCard extends StatelessWidget {
               onComment: onComment,
               onBookmark: onBookmark,
               onShare: () => _openShareSheet(context),
+              onShowLikers: () => _openLikersSheet(context),
             ),
           ]),
         ),
       );
+}
+
+
+/// The media block of a post: image or video preview, wrapped so that:
+/// - a single tap opens the full-screen [MediaViewerScreen]
+/// - a double tap likes the post (Instagram-style) with a heart pop
+///   animation, without ever un-liking on a repeat double tap
+/// - a small download button in the corner saves the media directly from
+///   the feed, without needing to open the viewer first
+///
+/// Videos are NOT given a live `VideoPlayerController` here — running one
+/// controller per visible video in a scrolling list is a real memory/perf
+/// risk, so the feed shows a lightweight static placeholder and only pays
+/// for video playback once the person actually opens the full viewer.
+class _PostMedia extends StatefulWidget {
+  const _PostMedia({required this.post, required this.liked, required this.onLike});
+  final PostModel post;
+  final bool liked;
+  final VoidCallback onLike;
+
+  @override
+  State<_PostMedia> createState() => _PostMediaState();
+}
+
+class _PostMediaState extends State<_PostMedia> with SingleTickerProviderStateMixin {
+  late final AnimationController _heartController;
+  late final Animation<double> _heartScale;
+  bool _showHeart = false;
+  bool _downloading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _heartController = AnimationController(vsync: this, duration: const Duration(milliseconds: 550));
+    _heartScale = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.2).chain(CurveTween(curve: Curves.easeOutBack)), weight: 55),
+      TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0), weight: 20),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 15),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeIn)), weight: 10),
+    ]).animate(_heartController);
+  }
+
+  @override
+  void dispose() {
+    _heartController.dispose();
+    super.dispose();
+  }
+
+  void _handleDoubleTap() {
+    setState(() => _showHeart = true);
+    _heartController.forward(from: 0).whenComplete(() {
+      if (mounted) setState(() => _showHeart = false);
+    });
+    if (!widget.liked) widget.onLike();
+  }
+
+  String get _mediaUrl => widget.post.imageUrl ?? widget.post.displayImageUrl ?? '';
+
+  void _openViewer(BuildContext context) {
+    if (_mediaUrl.isEmpty) return;
+    final type = widget.post.isVideo ? 'video' : 'image';
+    context.push('/media?url=${Uri.encodeComponent(_mediaUrl)}&type=$type');
+  }
+
+  Future<void> _download(BuildContext context) async {
+    if (_downloading || _mediaUrl.isEmpty) return;
+    setState(() => _downloading = true);
+    try {
+      await saveMediaToDevice(url: _mediaUrl, isVideo: widget.post.isVideo);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.post.isVideo ? 'Video saved.' : 'Photo saved.')));
+      }
+    } on MediaDownloadException catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not save media. Please try again.')));
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: GestureDetector(
+        onTap: () => _openViewer(context),
+        onDoubleTap: _handleDoubleTap,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              height: 220,
+              width: double.infinity,
+              child: widget.post.isVideo ? const _VideoPlaceholder() : _ImageThumbnail(post: widget.post),
+            ),
+            IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: _showHeart ? 1 : 0,
+                duration: const Duration(milliseconds: 150),
+                child: ScaleTransition(
+                  scale: _heartScale,
+                  child: const Icon(Icons.favorite, color: Colors.white, size: 84, shadows: [Shadow(blurRadius: 12, color: Colors.black45)]),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: _MediaIconButton(
+                icon: _downloading ? null : Icons.download_outlined,
+                loading: _downloading,
+                onTap: () => _download(context),
+                tooltip: 'Download',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ImageThumbnail extends StatelessWidget {
+  const _ImageThumbnail({required this.post});
+  final PostModel post;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = post.displayImageUrl;
+    if (url == null) return const SizedBox.shrink();
+    return CachedNetworkImage(
+      imageUrl: url,
+      cacheKey: post.imageCacheKey,
+      fit: BoxFit.cover,
+      memCacheWidth: 1080,
+      fadeInDuration: const Duration(milliseconds: 120),
+      placeholder: (context, url) => const SkeletonBox(height: 220),
+      errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image_outlined)),
+    );
+  }
+}
+
+class _VideoPlaceholder extends StatelessWidget {
+  const _VideoPlaceholder();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF2B2B2B), Color(0xFF161616)]),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.35), shape: BoxShape.circle),
+              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 40),
+            ),
+            const Positioned(
+              left: 10,
+              bottom: 10,
+              child: _MediaBadge(label: 'VIDEO', icon: Icons.videocam_outlined),
+            ),
+          ],
+        ),
+      );
+}
+
+class _MediaBadge extends StatelessWidget {
+  const _MediaBadge({required this.label, required this.icon});
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(6)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 12, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+        ]),
+      );
+}
+
+class _MediaIconButton extends StatelessWidget {
+  const _MediaIconButton({required this.onTap, this.icon, this.loading = false, this.tooltip});
+  final VoidCallback onTap;
+  final IconData? icon;
+  final bool loading;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.black.withValues(alpha: 0.45),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(7),
+            child: loading
+                ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Icon(icon, size: 18, color: Colors.white),
+          ),
+        ),
+      );
+}
+
+/// Bottom sheet listing the people who liked a post.
+class _LikersSheet extends StatefulWidget {
+  const _LikersSheet({required this.postId, required this.likeCount});
+  final String postId;
+  final int likeCount;
+
+  @override
+  State<_LikersSheet> createState() => _LikersSheetState();
+}
+
+class _LikersSheetState extends State<_LikersSheet> {
+  late Future<List<RecommendedUser>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = FeedRepository().likersOf(widget.postId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.6,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Text('Liked by ${widget.likeCount}', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            ),
+            Expanded(
+              child: FutureBuilder<List<RecommendedUser>>(
+                future: _future,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return const EmptyState(icon: Icons.error_outline, title: 'Could not load likes');
+                  }
+                  final likers = snapshot.data ?? const [];
+                  if (likers.isEmpty) {
+                    return const EmptyState(icon: Icons.favorite_border, title: 'No likes yet');
+                  }
+                  return ListView.builder(
+                    itemCount: likers.length,
+                    itemBuilder: (context, index) {
+                      final user = likers[index];
+                      return ListTile(
+                        leading: ProfileAvatar(url: user.avatarUrl, radius: 20),
+                        title: Text(user.username),
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/user?id=${user.id}');
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PostHeader extends StatelessWidget {
@@ -335,6 +606,7 @@ class _PostActionBar extends StatelessWidget {
   final VoidCallback onComment;
   final VoidCallback onBookmark;
   final VoidCallback onShare;
+  final VoidCallback onShowLikers;
 
   const _PostActionBar({
     required this.post,
@@ -344,18 +616,30 @@ class _PostActionBar extends StatelessWidget {
     required this.onComment,
     required this.onBookmark,
     required this.onShare,
+    required this.onShowLikers,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Row(children: [
-      _ActionButton(
-        icon: liked ? Icons.favorite : Icons.favorite_border,
-        color: liked ? Colors.redAccent : null,
-        label: post.likeCount > 0 ? '${post.likeCount}' : null,
+      InkWell(
+        borderRadius: BorderRadius.circular(20),
         onTap: onLike,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Icon(liked ? Icons.favorite : Icons.favorite_border, size: 20, color: liked ? Colors.redAccent : null),
+        ),
       ),
+      if (post.likeCount > 0)
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onShowLikers,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: Text('${post.likeCount}', style: theme.textTheme.bodySmall),
+          ),
+        ),
       const SizedBox(width: 4),
       _ActionButton(
         icon: Icons.mode_comment_outlined,
