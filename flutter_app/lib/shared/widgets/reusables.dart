@@ -667,7 +667,7 @@ class _ActionButton extends StatelessWidget {
   final String? label;
   final Color? color;
   final VoidCallback onTap;
-  const _ActionButton({required this.icon, required this.onTap, this.label});
+  const _ActionButton({required this.icon, required this.onTap, this.label, this.color});
 
   @override
   Widget build(BuildContext context) => InkWell(
