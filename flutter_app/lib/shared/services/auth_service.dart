@@ -54,7 +54,15 @@ class AuthService {
   }
 
   Future<void> signOut() async {
-    await PushNotificationService.instance.clearTokenForCurrentUser();
+    // Best-effort: clearing the FCM token must never block the actual
+    // sign-out. Previously an exception here (e.g. a flaky network call)
+    // propagated all the way up and left the person stuck on the "Sign
+    // out" button with no error and no signed-out state.
+    try {
+      await PushNotificationService.instance.clearTokenForCurrentUser();
+    } catch (_) {
+      // Ignored — a stale token is harmless; failing to sign out is not.
+    }
     await _client.auth.signOut();
   }
   Future<void> resetPassword(String email) => _client.auth.resetPasswordForEmail(email);
