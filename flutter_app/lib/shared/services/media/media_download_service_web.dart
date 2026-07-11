@@ -1,4 +1,3 @@
-
 import 'package:web/web.dart' as web;
 import 'media_download_exception.dart';
 
@@ -10,7 +9,7 @@ Future<void> saveMediaToDevice({
     final response = await web.fetch(url);
     final buffer = await response.arrayBuffer();
     final mimeType = isVideo ? 'video/mp4' : 'image/jpeg';
-    final blob = web.Blob([buffer] as List<Object>, mimeType);
+    final blob = web.Blob([buffer] as List<Object?>, mimeType);
     final blobUrl = web.URL.createObjectURL(blob);
     final fileName = 'gather_${DateTime.now().millisecondsSinceEpoch}.${isVideo ? 'mp4' : 'jpg'}';
 
