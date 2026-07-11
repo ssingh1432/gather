@@ -665,9 +665,8 @@ class _PostActionBar extends StatelessWidget {
 class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String? label;
-  final Color? color;
   final VoidCallback onTap;
-  const _ActionButton({required this.icon, required this.onTap, this.label, this.color});
+  const _ActionButton({required this.icon, required this.onTap, this.label});
 
   @override
   Widget build(BuildContext context) => InkWell(
@@ -676,10 +675,10 @@ class _ActionButton extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           child: Row(children: [
-            Icon(icon, size: 20, color: color),
+            Icon(icon, size: 20),
             if (label != null) ...[
               const SizedBox(width: 4),
-              Text(label!, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color)),
+              Text(label!, style: Theme.of(context).textTheme.bodySmall),
             ],
           ]),
         ),
