@@ -3,7 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
 import 'media/post_image_preparer.dart' as preparer;
+import 'media/post_video_preparer.dart' as video_preparer;
 import 'media/prepared_post_image.dart';
+import 'media/prepared_post_video.dart';
 
 export 'media/media_upload_exception.dart';
 export 'media/prepared_post_image.dart' show PreparedImageSet;
@@ -36,6 +38,25 @@ class MediaUploadService {
   /// Prepares [image] for upload. On mobile this compresses to temp files;
   /// on Web it reads the raw bytes. See `media/post_image_preparer.dart`.
   Future<PreparedImageSet> preparePostImage(XFile image) => preparer.preparePostImage(image);
+
+  /// Prepares a picked video for upload — same io/File-vs-Web/bytes seam as
+  /// [preparePostImage], but with no client-side re-encoding (videos are
+  /// uploaded as picked). See `media/post_video_preparer.dart`.
+  Future<PreparedPostVideo> preparePostVideo(XFile video) => video_preparer.preparePostVideo(video);
+
+  /// Uploads a post video to `posts/{postId}/video`. Deterministic path +
+  /// upsert mirrors [uploadPostImage] so a retried publish overwrites the
+  /// same object instead of orphaning duplicates.
+  Future<String> uploadPostVideo({
+    required String postId,
+    required PreparedPostVideo video,
+  }) async {
+    final options = FileOptions(contentType: video.contentType, cacheControl: '31536000', upsert: true);
+    final storage = _client.storage.from(bucket);
+    final path = 'posts/$postId/video';
+    await video.uploadTo(storage, path, options);
+    return storage.getPublicUrl(path);
+  }
 
   Future<UploadedPostImage> uploadPostImage({
     required String postId,

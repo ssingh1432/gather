@@ -13,6 +13,7 @@ import '../features/communities/community_detail_screen.dart';
 import '../features/communities/create_community_screen.dart';
 import '../features/home/home_feed_screen.dart';
 import '../features/home/post_detail_screen.dart';
+import '../features/media/media_viewer_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/posts/create_post_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
@@ -68,6 +69,13 @@ final appRouter = GoRouter(
     GoRoute(path: '/bookmarks', builder: (_, __) => const BookmarksScreen()),
     GoRoute(path: '/edit-profile', builder: (_, __) => const EditProfileScreen()),
     GoRoute(path: '/post', builder: (_, s) => PostDetailScreen(postId: s.uri.queryParameters['id'] ?? '')),
+    GoRoute(
+      path: '/media',
+      builder: (_, s) => MediaViewerScreen(
+        url: s.uri.queryParameters['url'] ?? '',
+        isVideo: s.uri.queryParameters['type'] == 'video',
+      ),
+    ),
     GoRoute(
       path: '/report',
       builder: (_, s) => ReportScreen(
@@ -158,6 +166,7 @@ const _protectedRoutes = {
   '/communities',
   '/community',
   '/post',
+  '/media',
   '/search',
   '/user',
   '/create-post',

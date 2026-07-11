@@ -27,6 +27,7 @@ class _P extends State<CreatePostScreen> {
   final location = TextEditingController();
   final tagsCtrl = TextEditingController();
   XFile? image;
+  XFile? video;
   bool loading = false;
   String? err;
   String? _pendingPostId;
@@ -68,11 +69,11 @@ class _P extends State<CreatePostScreen> {
 
   @override
   void dispose() {
-    if (!_published && (text.text.trim().isNotEmpty || image != null)) {
+    if (!_published && (text.text.trim().isNotEmpty || image != null || video != null)) {
       AnalyticsService.instance.postCreationAbandoned(
         communityId: widget.communityId,
         hadText: text.text.trim().isNotEmpty,
-        hadImage: image != null,
+        hadImage: image != null || video != null,
       );
     }
     text.dispose();
@@ -94,7 +95,7 @@ class _P extends State<CreatePostScreen> {
       .toSet()
       .toList();
 
-    Future<void> _publish() async {
+  Future<void> _publish() async {
     final uid = SupabaseConfig.client.auth.currentUser?.id;
     if (uid == null) {
       if (mounted) {
@@ -103,8 +104,8 @@ class _P extends State<CreatePostScreen> {
       return;
     }
 
-    if (text.text.trim().isEmpty && image == null) {
-      if (mounted) setState(() => err = 'Add text or image');
+    if (text.text.trim().isEmpty && image == null && video == null) {
+      if (mounted) setState(() => err = 'Add text, a photo, or a video');
       return;
     }
 
@@ -128,15 +129,19 @@ class _P extends State<CreatePostScreen> {
         'reply_to_post_id': widget.quotePostId,
       }))['id'].toString();
 
-      if (image != null) {
+      if (video != null) {
+        final videoUrl = await postRepository.uploadPostVideo(_pendingPostId!, video!);
+        await postRepository.addPostMedia(_pendingPostId!, videoUrl, mediaType: 'video');
+      } else if (image != null) {
         final uploaded = await postRepository.uploadPostImage(_pendingPostId!, image!);
         await postRepository.addPostMedia(_pendingPostId!, uploaded.originalUrl);
       }
 
       _published = true;
-           if (mounted) {
+      if (mounted) {
         text.clear();
         image = null;
+        video = null;
         context.go('/');
       }
     } catch (e, stackTrace) {
@@ -211,11 +216,27 @@ class _P extends State<CreatePostScreen> {
               children: [
                 OutlinedButton.icon(
                   onPressed: () async {
-                    image = await ImagePicker().pickImage(source: ImageSource.gallery);
-                    setState(() {});
+                    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+                    if (picked == null) return;
+                    setState(() {
+                      image = picked;
+                      video = null; // a post carries at most one media item
+                    });
                   },
                   icon: const Icon(Icons.image_outlined),
                   label: Text(image == null ? 'Add photo' : 'Photo selected'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final picked = await ImagePicker().pickVideo(source: ImageSource.gallery, maxDuration: const Duration(minutes: 5));
+                    if (picked == null) return;
+                    setState(() {
+                      video = picked;
+                      image = null; // a post carries at most one media item
+                    });
+                  },
+                  icon: const Icon(Icons.videocam_outlined),
+                  label: Text(video == null ? 'Add video' : 'Video selected'),
                 ),
                 OutlinedButton.icon(
                   onPressed: _pickFeeling,
@@ -224,6 +245,10 @@ class _P extends State<CreatePostScreen> {
                 ),
               ],
             ),
+            if (video != null) ...[
+              const SizedBox(height: 8),
+              Text('Videos up to 5 minutes are supported.', style: Theme.of(context).textTheme.bodySmall),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: location,
