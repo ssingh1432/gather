@@ -7,12 +7,10 @@ Future<void> saveMediaToDevice({
 }) async {
   try {
     final request = web.XMLHttpRequest();
-    request.open('GET', url, true);
-    request.responseType = 'arraybuffer';
+    request.open('GET', url);
+    request.responseType = 'blob';
     await request.onLoad.first;
-    final buffer = request.response as web.ArrayBuffer;
-    final mimeType = isVideo ? 'video/mp4' : 'image/jpeg';
-    final blob = web.Blob([buffer] as List<Object?>, mimeType);
+    final blob = request.response as web.Blob;
     final blobUrl = web.URL.createObjectURL(blob);
     final fileName = 'gather_${DateTime.now().millisecondsSinceEpoch}.${isVideo ? 'mp4' : 'jpg'}';
 
