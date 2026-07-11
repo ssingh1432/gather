@@ -134,8 +134,7 @@ class _P extends State<CreatePostScreen> {
       }
 
       _published = true;
-
-      if (mounted) {
+           if (mounted) {
         text.clear();
         image = null;
         context.go('/');
