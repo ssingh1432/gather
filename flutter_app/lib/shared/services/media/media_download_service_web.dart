@@ -9,7 +9,19 @@ Future<void> saveMediaToDevice({
     final request = web.XMLHttpRequest();
     request.open('GET', url);
     request.responseType = 'blob';
-    await request.onLoad.first;
+
+    final loadOrError = Future.any([
+      request.onLoad.first,
+      request.onError.first.then((_) => throw const MediaDownloadException(
+          'Could not download this media. Please try again.')),
+    ]);
+    request.send();
+    await loadOrError;
+
+    if (request.status < 200 || request.status >= 300) {
+      throw const MediaDownloadException('Could not download this media. Please try again.');
+    }
+
     final blob = request.response as web.Blob;
     final blobUrl = web.URL.createObjectURL(blob);
     final fileName = 'gather_${DateTime.now().millisecondsSinceEpoch}.${isVideo ? 'mp4' : 'jpg'}';

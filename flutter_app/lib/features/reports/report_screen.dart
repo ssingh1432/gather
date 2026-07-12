@@ -47,12 +47,25 @@ class _ReportScreenState extends State<ReportScreen> {
       return;
     }
 
+    // The `reports` table has a CHECK constraint: target_type must be
+    // 'post' or 'user', and exactly the matching target_*_id column must
+    // be set (the other must be null). Prefer postId when both are somehow
+    // present.
+    final isPostReport = widget.postId != null;
+    if (!isPostReport && widget.userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nothing to report — missing post or user.')),
+      );
+      return;
+    }
+
     setState(() => _loading = true);
     try {
       await ModerationRepository().report({
         'reporter_id': reporterId,
-        'post_id': widget.postId,
-        'reported_user_id': widget.userId,
+        'target_type': isPostReport ? 'post' : 'user',
+        'target_post_id': isPostReport ? widget.postId : null,
+        'target_user_id': isPostReport ? null : widget.userId,
         'reason': reason,
         'status': 'open',
       });
