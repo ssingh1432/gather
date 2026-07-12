@@ -79,6 +79,28 @@ class AuthService {
     return res;
   }
 
+  /// Converts a normalized 10-digit Nepali number into E.164 for Supabase/Twilio.
+  String toE164(String normalizedPhone) => '+977$normalizedPhone';
+
+  /// Sends (or resends) an SMS OTP to verify the current user's phone number.
+  /// Requires the Phone provider (Twilio) to be configured in Supabase Auth.
+  Future<void> sendPhoneOtp(String normalizedPhone) async {
+    await _client.auth.updateUser(UserAttributes(phone: toE164(normalizedPhone)));
+  }
+
+  /// Confirms the SMS code the user typed in and marks the phone verified.
+  Future<void> verifyPhoneOtp(String normalizedPhone, String code) async {
+    await _client.auth.verifyOTP(
+      type: OtpType.phoneChange,
+      phone: toE164(normalizedPhone),
+      token: code.trim(),
+    );
+    final uid = _client.auth.currentUser?.id;
+    if (uid != null) {
+      await _client.from('users').update({'phone_verified': true}).eq('id', uid);
+    }
+  }
+
   Future<void> signOut() async {
     // Best-effort: clearing the FCM token must never block the actual
     // sign-out. Previously an exception here (e.g. a flaky network call)

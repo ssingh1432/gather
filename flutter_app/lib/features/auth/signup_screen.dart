@@ -19,14 +19,18 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final email = TextEditingController();
   final phone = TextEditingController();
   final password = TextEditingController();
+  final confirmPassword = TextEditingController();
   final username = TextEditingController();
   bool _loading = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
 
   @override
   void dispose() {
     email.dispose();
     phone.dispose();
     password.dispose();
+    confirmPassword.dispose();
     username.dispose();
     super.dispose();
   }
@@ -46,6 +50,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final name = username.text.trim();
     final mail = email.text.trim();
     final pass = password.text.trim();
+    final confirmPass = confirmPassword.text.trim();
+
     if (name.isEmpty || mail.isEmpty || pass.isEmpty || phone.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Username, email, mobile number, and password are required.')),
@@ -59,6 +65,18 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       );
       return;
     }
+    if (pass.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must be at least 6 characters.')),
+      );
+      return;
+    }
+    if (pass != confirmPass) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passwords do not match.')),
+      );
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -67,9 +85,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
       if (SupabaseConfig.currentUserId != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account created. You can continue now.')),
+          const SnackBar(content: Text('Account created!')),
         );
-        context.go(_safeRedirect(widget.redirect) ?? '/');
+        // Verifying the phone is optional; the account already exists and
+        // works regardless of whether the SMS step succeeds.
+        context.go('/verify-phone?phone=$normalizedPhone');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Account created. Please verify your email, then log in.')),
@@ -90,45 +110,96 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final loginLocation = _loginLocation(widget.redirect);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Signup')),
+      appBar: AppBar(title: const Text('Create account')),
       body: ResponsiveCenter(
         maxWidth: 420,
-        child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(children: [
-          TextField(controller: username, decoration: const InputDecoration(labelText: 'Username')),
-          TextField(
-            controller: email,
-            decoration: const InputDecoration(labelText: 'Email'),
-            keyboardType: TextInputType.emailAddress,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Icon(Icons.groups_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(height: 8),
+              Text(
+                'Join Gather',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: username,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  prefixIcon: Icon(Icons.person_outline),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: email,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  prefixIcon: Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: phone,
+                decoration: const InputDecoration(
+                  labelText: 'Mobile number',
+                  hintText: '98XXXXXXXX',
+                  prefixIcon: Icon(Icons.phone_outlined),
+                  prefixText: '+977 ',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: password,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: confirmPassword,
+                obscureText: _obscureConfirm,
+                decoration: InputDecoration(
+                  labelText: 'Confirm password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                  ),
+                ),
+                onSubmitted: (_) => _loading ? null : _submit(),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _loading ? null : _submit,
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                child: _loading
+                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Create account'),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => context.push(loginLocation),
+                child: const Text('Already have an account? Log in'),
+              ),
+            ],
           ),
-          TextField(
-            controller: phone,
-            decoration: const InputDecoration(
-              labelText: 'Mobile number',
-              hintText: '98XXXXXXXX',
-              prefixText: '+977 ',
-            ),
-            keyboardType: TextInputType.phone,
-          ),
-          TextField(
-            controller: password,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Password'),
-            onSubmitted: (_) => _loading ? null : _submit(),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _loading ? null : _submit,
-            child: _loading
-                ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Create account'),
-          ),
-          TextButton(
-            onPressed: () => context.push(loginLocation),
-            child: const Text('Already have an account? Log in'),
-          ),
-        ]),
         ),
       ),
     );
@@ -138,12 +209,3 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 String _loginLocation(String? redirect) => redirect == null || redirect.isEmpty
     ? '/login'
     : '/login?redirect=${Uri.encodeComponent(redirect)}';
-
-String? _safeRedirect(String? redirect) {
-  if (redirect == null || redirect.isEmpty) return null;
-  final uri = Uri.tryParse(redirect);
-  if (uri == null || !uri.hasAbsolutePath || uri.hasScheme || uri.hasAuthority) {
-    return null;
-  }
-  return uri.toString();
-}
