@@ -17,6 +17,7 @@ class SignupScreen extends ConsumerStatefulWidget {
 
 class _SignupScreenState extends ConsumerState<SignupScreen> {
   final email = TextEditingController();
+  final phone = TextEditingController();
   final password = TextEditingController();
   final username = TextEditingController();
   bool _loading = false;
@@ -24,25 +25,44 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   @override
   void dispose() {
     email.dispose();
+    phone.dispose();
     password.dispose();
     username.dispose();
     super.dispose();
+  }
+
+  /// Normalizes a Nepali mobile number to a plain 10-digit string
+  /// (accepts an optional +977 / 977 / 0 prefix). Returns null if invalid.
+  String? _normalizedPhoneOrNull(String raw) {
+    var digits = raw.trim().replaceAll(RegExp(r'[\s-]'), '');
+    if (digits.startsWith('+977')) digits = digits.substring(4);
+    if (digits.startsWith('977')) digits = digits.substring(3);
+    if (digits.startsWith('0')) digits = digits.substring(1);
+    if (!RegExp(r'^9\d{9}$').hasMatch(digits)) return null;
+    return digits;
   }
 
   Future<void> _submit() async {
     final name = username.text.trim();
     final mail = email.text.trim();
     final pass = password.text.trim();
-    if (name.isEmpty || mail.isEmpty || pass.isEmpty) {
+    if (name.isEmpty || mail.isEmpty || pass.isEmpty || phone.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Username, email, and password are required.')),
+        const SnackBar(content: Text('Username, email, mobile number, and password are required.')),
+      );
+      return;
+    }
+    final normalizedPhone = _normalizedPhoneOrNull(phone.text);
+    if (normalizedPhone == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid 10-digit mobile number (e.g. 98XXXXXXXX).')),
       );
       return;
     }
 
     setState(() => _loading = true);
     try {
-      await ref.read(authServiceProvider).signUp(mail, pass, username: name);
+      await ref.read(authServiceProvider).signUp(mail, pass, username: name, phoneNumber: normalizedPhone);
       if (!mounted) return;
 
       if (SupabaseConfig.currentUserId != null) {
@@ -81,6 +101,15 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             controller: email,
             decoration: const InputDecoration(labelText: 'Email'),
             keyboardType: TextInputType.emailAddress,
+          ),
+          TextField(
+            controller: phone,
+            decoration: const InputDecoration(
+              labelText: 'Mobile number',
+              hintText: '98XXXXXXXX',
+              prefixText: '+977 ',
+            ),
+            keyboardType: TextInputType.phone,
           ),
           TextField(
             controller: password,

@@ -12,15 +12,41 @@ class AuthService {
   Stream<AuthState> authChanges() => _client.auth.onAuthStateChange;
   Session? currentSession() => _client.auth.currentSession;
 
-  Future<AuthResponse> signUp(String email, String password, {required String username}) async {
+  Future<AuthResponse> signUp(
+    String email,
+    String password, {
+    required String username,
+    required String phoneNumber,
+  }) async {
     final normalizedEmail = email.trim().toLowerCase();
+    final normalizedPhone = phoneNumber.trim();
     if (!await _betaAccess.isEmailAllowed(normalizedEmail)) {
       throw Exception('This email is not on the closed beta allowlist.');
     }
-    final res = await _client.auth.signUp(email: normalizedEmail, password: password, data: {'username': username});
+    final res = await _client.auth.signUp(
+      email: normalizedEmail,
+      password: password,
+      data: {'username': username, 'phone_number': normalizedPhone},
+    );
     final uid = res.user?.id;
     if (uid != null) {
-      await _client.from('users').upsert({'id': uid, 'email': normalizedEmail, 'username': username, 'status': 'active'});
+      try {
+        await _client.from('users').upsert({
+          'id': uid,
+          'email': normalizedEmail,
+          'username': username,
+          'phone_number': normalizedPhone,
+          'status': 'active',
+        });
+      } on PostgrestException catch (e) {
+        if (e.code == '23505') {
+          // Unique violation. The users_phone_number_key index is the only
+          // one an unauthenticated new signup could hit here.
+          await signOut();
+          throw Exception('This phone number is already registered.');
+        }
+        rethrow;
+      }
       final betaAllowed = await _betaAccess.claimForCurrentUser();
       if (!betaAllowed) {
         await signOut();
