@@ -167,7 +167,7 @@ class _Stat extends StatelessWidget {
   }
 }
 
-/// "Member since <Month Year>", location, and website — the small facts
+/// "Member since &lt;Month Year&gt;", location, and website — the small facts
 /// row under the bio.
 class ProfileFactsRow extends StatelessWidget {
   const ProfileFactsRow({super.key, required this.createdAt, this.location, this.websiteUrl, this.onTapWebsite});
