@@ -20,6 +20,19 @@ class FeedRepository {
     return (data as List).map((e) => PostModel.fromMap(e)).toList();
   }
 
+  /// A user's own published posts, newest first — backs the photo/video
+  /// grid on their profile.
+  Future<List<PostModel>> postsByUser(String userId, {int limit = 30}) async {
+    final data = await _c
+        .from('posts')
+        .select('*, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url, media_type)')
+        .eq('author_id', userId)
+        .eq('is_removed', false)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return (data as List).map((e) => PostModel.fromMap(e)).toList();
+  }
+
   Future<List<PostModel>> homeFeed(String userId, {int page = 0, int pageSize = 20}) async {
     final data = await _c.rpc('get_home_feed', params: {
       'user_id': userId,
@@ -174,6 +187,42 @@ class ProfileRepository {
   Future<void> follow(String targetId, String userId) => _c.from('user_follows').upsert({'following_id': targetId, 'follower_id': userId});
   Future<void> unfollow(String targetId, String userId) => _c.from('user_follows').delete().match({'following_id': targetId, 'follower_id': userId});
   Future<void> block(String targetId, String userId) => _c.from('user_blocks').upsert({'blocked_id': targetId, 'blocker_id': userId});
+  Future<void> unblock(String targetId, String userId) => _c.from('user_blocks').delete().match({'blocked_id': targetId, 'blocker_id': userId});
+
+  Future<bool> isFollowing(String targetId, String userId) async {
+    final row = await _c.from('user_follows').select('follower_id').match({'following_id': targetId, 'follower_id': userId}).maybeSingle();
+    return row != null;
+  }
+
+  Future<bool> isBlocked(String targetId, String userId) async {
+    final row = await _c.from('user_blocks').select('blocker_id').match({'blocked_id': targetId, 'blocker_id': userId}).maybeSingle();
+    return row != null;
+  }
+
+  /// Published (non-removed) post count — the "Posts" stat on a profile.
+  Future<int> postCount(String userId) async =>
+      await _c.from('posts').count(CountOption.exact).eq('author_id', userId).eq('is_removed', false);
+
+  Future<List<RecommendedUser>> followersList(String userId, {int limit = 100}) async {
+    final data = await _c
+        .from('user_follows')
+        .select('users!user_follows_follower_id_fkey(id, username, profile_photo_url)')
+        .eq('following_id', userId)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return (data as List).map((row) => row['users']).whereType<Map<String, dynamic>>().map(RecommendedUser.fromMap).toList();
+  }
+
+  Future<List<RecommendedUser>> followingList(String userId, {int limit = 100}) async {
+    final data = await _c
+        .from('user_follows')
+        .select('users!user_follows_following_id_fkey(id, username, profile_photo_url)')
+        .eq('follower_id', userId)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return (data as List).map((row) => row['users']).whereType<Map<String, dynamic>>().map(RecommendedUser.fromMap).toList();
+  }
+
   Future<String> uploadProfileImage(String userId, XFile file, ProfileImageKind kind) =>
       MediaUploadService().uploadProfileImage(userId: userId, image: file, kind: kind);
 

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
 import '../../shared/services/media_upload_service.dart';
+import '../../shared/widgets/profile_view.dart';
 import '../data/repositories.dart';
 
 /// Suggested interest tags for discovery. Kept short and Nepal-relevant;
@@ -300,24 +301,31 @@ class _CoverAndAvatarPicker extends StatelessWidget {
             child: Container(
               height: 120,
               width: double.infinity,
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: const Color(0xFF1D9E75).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
-                image: existingCoverUrl != null
+                image: (coverPick == null && existingCoverUrl != null)
                     ? DecorationImage(image: NetworkImage(existingCoverUrl!), fit: BoxFit.cover)
                     : null,
               ),
-              child: existingCoverUrl == null
-                  ? const Center(child: Icon(Icons.add_photo_alternate_outlined, size: 32, color: Color(0xFF1D9E75)))
-                  : (coverPick != null
-                      ? const Align(
-                          alignment: Alignment.topRight,
-                          child: Padding(
-                            padding: EdgeInsets.all(6),
-                            child: Chip(label: Text('New photo selected'), visualDensity: VisualDensity.compact),
-                          ),
-                        )
-                      : null),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (coverPick != null) PickedImagePreview(bytesFuture: coverPick!.readAsBytes()),
+                  if (coverPick == null && existingCoverUrl == null)
+                    const Center(child: Icon(Icons.add_photo_alternate_outlined, size: 32, color: Color(0xFF1D9E75))),
+                  Positioned(
+                    right: 6,
+                    bottom: 6,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.45), shape: BoxShape.circle),
+                      child: const Icon(Icons.camera_alt_outlined, size: 16, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           Positioned(
@@ -330,25 +338,30 @@ class _CoverAndAvatarPicker extends StatelessWidget {
                   CircleAvatar(
                     radius: 40,
                     backgroundColor: Colors.white,
-                    child: CircleAvatar(
-                      radius: 37,
-                      backgroundColor: const Color(0xFF1D9E75).withValues(alpha: 0.15),
-                      backgroundImage: existingAvatarUrl != null ? NetworkImage(existingAvatarUrl!) : null,
-                      child: existingAvatarUrl == null
-                          ? const Icon(Icons.person, size: 36, color: Color(0xFF1D9E75))
-                          : null,
-                    ),
-                  ),
-                  if (avatarPick != null)
-                    const Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: CircleAvatar(
-                        radius: 10,
-                        backgroundColor: Color(0xFF1D9E75),
-                        child: Icon(Icons.check, size: 14, color: Colors.white),
+                    child: ClipOval(
+                      child: SizedBox(
+                        width: 74,
+                        height: 74,
+                        child: avatarPick != null
+                            ? PickedImagePreview(bytesFuture: avatarPick!.readAsBytes())
+                            : Container(
+                                color: const Color(0xFF1D9E75).withValues(alpha: 0.15),
+                                child: existingAvatarUrl != null
+                                    ? Image(image: NetworkImage(existingAvatarUrl!), fit: BoxFit.cover)
+                                    : const Icon(Icons.person, size: 36, color: Color(0xFF1D9E75)),
+                              ),
                       ),
                     ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: Color(0xFF1D9E75), shape: BoxShape.circle),
+                      child: const Icon(Icons.camera_alt_outlined, size: 14, color: Colors.white),
+                    ),
+                  ),
                 ],
               ),
             ),
