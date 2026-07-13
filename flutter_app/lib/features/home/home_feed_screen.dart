@@ -208,7 +208,16 @@ class _S extends ConsumerState<HomeFeedScreen> {
   Widget build(BuildContext c) {
     final uid = SupabaseConfig.currentUserId;
     return Scaffold(
-      appBar: AppBar(title: const Text('Home')),
+      appBar: AppBar(
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset('assets/brand/gather_mark.png', width: 28, height: 28),
+            const SizedBox(width: 8),
+            const Text('Gather'),
+          ],
+        ),
+      ),
       body: Stack(
         children: [
           _loadingInitial
