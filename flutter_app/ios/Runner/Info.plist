@@ -28,6 +28,13 @@
 	<true/>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Gather saves photos and videos you download to your Photos library.</string>
+	<!-- AdMob App ID. This is Google's official public TEST app ID — safe
+	     to ship as-is. Replace with your real AdMob App ID only once you
+	     also flip ads_test_mode to false in app_config. -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Gather uses this to show ads that are more relevant to you.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

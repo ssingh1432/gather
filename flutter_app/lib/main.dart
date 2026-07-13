@@ -12,6 +12,8 @@ import 'core/theme/app_theme.dart';
 import 'shared/services/analytics_service.dart';
 import 'shared/services/beta_error_logging_service.dart';
 import 'shared/services/push_notification_service.dart';
+import 'shared/services/remote_config_service.dart';
+import 'shared/services/ads_bootstrap.dart';
 
 Future<void> main() async {
   runZonedGuarded(() async {
@@ -54,6 +56,12 @@ Future<void> main() async {
         AnalyticsService.instance.dailyActiveUser();
       } catch (error, stack) {
         BetaErrorLoggingService.instance.record(error, stack, context: 'AnalyticsService.dailyActiveUser');
+      }
+      try {
+        await RemoteConfigService.instance.load();
+        await maybeInitAds();
+      } catch (error, stack) {
+        BetaErrorLoggingService.instance.record(error, stack, context: 'RemoteConfigService/AdsService.initialize');
       }
     } else {
       debugPrint("⚠️ Supabase URL or Anon Key is missing in .env");

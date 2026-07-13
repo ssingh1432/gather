@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +15,8 @@ import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
 import '../../shared/widgets/composer_prompt.dart';
 import '../../shared/widgets/people_you_may_know.dart';
+import '../../shared/widgets/feed_ad_card.dart';
+import '../../shared/services/remote_config_service.dart';
 
 class HomeFeedScreen extends ConsumerStatefulWidget {
   const HomeFeedScreen({super.key});
@@ -204,9 +207,28 @@ class _S extends ConsumerState<HomeFeedScreen> {
     bookmarked = await repo.bookmarkedPostIds(uid, ids);
   }
 
+  /// Posts with ad slots interleaved every `adsFeedInterval` posts. An ad
+  /// slot is represented as `null`. Returns just the posts (no ads mixed
+  /// in) whenever ads are disabled/unsupported — which is the default, so
+  /// this is a no-op today.
+  List<PostModel?> _feedRows() {
+    final adsSupportedPlatform =
+        !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+    final adsOn = RemoteConfigService.instance.adsEnabled && adsSupportedPlatform;
+    if (!adsOn) return _posts;
+    final interval = RemoteConfigService.instance.adsFeedInterval;
+    final rows = <PostModel?>[];
+    for (var i = 0; i < _posts.length; i++) {
+      rows.add(_posts[i]);
+      if ((i + 1) % interval == 0) rows.add(null);
+    }
+    return rows;
+  }
+
   @override
   Widget build(BuildContext c) {
     final uid = SupabaseConfig.currentUserId;
+    final feedRows = _feedRows();
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -243,18 +265,20 @@ class _S extends ConsumerState<HomeFeedScreen> {
                       child: ListView.builder(
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: 2 + _posts.length + (_loadingMore ? 1 : 0),
+                        itemCount: 2 + feedRows.length + (_loadingMore ? 1 : 0),
                         itemBuilder: (context, rawIndex) {
                           if (rawIndex == 0) return const ComposerPrompt();
                           if (rawIndex == 1) return const PeopleYouMayKnow();
                           final index = rawIndex - 2;
-                          if (index >= _posts.length) {
+                          if (index >= feedRows.length) {
                             return const Padding(
                               padding: EdgeInsets.all(16),
                               child: Center(child: CircularProgressIndicator()),
                             );
                           }
-                          final p = _posts[index];
+                          final rowPost = feedRows[index];
+                          if (rowPost == null) return const FeedAdCard();
+                          final p = rowPost;
                           return PostCard(
                             post: p,
                             liked: liked.contains(p.id) || p.isLiked,
