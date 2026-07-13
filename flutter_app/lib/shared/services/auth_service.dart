@@ -23,11 +23,7 @@ class AuthService {
     if (!await _betaAccess.isEmailAllowed(normalizedEmail)) {
       throw Exception('This email is not on the closed beta allowlist.');
     }
-    final res = await _client.auth.signUp(
-      email: normalizedEmail,
-      password: password,
-      data: {'username': username, 'phone_number': normalizedPhone},
-    );
+    final res = await _authSignUpOrFriendlyError(normalizedEmail, password, username, normalizedPhone);
     final uid = res.user?.id;
     if (uid != null) {
       try {
@@ -98,6 +94,28 @@ class AuthService {
     final uid = _client.auth.currentUser?.id;
     if (uid != null) {
       await _client.from('users').update({'phone_verified': true}).eq('id', uid);
+    }
+  }
+
+  Future<AuthResponse> _authSignUpOrFriendlyError(
+    String email,
+    String password,
+    String username,
+    String phone,
+  ) async {
+    try {
+      return await _client.auth.signUp(
+        email: email,
+        password: password,
+        data: {'username': username, 'phone_number': phone},
+      );
+    } on AuthApiException catch (e) {
+      if (e.code == 'over_email_send_rate_limit' || e.statusCode == '429') {
+        throw Exception(
+          'Too many signups too quickly — please wait a minute and try again.',
+        );
+      }
+      rethrow;
     }
   }
 
