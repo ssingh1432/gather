@@ -118,7 +118,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(Icons.groups_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
+              Image.asset('assets/brand/gather_mark.png', width: 64, height: 64),
               const SizedBox(height: 8),
               Text(
                 'Join Gather',

@@ -1,11 +1,11 @@
 {
-    "name": "gather_app",
-    "short_name": "gather_app",
+    "name": "Gather",
+    "short_name": "Gather",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#1D9E75",
+    "theme_color": "#1D9E75",
+    "description": "Gather — connect with your community.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
