@@ -265,7 +265,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     posts: bundle.posts,
                     pinnedPostId: u['pinned_post_id'] as String?,
                     isOwnProfile: true,
-                    onTogglePin: (post, pin) {},
+                    onTogglePin: (post, pin) async {},
                   ),
                 ),
               ],
