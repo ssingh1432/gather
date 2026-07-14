@@ -341,6 +341,12 @@ class MonetizationRepository {
       'monetization_status': status == 'approved' ? 'approved' : 'rejected',
     }).eq('id', userId);
   }
+  /// Server validates eligibility itself (never trusts the client), so
+  /// this is safe to call speculatively whenever an ad card actually
+  /// renders — it silently no-ops if the post's author turns out not to
+  /// be an approved, opted-in creator.
+  Future<void> logAdImpression(String postId) =>
+      _c.rpc('log_ad_impression', params: {'p_post_id': postId});
 }
 
 class PostRepository {

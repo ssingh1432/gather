@@ -24,6 +24,13 @@ class HomeFeedScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeFeedScreen> createState() => _S();
 }
 
+/// A feed row that's an ad rather than a post, tied to the approved
+/// creator's post it's shown alongside.
+class _AdSlot {
+  const _AdSlot(this.postId);
+  final String postId;
+}
+
 class _S extends ConsumerState<HomeFeedScreen> {
   static const int _pageSize = 20;
   static const double _preloadExtent = 640;
@@ -207,20 +214,29 @@ class _S extends ConsumerState<HomeFeedScreen> {
     bookmarked = await repo.bookmarkedPostIds(uid, ids);
   }
 
-  /// Posts with ad slots interleaved every `adsFeedInterval` posts. An ad
-  /// slot is represented as `null`. Returns just the posts (no ads mixed
-  /// in) whenever ads are disabled/unsupported — which is the default, so
-  /// this is a no-op today.
-  List<PostModel?> _feedRows() {
+  /// Posts with ad slots interleaved. Unlike a plain fixed-interval house
+  /// ad, each slot is tied to a specific approved, opted-in creator's post
+  /// — that's what makes the "earn a share of ad revenue on your posts"
+  /// promise in the monetization screen actually true, since
+  /// `_AdSlot.postId` is what `log_ad_impression` attributes the
+  /// impression to. Falls back to no ad slots whenever ads are
+  /// disabled/unsupported or there's no eligible creator post to attach
+  /// to yet — which is the default today, until creators get approved.
+  List<Object> _feedRows() {
     final adsSupportedPlatform =
         !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
     final adsOn = RemoteConfigService.instance.adsEnabled && adsSupportedPlatform;
     if (!adsOn) return _posts;
     final interval = RemoteConfigService.instance.adsFeedInterval;
-    final rows = <PostModel?>[];
-    for (var i = 0; i < _posts.length; i++) {
-      rows.add(_posts[i]);
-      if ((i + 1) % interval == 0) rows.add(null);
+    final rows = <Object>[];
+    var postsSinceLastAd = 0;
+    for (final post in _posts) {
+      rows.add(post);
+      postsSinceLastAd++;
+      if (post.authorAdsEligible && postsSinceLastAd >= interval) {
+        rows.add(_AdSlot(post.id));
+        postsSinceLastAd = 0;
+      }
     }
     return rows;
   }
@@ -277,8 +293,8 @@ class _S extends ConsumerState<HomeFeedScreen> {
                             );
                           }
                           final rowPost = feedRows[index];
-                          if (rowPost == null) return const FeedAdCard();
-                          final p = rowPost;
+                          if (rowPost is _AdSlot) return FeedAdCard(postId: rowPost.postId);
+                          final p = rowPost as PostModel;
                           return PostCard(
                             post: p,
                             liked: liked.contains(p.id) || p.isLiked,

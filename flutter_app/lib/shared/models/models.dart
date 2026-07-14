@@ -58,6 +58,7 @@ class PostModel {
   final List<String> tags;
   final QuotedPostPreview? replyTo;
   final String? mediaType;
+  final bool authorAdsEligible;
 
   PostModel({
     required this.id,
@@ -80,6 +81,7 @@ class PostModel {
     this.tags = const [],
     this.replyTo,
     this.mediaType,
+    this.authorAdsEligible = false,
   });
 
   factory PostModel.fromMap(Map<String, dynamic> map) {
@@ -109,6 +111,7 @@ class PostModel {
       tags: ((map['tags'] as List?) ?? const []).map((e) => e.toString()).toList(),
       replyTo: QuotedPostPreview.fromMap(map),
       mediaType: map['media_type'] as String? ?? (media != null && media.isNotEmpty ? media.first['media_type'] as String? : null),
+      authorAdsEligible: map['author_ads_eligible'] == true,
     );
   }
 

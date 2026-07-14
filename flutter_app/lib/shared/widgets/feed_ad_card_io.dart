@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import '../../features/data/repositories.dart';
 import '../services/ads_service.dart';
 
 /// A "Sponsored" card matching the feed's card styling, holding a banner
 /// ad. Renders nothing (SizedBox.shrink) until the ad actually loads, and
 /// nothing forever if loading fails — a broken ad slot should never leave
 /// a visible gap or error in the feed.
+///
+/// [postId] is the approved creator's post this ad is attached to — an
+/// impression is only logged (server-side, for manual payout review) once
+/// the ad actually renders, not just when the slot is scheduled.
 class FeedAdCard extends StatefulWidget {
-  const FeedAdCard({super.key});
+  const FeedAdCard({super.key, required this.postId});
+
+  final String postId;
 
   @override
   State<FeedAdCard> createState() => _FeedAdCardState();
@@ -25,6 +32,7 @@ class _FeedAdCardState extends State<FeedAdCard> {
       AdsService.instance.loadBannerAd(
         onLoaded: (ad) {
           if (mounted) setState(() => _ad = ad as BannerAd);
+          MonetizationRepository().logAdImpression(widget.postId);
         },
         onFailed: (ad, error) {
           if (mounted) setState(() => _failed = true);
