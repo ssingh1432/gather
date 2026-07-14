@@ -13,11 +13,13 @@ class AdminModerationScreen extends StatefulWidget {
 class _AdminModerationScreenState extends State<AdminModerationScreen> {
   final repo = ModerationRepository();
   final betaRepo = BetaOpsRepository();
+  final monetizationRepo = MonetizationRepository();
   bool _loading = true;
   String? _error;
   bool _allowed = false;
   List<Map<String, dynamic>> _reports = const [];
   List<Map<String, dynamic>> _feedback = const [];
+  List<Map<String, dynamic>> _pendingPayouts = const [];
 
   @override
   void initState() {
@@ -42,9 +44,11 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
         if (_allowed) {
           _reports = await repo.openReports();
           _feedback = await betaRepo.feedback();
+          _pendingPayouts = await monetizationRepo.pendingPayoutReviews();
         } else {
           _reports = const [];
           _feedback = const [];
+          _pendingPayouts = const [];
         }
       }
     } catch (e) {
@@ -76,6 +80,20 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
     }
   }
 
+  Future<void> _reviewPayout(Map<String, dynamic> payout, String status) async {
+    try {
+      await monetizationRepo.reviewPayout(userId: payout['user_id'].toString(), status: status);
+      await _loadAdminData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(status == 'approved' ? 'Payout approved — ads enabled' : 'Payout rejected')),
+        );
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Review failed: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -83,14 +101,15 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
     if (!_allowed) return const Scaffold(body: Center(child: Text('Access denied')));
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Moderation'),
-          bottom: const TabBar(
+          bottom: TabBar(
             tabs: [
-              Tab(text: 'Reports'),
-              Tab(text: 'Beta feedback'),
+              const Tab(text: 'Reports'),
+              const Tab(text: 'Beta feedback'),
+              Tab(text: _pendingPayouts.isEmpty ? 'Payouts' : 'Payouts (${_pendingPayouts.length})'),
             ],
           ),
         ),
@@ -98,6 +117,7 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
           children: [
             _ReportsList(reports: _reports, onRefresh: _loadAdminData, onActOnReport: _actOnReport),
             _BetaFeedbackList(feedback: _feedback, onRefresh: _loadAdminData, onReview: _reviewFeedback),
+            _PayoutReviewList(payouts: _pendingPayouts, onRefresh: _loadAdminData, onReview: _reviewPayout),
           ],
         ),
       ),
@@ -194,6 +214,52 @@ class _BetaFeedbackList extends StatelessWidget {
                     ],
                   ),
                 ],
+              );
+            },
+          ),
+        );
+}
+
+class _PayoutReviewList extends StatelessWidget {
+  const _PayoutReviewList({required this.payouts, required this.onRefresh, required this.onReview});
+
+  final List<Map<String, dynamic>> payouts;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function(Map<String, dynamic> payout, String status) onReview;
+
+  static const _providerLabels = {'esewa': 'eSewa', 'khalti': 'Khalti', 'bank': 'Bank account'};
+
+  @override
+  Widget build(BuildContext context) => payouts.isEmpty
+      ? const Center(child: Text('No payout preferences awaiting review'))
+      : RefreshIndicator(
+          onRefresh: onRefresh,
+          child: ListView.separated(
+            itemCount: payouts.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final p = payouts[index];
+              final user = p['users'] as Map<String, dynamic>?;
+              final provider = _providerLabels[p['provider']] ?? p['provider']?.toString() ?? 'Unknown';
+              return ListTile(
+                title: Text('${user?['username'] ?? p['user_id']} — $provider'),
+                subtitle: Text('Holder: ${p['holder_name']} • Ref: •••${p['masked_reference']}\n${user?['email'] ?? ''}'),
+                isThreeLine: true,
+                trailing: Wrap(
+                  spacing: 4,
+                  children: [
+                    IconButton(
+                      tooltip: 'Approve',
+                      onPressed: () => onReview(p, 'approved'),
+                      icon: const Icon(Icons.check_circle, color: Colors.green),
+                    ),
+                    IconButton(
+                      tooltip: 'Reject',
+                      onPressed: () => onReview(p, 'rejected'),
+                      icon: const Icon(Icons.cancel, color: Colors.red),
+                    ),
+                  ],
+                ),
               );
             },
           ),

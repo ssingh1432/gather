@@ -312,6 +312,35 @@ class MonetizationRepository {
         'holder_name': holderName,
         'masked_reference': maskedReference,
       });
+
+  /// Admin/mod only (RLS-enforced): payout preferences awaiting manual
+  /// review, newest first, with the requesting user's basic info embedded.
+  Future<List<Map<String, dynamic>>> pendingPayoutReviews() async {
+    final result = await _c
+        .from('user_payout_preferences')
+        .select('*, users(username, email, monetization_status)')
+        .eq('status', 'pending_review')
+        .order('updated_at', ascending: true);
+    return List<Map<String, dynamic>>.from(result as List);
+  }
+
+  /// Admin/mod only: sets the payout preference's review status and, on
+  /// approval, flips the user's overall monetization_status to approved so
+  /// ads actually start showing. Rejecting a payout leaves opt-in as-is but
+  /// marks monetization_status rejected so the UI reflects it needs fixing.
+  Future<void> reviewPayout({
+    required String userId,
+    required String status,
+    String? notes,
+  }) async {
+    await _c.from('user_payout_preferences').update({
+      'status': status,
+      if (notes != null) 'notes': notes,
+    }).eq('user_id', userId);
+    await _c.from('users').update({
+      'monetization_status': status == 'approved' ? 'approved' : 'rejected',
+    }).eq('id', userId);
+  }
 }
 
 class PostRepository {
