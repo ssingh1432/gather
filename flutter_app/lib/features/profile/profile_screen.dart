@@ -157,6 +157,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   displayName: displayName,
                   username: (u['username'] as String?) ?? '',
                   role: (u['role'] as String?) ?? 'user',
+                  isVerified: (u['is_verified'] as bool?) ?? false,
+                  pronouns: u['pronouns'] as String?,
+                  isPrivate: (u['is_private'] as bool?) ?? false,
                 ),
                 const SizedBox(height: 12),
                 Padding(
@@ -227,6 +230,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/notifications'),
                       ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.payments_outlined),
+                        title: const Text('Monetization'),
+                        subtitle: const Text('Earn from ads on your posts'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/monetization'),
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.star_outline),
+                        title: const Text('Close Friends'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/close-friends'),
+                      ),
                       if ((u['role'] as String?) == 'admin' || (u['role'] as String?) == 'moderator')
                         ListTile(
                           contentPadding: EdgeInsets.zero,
@@ -243,7 +261,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 8),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: ProfilePostsGrid(posts: bundle.posts),
+                  child: ProfilePostsGrid(
+                    posts: bundle.posts,
+                    pinnedPostId: u['pinned_post_id'] as String?,
+                    isOwnProfile: true,
+                    onTogglePin: (post, pin) async {
+                      try {
+                        await ProfileRepository().setPinnedPost(uid, pin ? post.id : null);
+                        await _refresh();
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update pin: $e')));
+                        }
+                      }
+                    },
+                  ),
                 ),
               ],
             ),
