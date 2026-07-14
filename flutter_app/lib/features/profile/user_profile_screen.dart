@@ -216,6 +216,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   displayName: displayName,
                   username: (u['username'] as String?) ?? '',
                   role: (u['role'] as String?) ?? 'user',
+                  isVerified: (u['is_verified'] as bool?) ?? false,
+                  pronouns: u['pronouns'] as String?,
+                  isPrivate: (u['is_private'] as bool?) ?? false,
                 ),
                 const SizedBox(height: 12),
                 Padding(
@@ -284,7 +287,22 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 const SizedBox(height: 8),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: ProfilePostsGrid(posts: bundle.posts),
+                  child: ((u['is_private'] as bool?) ?? false) && !bundle.isFollowing && u['id'] != SupabaseConfig.currentUserId
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 32),
+                          child: Center(
+                            child: Column(
+                              children: [
+                                Icon(Icons.lock_outline, size: 40, color: Colors.grey),
+                                SizedBox(height: 8),
+                                Text('This account is private', style: TextStyle(fontWeight: FontWeight.w600)),
+                                SizedBox(height: 4),
+                                Text('Follow to see their posts', style: TextStyle(color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ProfilePostsGrid(posts: bundle.posts, pinnedPostId: u['pinned_post_id'] as String?),
                 ),
               ],
             ),
