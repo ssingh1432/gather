@@ -61,8 +61,8 @@ class _MonetizationSettingsScreenState extends State<MonetizationSettingsScreen>
         _repo.loadPayoutPreference(uid),
       ]);
       final eligibility = results[0] as Map<String, dynamic>;
-      final profile = results[1] as Map<String, dynamic>?;
-      final payoutPref = results[2] as Map<String, dynamic>?;
+      final profile = results[1];
+      final payoutPref = results[2];
       if (mounted) {
         setState(() {
           _eligibility = eligibility;
@@ -191,8 +191,8 @@ class _MonetizationSettingsScreenState extends State<MonetizationSettingsScreen>
   Widget _buildEligibilityCard() {
     final e = _eligibility ?? const {};
     final rows = <_CheckRow>[
-      _CheckRow('Account age', (e['account_age_days_required'] ?? 14).toString() + '+ days', e['account_age_days_met'] ?? ((e['account_age_days'] ?? 0) >= (e['account_age_days_required'] ?? 14))),
-      _CheckRow('Posts published', (e['post_count_required'] ?? 5).toString() + '+ posts', (e['post_count'] ?? 0) >= (e['post_count_required'] ?? 5)),
+      _CheckRow('Account age', '${e['account_age_days_required'] ?? 14}+ days', e['account_age_days_met'] ?? ((e['account_age_days'] ?? 0) >= (e['account_age_days_required'] ?? 14))),
+      _CheckRow('Posts published', '${e['post_count_required'] ?? 5}+ posts', (e['post_count'] ?? 0) >= (e['post_count_required'] ?? 5)),
       _CheckRow('Phone verified', null, e['phone_verified'] == true),
       _CheckRow('Email verified', null, e['email_verified'] == true),
     ];
