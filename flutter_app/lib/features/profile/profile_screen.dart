@@ -266,14 +266,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     pinnedPostId: u['pinned_post_id'] as String?,
                     isOwnProfile: true,
                     onTogglePin: (post, pin) async {
-                      try {
-                        await ProfileRepository().setPinnedPost(uid, pin ? post.id : null);
-                        await _refresh();
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update pin: $e')));
-                        }
-                      }
+                      await ProfileRepository().setPinnedPost(uid, pin ? post.id : null);
+                      await _refresh();
                     },
                   ),
                 ),
