@@ -265,7 +265,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     posts: bundle.posts,
                     pinnedPostId: u['pinned_post_id'] as String?,
                     isOwnProfile: true,
-                    onTogglePin: (post, pin) async {},
+                    onTogglePin: (post, pin) async {
+                      await ProfileRepository().setPinnedPost(uid, pin ? post.id : null);
+                      await _refresh();
+                    },
                   ),
                 ),
               ],
