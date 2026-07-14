@@ -261,7 +261,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 8),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: ProfilePostsGrid(posts: bundle.posts),
+                  child: ProfilePostsGrid(
+                    posts: bundle.posts,
+                    pinnedPostId: u['pinned_post_id'] as String?,
+                    isOwnProfile: true,
+                    onTogglePin: (post, pin) {},
+                  ),
                 ),
               ],
             ),
