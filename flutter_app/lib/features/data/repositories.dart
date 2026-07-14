@@ -203,6 +203,25 @@ class ProfileRepository {
   Future<int> postCount(String userId) async =>
       await _c.from('posts').count(CountOption.exact).eq('author_id', userId).eq('is_removed', false);
 
+  /// Pin/unpin a post to the top of your own profile grid. Pass null to
+  /// unpin. Server-side, a post can only be pinned by its own author (see
+  /// guard_user_update trigger).
+  Future<void> setPinnedPost(String userId, String? postId) =>
+      _c.from('users').update({'pinned_post_id': postId}).eq('id', userId);
+
+  /// Close friends: a private list only the owner can see (not visible to
+  /// the friend being added), same as Instagram's close friends list.
+  Future<List<String>> closeFriendIds(String userId) async {
+    final rows = await _c.from('close_friends').select('friend_id').eq('user_id', userId);
+    return (rows as List).map((r) => r['friend_id'] as String).toList();
+  }
+
+  Future<void> addCloseFriend(String userId, String friendId) =>
+      _c.from('close_friends').upsert({'user_id': userId, 'friend_id': friendId});
+
+  Future<void> removeCloseFriend(String userId, String friendId) =>
+      _c.from('close_friends').delete().match({'user_id': userId, 'friend_id': friendId});
+
   Future<List<RecommendedUser>> followersList(String userId, {int limit = 100}) async {
     final data = await _c
         .from('user_follows')
@@ -263,6 +282,36 @@ class ProfileRepository {
     await follow(targetId, userId);
     AnalyticsService.instance.firstActionCompleted(action: 'friend_request_sent');
   }
+}
+
+/// Creator monetization: eligibility check, opt-in toggle, and payout
+/// PREFERENCES (never full account numbers — see MonetizationSettingsScreen
+/// docs). Actual payouts are a manual, admin-reviewed process for now.
+class MonetizationRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
+
+  Future<Map<String, dynamic>> checkEligibility() async {
+    final result = await _c.rpc('check_monetization_eligibility');
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<void> setOptIn(bool optIn) => _c.rpc('set_monetization_opt_in', params: {'opt_in': optIn});
+
+  Future<Map<String, dynamic>?> loadPayoutPreference(String userId) =>
+      _c.from('user_payout_preferences').select().eq('user_id', userId).maybeSingle();
+
+  Future<void> savePayoutPreference({
+    required String userId,
+    required String provider,
+    required String holderName,
+    required String maskedReference,
+  }) =>
+      _c.from('user_payout_preferences').upsert({
+        'user_id': userId,
+        'provider': provider,
+        'holder_name': holderName,
+        'masked_reference': maskedReference,
+      });
 }
 
 class PostRepository {

@@ -36,9 +36,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _bio = TextEditingController();
   final _website = TextEditingController();
   final _customInterest = TextEditingController();
+  final _pronouns = TextEditingController();
 
   String? _location;
   String _language = 'ne';
+  bool _isPrivate = false;
+  String _accountMode = 'personal';
   final Set<String> _interests = {};
 
   XFile? _avatarPick;
@@ -64,6 +67,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _bio.dispose();
     _website.dispose();
     _customInterest.dispose();
+    _pronouns.dispose();
     super.dispose();
   }
 
@@ -82,6 +86,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           _interests.addAll(((profile['interests'] as List?) ?? []).cast<String>());
           _existingAvatarUrl = profile['profile_photo_url'] as String?;
           _existingCoverUrl = profile['cover_photo_url'] as String?;
+          _pronouns.text = (profile['pronouns'] as String?) ?? '';
+          _isPrivate = (profile['is_private'] as bool?) ?? false;
+          _accountMode = (profile['account_mode'] as String?) ?? 'personal';
         });
       }
     } catch (e) {
@@ -150,6 +157,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'location': _location,
         'language_preference': _language,
         'interests': _interests.toList(),
+        'pronouns': _pronouns.text.trim().isEmpty ? null : _pronouns.text.trim(),
+        'is_private': _isPrivate,
+        'account_mode': _accountMode,
         if (avatarUrl != null) 'profile_photo_url': avatarUrl,
         if (coverUrl != null) 'cover_photo_url': coverUrl,
       });
@@ -209,6 +219,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             maxLines: 3,
             decoration: const InputDecoration(labelText: 'Bio', alignLabelWithHint: true),
           ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _pronouns,
+            maxLength: 20,
+            decoration: const InputDecoration(labelText: 'Pronouns', hintText: 'e.g. she/her', counterText: ''),
+          ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             initialValue: _location,
@@ -223,6 +239,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             controller: _website,
             decoration: const InputDecoration(labelText: 'Website / link', hintText: 'https://...'),
             keyboardType: TextInputType.url,
+          ),
+          const SizedBox(height: 24),
+          const Text('Account type', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          const Text(
+            'Creator accounts unlock monetization tools once eligible. Anyone can switch back anytime.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'personal', label: Text('Personal')),
+              ButtonSegment(value: 'creator', label: Text('Creator')),
+            ],
+            selected: {_accountMode},
+            onSelectionChanged: (v) => setState(() => _accountMode = v.first),
+          ),
+          const SizedBox(height: 16),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Private account'),
+            subtitle: const Text('Only your followers can see your posts'),
+            value: _isPrivate,
+            onChanged: (v) => setState(() => _isPrivate = v),
           ),
           const SizedBox(height: 24),
           const Text('App language', style: TextStyle(fontWeight: FontWeight.bold)),

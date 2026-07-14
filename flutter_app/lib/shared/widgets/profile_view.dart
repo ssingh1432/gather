@@ -17,6 +17,9 @@ class ProfileCoverAndIdentity extends StatelessWidget {
     required this.displayName,
     required this.username,
     this.role = 'user',
+    this.isVerified = false,
+    this.pronouns,
+    this.isPrivate = false,
   });
 
   final String? coverUrl;
@@ -24,6 +27,9 @@ class ProfileCoverAndIdentity extends StatelessWidget {
   final String displayName;
   final String username;
   final String role;
+  final bool isVerified;
+  final String? pronouns;
+  final bool isPrivate;
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +60,10 @@ class ProfileCoverAndIdentity extends StatelessWidget {
               Flexible(
                 child: Text(displayName, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
               ),
+              if (isVerified) ...[
+                const SizedBox(width: 4),
+                Icon(Icons.verified, size: 20, color: theme.colorScheme.primary),
+              ],
               if (role != 'user') ...[
                 const SizedBox(width: 6),
                 _RoleBadge(role: role),
@@ -64,7 +74,18 @@ class ProfileCoverAndIdentity extends StatelessWidget {
         if (username.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text('@$username', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
+            child: Row(
+              children: [
+                Text('@$username', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
+                if (pronouns != null && pronouns!.isNotEmpty) ...[
+                  Text(' · $pronouns', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
+                ],
+                if (isPrivate) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.lock_outline, size: 14, color: theme.colorScheme.outline),
+                ],
+              ],
+            ),
           ),
       ],
     );
@@ -229,8 +250,11 @@ class _Fact extends StatelessWidget {
 /// Instagram-style grid of a user's post thumbnails. Videos show the same
 /// dark placeholder + play icon used on the feed for consistency.
 class ProfilePostsGrid extends StatelessWidget {
-  const ProfilePostsGrid({super.key, required this.posts});
+  const ProfilePostsGrid({super.key, required this.posts, this.pinnedPostId, this.isOwnProfile = false, this.onTogglePin});
   final List<PostModel> posts;
+  final String? pinnedPostId;
+  final bool isOwnProfile;
+  final void Function(PostModel post, bool pin)? onTogglePin;
 
   @override
   Widget build(BuildContext context) {
@@ -240,28 +264,65 @@ class ProfilePostsGrid extends StatelessWidget {
         child: EmptyState(icon: Icons.grid_view_outlined, title: 'No posts yet'),
       );
     }
+    final ordered = List<PostModel>.from(posts);
+    if (pinnedPostId != null) {
+      final i = ordered.indexWhere((p) => p.id == pinnedPostId);
+      if (i > 0) {
+        final pinned = ordered.removeAt(i);
+        ordered.insert(0, pinned);
+      }
+    }
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(2),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 2, mainAxisSpacing: 2),
-      itemCount: posts.length,
+      itemCount: ordered.length,
       itemBuilder: (context, index) {
-        final post = posts[index];
+        final post = ordered[index];
         return InkWell(
           onTap: () => context.push('/post?id=${post.id}'),
-          child: post.isVideo
-              ? Container(
-                  color: Colors.black87,
-                  child: const Center(child: Icon(Icons.play_arrow_rounded, color: Colors.white70)),
-                )
-              : (post.displayImageUrl != null
-                  ? CachedNetworkImage(imageUrl: post.displayImageUrl!, fit: BoxFit.cover)
-                  : Container(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      padding: const EdgeInsets.all(6),
-                      child: Text(post.textContent, maxLines: 4, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
-                    )),
+          onLongPress: isOwnProfile && onTogglePin != null
+              ? () async {
+                  final isPinned = post.id == pinnedPostId;
+                  final action = await showModalBottomSheet<String>(
+                    context: context,
+                    builder: (ctx) => SafeArea(
+                      child: Wrap(children: [
+                        ListTile(
+                          leading: Icon(isPinned ? Icons.push_pin_outlined : Icons.push_pin),
+                          title: Text(isPinned ? 'Unpin from profile' : 'Pin to profile'),
+                          onTap: () => Navigator.pop(ctx, 'toggle'),
+                        ),
+                      ]),
+                    ),
+                  );
+                  if (action == 'toggle') onTogglePin!(post, !isPinned);
+                }
+              : null,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              post.isVideo
+                  ? Container(
+                      color: Colors.black87,
+                      child: const Center(child: Icon(Icons.play_arrow_rounded, color: Colors.white70)),
+                    )
+                  : (post.displayImageUrl != null
+                      ? CachedNetworkImage(imageUrl: post.displayImageUrl!, fit: BoxFit.cover)
+                      : Container(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          padding: const EdgeInsets.all(6),
+                          child: Text(post.textContent, maxLines: 4, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+                        )),
+              if (post.id == pinnedPostId)
+                const Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Icon(Icons.push_pin, size: 16, color: Colors.white, shadows: [Shadow(color: Colors.black87, blurRadius: 4)]),
+                ),
+            ],
+          ),
         );
       },
     );

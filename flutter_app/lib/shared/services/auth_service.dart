@@ -91,10 +91,10 @@ class AuthService {
       phone: toE164(normalizedPhone),
       token: code.trim(),
     );
-    final uid = _client.auth.currentUser?.id;
-    if (uid != null) {
-      await _client.from('users').update({'phone_verified': true}).eq('id', uid);
-    }
+    // phone_verified is now only settable server-side (see guard_user_update
+    // trigger) — this RPC checks auth.users.phone_confirmed_at itself
+    // rather than trusting the client.
+    await _client.rpc('mark_phone_verified');
   }
 
   Future<AuthResponse> _authSignUpOrFriendlyError(
