@@ -53,6 +53,9 @@ class _ClosedBetaError extends StatelessWidget {
 
   final String message;
 
+  bool get _isExpiredAuthLink =>
+      message.contains('otp_expired') || message.contains('access_denied') || message.contains('invalid or has expired');
+
   @override
   Widget build(BuildContext context) => Center(
         child: Padding(
@@ -62,11 +65,20 @@ class _ClosedBetaError extends StatelessWidget {
             children: [
               Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
               const SizedBox(height: 12),
-              Text('Could not verify beta access', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text(message, textAlign: TextAlign.center),
+              Text(
+                _isExpiredAuthLink ? 'This link has expired or was already used' : 'Could not verify beta access',
+                style: Theme.of(context).textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              if (!_isExpiredAuthLink) ...[
+                const SizedBox(height: 8),
+                Text(message, textAlign: TextAlign.center),
+              ],
               const SizedBox(height: 16),
-              FilledButton(onPressed: () => context.go('/login'), child: const Text('Log in again')),
+              FilledButton(
+                onPressed: () => context.go(_isExpiredAuthLink ? '/forgot' : '/login'),
+                child: Text(_isExpiredAuthLink ? 'Request a new link' : 'Log in again'),
+              ),
             ],
           ),
         ),
