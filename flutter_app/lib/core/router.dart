@@ -29,6 +29,49 @@ import '../features/search/search_screen.dart';
 import 'supabase_client.dart';
 
 final appRouter = GoRouter(
+  // GoRouter's default error screen shows the raw exception text (e.g.
+  // "GoException: no routes for location: error=access_denied&..."). That
+  // exact case happens whenever an expired/invalid Supabase auth link
+  // (signup confirmation, password reset) redirects back with an
+  // "#error=..." fragment that doesn't match any route. Recognize that
+  // pattern and show something a person can actually act on.
+  errorBuilder: (context, state) {
+    final text = state.error?.toString() ?? '';
+    final isAuthLinkError = text.contains('otp_expired') ||
+        text.contains('access_denied') ||
+        text.contains('invalid_request');
+    return Scaffold(
+      appBar: AppBar(title: const Text('Gather')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isAuthLinkError
+                    ? 'This link has expired or was already used.'
+                    : "That page doesn't exist.",
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 20),
+              if (isAuthLinkError)
+                FilledButton(
+                  onPressed: () => context.go('/forgot'),
+                  child: const Text('Request a new link'),
+                )
+              else
+                FilledButton(
+                  onPressed: () => context.go('/'),
+                  child: const Text('Go home'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  },
   redirect: (context, state) {
     final authed = SupabaseConfig.maybeClient?.auth.currentUser != null;
     final path = state.uri.path;
