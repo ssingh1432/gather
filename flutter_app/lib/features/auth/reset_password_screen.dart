@@ -93,11 +93,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Your password has been updated.'),
+                    const Text("Your password has been updated. You're signed in."),
                     const SizedBox(height: 16),
                     FilledButton(
-                      onPressed: () => context.go('/login'),
-                      child: const Text('Back to login'),
+                      onPressed: () => context.go('/'),
+                      child: const Text('Continue to Gather'),
                     ),
                   ],
                 )

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../shared/providers/app_providers.dart';
+import '../../shared/services/remember_me_service.dart';
 import '../../core/responsive.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -19,6 +20,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _password = TextEditingController();
   bool _loading = false;
   bool _obscurePassword = true;
+  bool _rememberMe = true;
 
   @override
   void dispose() {
@@ -40,6 +42,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _loading = true);
     try {
       await ref.read(authServiceProvider).signIn(email, password);
+      RememberMeService.instance.setRemembered(_rememberMe);
       if (mounted) context.go(_safeRedirect(widget.redirect) ?? '/');
     } catch (e) {
       if (mounted) {
@@ -100,12 +103,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 onSubmitted: (_) => _loading ? null : _submit(),
               ),
               const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => context.push('/forgot'),
-                  child: const Text('Forgot password?'),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  GestureDetector(
+                    onTap: () => setState(() => _rememberMe = !_rememberMe),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Checkbox(
+                          value: _rememberMe,
+                          onChanged: (v) => setState(() => _rememberMe = v ?? true),
+                        ),
+                        const Text('Remember me'),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => context.push('/forgot'),
+                    child: const Text('Forgot password?'),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               FilledButton(

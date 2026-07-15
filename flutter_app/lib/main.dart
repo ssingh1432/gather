@@ -12,6 +12,7 @@ import 'core/theme/app_theme.dart';
 import 'shared/services/analytics_service.dart';
 import 'shared/services/beta_error_logging_service.dart';
 import 'shared/services/push_notification_service.dart';
+import 'shared/services/remember_me_service.dart';
 import 'shared/services/remote_config_service.dart';
 import 'shared/services/ads_bootstrap.dart';
 
@@ -44,6 +45,7 @@ Future<void> main() async {
     if (AppEnv.supabaseUrl.isNotEmpty && AppEnv.supabaseAnonKey.isNotEmpty) {
       try {
         await SupabaseConfig.initialize();
+        await RememberMeService.instance.enforceOnStartup();
       } catch (error, stack) {
         BetaErrorLoggingService.instance.record(error, stack, context: 'SupabaseConfig.initialize');
       }

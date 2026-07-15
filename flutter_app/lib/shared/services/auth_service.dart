@@ -16,10 +16,10 @@ class AuthService {
     String email,
     String password, {
     required String username,
-    required String phoneNumber,
+    String? phoneNumber,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
-    final normalizedPhone = phoneNumber.trim();
+    final normalizedPhone = (phoneNumber == null || phoneNumber.trim().isEmpty) ? null : phoneNumber.trim();
     if (!await _betaAccess.isEmailAllowed(normalizedEmail)) {
       throw Exception('This email is not on the closed beta allowlist.');
     }
@@ -27,9 +27,11 @@ class AuthService {
     // Friendly duplicate checks *before* creating the auth user. These run
     // as anon (public.users has an open SELECT policy), so they work even
     // though the account doesn't exist/have a session yet.
-    final existingPhone = await _client.from('users').select('id').eq('phone_number', normalizedPhone).maybeSingle();
-    if (existingPhone != null) {
-      throw Exception('This phone number is already registered.');
+    if (normalizedPhone != null) {
+      final existingPhone = await _client.from('users').select('id').eq('phone_number', normalizedPhone).maybeSingle();
+      if (existingPhone != null) {
+        throw Exception('This phone number is already registered.');
+      }
     }
     final existingUsername = await _client.from('users').select('id').eq('username', username).maybeSingle();
     if (existingUsername != null) {
@@ -61,6 +63,10 @@ class AuthService {
     }
     return res;
   }
+
+  /// Re-sends the signup confirmation email (rate-limited server-side).
+  Future<void> resendSignupEmail(String email) =>
+      _client.auth.resend(type: OtpType.signup, email: email.trim().toLowerCase());
 
   Future<AuthResponse> signIn(String email, String password) async {
     final res = await _client.auth.signInWithPassword(email: email.trim().toLowerCase(), password: password);
@@ -108,14 +114,16 @@ class AuthService {
     String email,
     String password,
     String username,
-    String phone,
+    String? phone,
   ) async {
     try {
       return await _client.auth.signUp(
         email: email,
         password: password,
-        data: {'username': username, 'phone_number': phone},
-        emailRedirectTo: 'https://eiquoab.xyz/verify-phone?phone=$phone',
+        data: {'username': username, if (phone != null) 'phone_number': phone},
+        emailRedirectTo: phone != null
+            ? 'https://eiquoab.xyz/verify-phone?phone=$phone'
+            : 'https://eiquoab.xyz/',
       );
     } on AuthApiException catch (e) {
       if (e.code == 'over_email_send_rate_limit' || e.statusCode == '429') {

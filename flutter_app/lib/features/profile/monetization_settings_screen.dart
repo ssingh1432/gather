@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
@@ -188,6 +189,55 @@ class _MonetizationSettingsScreenState extends State<MonetizationSettingsScreen>
     );
   }
 
+  /// Same 10-digit-with-optional-prefix normalization as signup.
+  String? _normalizedPhoneOrNull(String raw) {
+    var digits = raw.trim().replaceAll(RegExp(r'[\s-]'), '');
+    if (digits.startsWith('+977')) digits = digits.substring(4);
+    if (digits.startsWith('977')) digits = digits.substring(3);
+    if (digits.startsWith('0')) digits = digits.substring(1);
+    if (!RegExp(r'^9\d{9}$').hasMatch(digits)) return null;
+    return digits;
+  }
+
+  Future<void> _promptAddPhone() async {
+    final controller = TextEditingController();
+    final normalized = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add mobile number'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(
+            labelText: 'Mobile number',
+            hintText: '98XXXXXXXX',
+            prefixText: '+977 ',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final n = _normalizedPhoneOrNull(controller.text);
+              if (n == null) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(content: Text('Enter a valid 10-digit mobile number.')),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, n);
+            },
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (normalized != null && mounted) {
+      context.push('/verify-phone?phone=$normalized');
+    }
+  }
+
   Widget _buildEligibilityCard() {
     final e = _eligibility ?? const {};
     final rows = <_CheckRow>[
@@ -215,6 +265,14 @@ class _MonetizationSettingsScreenState extends State<MonetizationSettingsScreen>
             ),
             const SizedBox(height: 12),
             for (final r in rows) r,
+            if (e['phone_verified'] != true) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _promptAddPhone,
+                icon: const Icon(Icons.phone_outlined),
+                label: const Text('Add & verify phone number'),
+              ),
+            ],
           ],
         ),
       ),

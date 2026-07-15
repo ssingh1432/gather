@@ -24,6 +24,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   bool _loading = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
+  bool _resending = false;
+  // Non-null once signup succeeds but the account still needs email
+  // confirmation (i.e. there's no session yet). Drives the "check your
+  // email" state below instead of a snackbar that's easy to miss.
+  String? _awaitingConfirmationFor;
 
   @override
   void dispose() {
@@ -51,19 +56,24 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final mail = email.text.trim();
     final pass = password.text.trim();
     final confirmPass = confirmPassword.text.trim();
+    final phoneRaw = phone.text.trim();
 
-    if (name.isEmpty || mail.isEmpty || pass.isEmpty || phone.text.trim().isEmpty) {
+    if (name.isEmpty || mail.isEmpty || pass.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Username, email, mobile number, and password are required.')),
+        const SnackBar(content: Text('Username, email, and password are required.')),
       );
       return;
     }
-    final normalizedPhone = _normalizedPhoneOrNull(phone.text);
-    if (normalizedPhone == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid 10-digit mobile number (e.g. 98XXXXXXXX).')),
-      );
-      return;
+    // Phone is optional — only validate format if the person entered one.
+    String? normalizedPhone;
+    if (phoneRaw.isNotEmpty) {
+      normalizedPhone = _normalizedPhoneOrNull(phoneRaw);
+      if (normalizedPhone == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid 10-digit mobile number (e.g. 98XXXXXXXX), or leave it blank.')),
+        );
+        return;
+      }
     }
     if (pass.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -84,17 +94,20 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       if (!mounted) return;
 
       if (SupabaseConfig.currentUserId != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account created!')),
-        );
-        // Verifying the phone is optional; the account already exists and
-        // works regardless of whether the SMS step succeeds.
-        context.go('/verify-phone?phone=$normalizedPhone');
+        // Email confirmation is off (or this address was pre-confirmed) —
+        // there's already a session, so the person is logged in.
+        if (normalizedPhone != null) {
+          context.go('/verify-phone?phone=$normalizedPhone');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Welcome to Gather!')),
+          );
+          context.go('/');
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account created. Please verify your email, then log in.')),
-        );
-        context.go(_loginLocation(widget.redirect));
+        // Show a clear, persistent "check your email" state instead of a
+        // snackbar the person might miss.
+        setState(() => _awaitingConfirmationFor = mail);
       }
     } catch (e) {
       if (mounted) {
@@ -105,9 +118,74 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
   }
 
+  Future<void> _resend() async {
+    final mail = _awaitingConfirmationFor;
+    if (mail == null) return;
+    setState(() => _resending = true);
+    try {
+      await ref.read(authServiceProvider).resendSignupEmail(mail);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Confirmation email resent.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not resend: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _resending = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final loginLocation = _loginLocation(widget.redirect);
+
+    if (_awaitingConfirmationFor != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Check your email')),
+        body: ResponsiveCenter(
+          maxWidth: 420,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Icon(Icons.mark_email_unread_outlined, size: 48),
+                const SizedBox(height: 16),
+                Text(
+                  'Confirm your email',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'We sent a confirmation link to ${_awaitingConfirmationFor!}. '
+                  'Open it on this device to activate your account — you\'ll be signed in automatically, '
+                  'no need to come back and log in.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                OutlinedButton(
+                  onPressed: _resending ? null : _resend,
+                  child: _resending
+                      ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Resend email'),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => context.go(loginLocation),
+                  child: const Text('Back to login'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create account')),
@@ -148,8 +226,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               TextField(
                 controller: phone,
                 decoration: const InputDecoration(
-                  labelText: 'Mobile number',
+                  labelText: 'Mobile number (optional)',
                   hintText: '98XXXXXXXX',
+                  helperText: "Add it now or later — required only for monetization",
                   prefixIcon: Icon(Icons.phone_outlined),
                   prefixText: '+977 ',
                   border: OutlineInputBorder(),
