@@ -23,30 +23,37 @@ class AuthService {
     if (!await _betaAccess.isEmailAllowed(normalizedEmail)) {
       throw Exception('This email is not on the closed beta allowlist.');
     }
+
+    // Friendly duplicate checks *before* creating the auth user. These run
+    // as anon (public.users has an open SELECT policy), so they work even
+    // though the account doesn't exist/have a session yet.
+    final existingPhone = await _client.from('users').select('id').eq('phone_number', normalizedPhone).maybeSingle();
+    if (existingPhone != null) {
+      throw Exception('This phone number is already registered.');
+    }
+    final existingUsername = await _client.from('users').select('id').eq('username', username).maybeSingle();
+    if (existingUsername != null) {
+      throw Exception('That username is already taken.');
+    }
+
     final res = await _authSignUpOrFriendlyError(normalizedEmail, password, username, normalizedPhone);
     final uid = res.user?.id;
     if (uid != null) {
-      try {
-        await _client.from('users').upsert({
-          'id': uid,
-          'email': normalizedEmail,
-          'username': username,
-          'phone_number': normalizedPhone,
-          'status': 'active',
-        });
-      } on PostgrestException catch (e) {
-        if (e.code == '23505') {
-          // Unique violation. The users_phone_number_key index is the only
-          // one an unauthenticated new signup could hit here.
+      // The public.users row is now provisioned server-side by a trigger on
+      // auth.users (see migration 015) — it no longer depends on the client
+      // having a session, which matters because when email confirmation is
+      // required there is no session yet at this point.
+      //
+      // Only claim beta access if we actually have a session (i.e. email
+      // confirmation is off, or this account was already confirmed). If
+      // confirmation is pending, there's nothing to claim yet — the user
+      // will land here again with a session once they confirm.
+      if (_client.auth.currentSession != null) {
+        final betaAllowed = await _betaAccess.claimForCurrentUser();
+        if (!betaAllowed) {
           await signOut();
-          throw Exception('This phone number is already registered.');
+          throw Exception('Closed beta access required');
         }
-        rethrow;
-      }
-      final betaAllowed = await _betaAccess.claimForCurrentUser();
-      if (!betaAllowed) {
-        await signOut();
-        throw Exception('Closed beta access required');
       }
       AnalyticsService.instance.signupStarted();
       AnalyticsService.instance.userSignedUp();
@@ -108,6 +115,7 @@ class AuthService {
         email: email,
         password: password,
         data: {'username': username, 'phone_number': phone},
+        emailRedirectTo: 'https://eiquoab.xyz/verify-phone?phone=$phone',
       );
     } on AuthApiException catch (e) {
       if (e.code == 'over_email_send_rate_limit' || e.statusCode == '429') {
@@ -131,5 +139,13 @@ class AuthService {
     }
     await _client.auth.signOut();
   }
-  Future<void> resetPassword(String email) => _client.auth.resetPasswordForEmail(email);
+  Future<void> resetPassword(String email) => _client.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        redirectTo: 'https://eiquoab.xyz/reset-password',
+      );
+
+  /// Sets a new password for the currently-active recovery session (i.e.
+  /// after the user has opened the password-reset email link).
+  Future<void> updatePassword(String newPassword) =>
+      _client.auth.updateUser(UserAttributes(password: newPassword));
 }

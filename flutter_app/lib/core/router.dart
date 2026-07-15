@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../features/admin/admin_moderation_screen.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_screen.dart';
+import '../features/auth/reset_password_screen.dart';
 import '../features/auth/signup_screen.dart';
 import '../features/auth/verify_phone_screen.dart';
 import '../features/beta/beta_feedback_button.dart';
@@ -65,6 +66,11 @@ final appRouter = GoRouter(
     GoRoute(path: '/signup', builder: (_, s) => SignupScreen(redirect: s.uri.queryParameters['redirect'])),
     GoRoute(path: '/register', builder: (_, s) => SignupScreen(redirect: s.uri.queryParameters['redirect'])),
     GoRoute(path: '/forgot', builder: (_, __) => ForgotPasswordScreen()),
+    // Deliberately not in _authRoutes/_protectedRoutes: the recovery link
+    // lands here with a fresh recovery session that supabase_flutter is
+    // still parsing from the URL fragment on the very first frame, so it
+    // must never be bounced by the authed/protected redirect check above.
+    GoRoute(path: '/reset-password', builder: (_, __) => const ResetPasswordScreen()),
     GoRoute(path: '/verify-phone', builder: (_, s) => VerifyPhoneScreen(phone: s.uri.queryParameters['phone'] ?? '')),
     GoRoute(path: '/community', builder: (_, s) => CommunityDetailScreen(communityId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/create-community', builder: (_, __) => const CreateCommunityScreen()),
