@@ -3,8 +3,9 @@
 // Supabase calls this function for every auth email (signup confirmation,
 // password recovery, email change, magic link, reauthentication) instead of
 // sending its own default email. We verify the request came from Supabase
-// (Standard Webhooks signature), build a branded HTML email per action
-// type, and send it through Resend using the verified eiquoab.xyz domain.
+// using the official `standardwebhooks` library, build a branded HTML email
+// per action type, and send it through Resend using the verified
+// eiquoab.xyz domain.
 //
 // Required function secrets (set these yourself, they are NOT in git):
 //   RESEND_API_KEY         - Resend API key
@@ -14,9 +15,11 @@
 // SUPABASE_URL is already injected automatically by the edge runtime.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const HOOK_SECRET = Deno.env.get("SEND_EMAIL_HOOK_SECRET") ?? "";
+const RAW_HOOK_SECRET = Deno.env.get("SEND_EMAIL_HOOK_SECRET") ?? "";
+const HOOK_SECRET = RAW_HOOK_SECRET.replace("v1,whsec_", "");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const FROM_ADDRESS = Deno.env.get("AUTH_EMAIL_FROM") || "Gather <noreply@eiquoab.xyz>";
 
@@ -40,36 +43,6 @@ function jsonError(message: string, httpCode = 500): Response {
     JSON.stringify({ error: { http_code: httpCode, message } }),
     { status: httpCode, headers: { "Content-Type": "application/json" } },
   );
-}
-
-/** Verifies the Standard Webhooks signature Supabase attaches to the request. */
-async function verifySignature(req: Request, rawBody: string): Promise<boolean> {
-  if (!HOOK_SECRET) return false;
-  const id = req.headers.get("webhook-id");
-  const timestamp = req.headers.get("webhook-timestamp");
-  const signatureHeader = req.headers.get("webhook-signature");
-  if (!id || !timestamp || !signatureHeader) return false;
-
-  // Reject requests older than 5 minutes to prevent replay.
-  const age = Math.abs(Date.now() / 1000 - Number(timestamp));
-  if (!Number.isFinite(age) || age > 300) return false;
-
-  const secretB64 = HOOK_SECRET.split("_").slice(1).join("_"); // strip "v1,whsec_" -> base64 key
-  const keyBytes = Uint8Array.from(atob(secretB64), (c) => c.charCodeAt(0));
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyBytes,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signedContent = `${id}.${timestamp}.${rawBody}`;
-  const sigBuffer = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(signedContent));
-  const expected = btoa(String.fromCharCode(...new Uint8Array(sigBuffer)));
-
-  return signatureHeader
-    .split(" ")
-    .some((part) => part.split(",")[1] === expected);
 }
 
 function buildLink(emailData: HookPayload["email_data"]): string {
@@ -186,16 +159,15 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return jsonError("Method not allowed", 405);
 
   const rawBody = await req.text();
-
-  if (!(await verifySignature(req, rawBody))) {
-    return jsonError("Invalid webhook signature", 401);
-  }
+  const headers = Object.fromEntries(req.headers);
 
   let payload: HookPayload;
   try {
-    payload = JSON.parse(rawBody);
-  } catch {
-    return jsonError("Invalid JSON payload", 400);
+    const wh = new Webhook(HOOK_SECRET);
+    payload = wh.verify(rawBody, headers) as HookPayload;
+  } catch (err) {
+    console.log("DEBUG: webhook verify failed", String(err));
+    return jsonError("Invalid webhook signature", 401);
   }
 
   if (!RESEND_API_KEY) return jsonError("RESEND_API_KEY is not configured", 500);
@@ -218,6 +190,7 @@ Deno.serve(async (req: Request) => {
 
   if (!resendRes.ok) {
     const detail = await resendRes.text();
+    console.log("DEBUG: resend failed", resendRes.status, detail);
     return jsonError(`Resend send failed: ${resendRes.status} ${detail}`, 500);
   }
 
