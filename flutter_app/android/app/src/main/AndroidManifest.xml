@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
         android:label="Gather"
         android:name="${applicationName}"
@@ -10,6 +12,12 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713"/>
+        <!-- Google Maps SDK key, used by the "pick location on a map" post
+             composer field. Restrict this key to the app's SHA-1 +
+             package name in Google Cloud Console. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyAEiXDNwVSa_gtvUML_TWeUFMoOiAiZWWo"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

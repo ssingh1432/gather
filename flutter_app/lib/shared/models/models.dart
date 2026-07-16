@@ -61,6 +61,8 @@ class PostModel {
   final bool authorAdsEligible;
   final List<String> mentionedUsernames;
   final int replyCount;
+  final double? locationLat;
+  final double? locationLng;
 
   PostModel({
     required this.id,
@@ -86,6 +88,8 @@ class PostModel {
     this.authorAdsEligible = false,
     this.mentionedUsernames = const [],
     this.replyCount = 0,
+    this.locationLat,
+    this.locationLng,
   });
 
   factory PostModel.fromMap(Map<String, dynamic> map) {
@@ -118,6 +122,8 @@ class PostModel {
       authorAdsEligible: map['author_ads_eligible'] == true,
       mentionedUsernames: ((map['mentioned_usernames'] as List?) ?? const []).map((e) => e.toString()).toList(),
       replyCount: _intFromMap(map, 'reply_count'),
+      locationLat: (map['location_lat'] as num?)?.toDouble(),
+      locationLng: (map['location_lng'] as num?)?.toDouble(),
     );
   }
 
@@ -150,6 +156,8 @@ class PostModel {
         authorAdsEligible: authorAdsEligible,
         mentionedUsernames: mentionedUsernames,
         replyCount: replyCount,
+        locationLat: locationLat,
+        locationLng: locationLng,
       );
 
   String? get displayImageUrl => thumbnailUrl ?? _derivedThumbnailUrl ?? imageUrl;

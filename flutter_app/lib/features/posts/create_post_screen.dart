@@ -9,6 +9,7 @@ import '../../shared/services/beta_error_logging_service.dart';
 import '../../shared/utils/feelings.dart';
 import '../../shared/widgets/reusables.dart';
 import '../data/repositories.dart';
+import 'location_picker_screen.dart';
 
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key, this.communityId, this.quotePostId});
@@ -39,6 +40,8 @@ class _P extends State<CreatePostScreen> {
 
   // username -> id, so chips can show the name while we submit ids.
   final Map<String, String> _taggedFriends = {};
+  double? _pickedLat;
+  double? _pickedLng;
 
   @override
   void initState() {
@@ -127,6 +130,8 @@ class _P extends State<CreatePostScreen> {
         'community_id': widget.communityId,
         'text_content': text.text.trim(),
         'location': location.text.trim().isEmpty ? null : location.text.trim(),
+        'location_lat': _pickedLat,
+        'location_lng': _pickedLng,
         'feeling': _feeling?.stored,
         'tags': _parsedTags,
         'reply_to_post_id': widget.quotePostId,
@@ -278,7 +283,7 @@ class _P extends State<CreatePostScreen> {
     }
   }
 
-
+  Future<void> _pickFeeling() async {
     final selected = await showModalBottomSheet<FeelingOption>(
       context: context,
       showDragHandle: true,
@@ -388,7 +393,40 @@ class _P extends State<CreatePostScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: location,
-              decoration: const InputDecoration(labelText: 'Location', hintText: 'e.g. Kathmandu, Nepal', prefixIcon: Icon(Icons.location_on_outlined)),
+              readOnly: true,
+              onTap: () async {
+                final picked = await Navigator.of(context).push<PickedLocation>(
+                  MaterialPageRoute(
+                    builder: (_) => LocationPickerScreen(
+                      initial: _pickedLat != null && _pickedLng != null && location.text.isNotEmpty
+                          ? PickedLocation(label: location.text, lat: _pickedLat!, lng: _pickedLng!)
+                          : null,
+                    ),
+                  ),
+                );
+                if (picked != null) {
+                  setState(() {
+                    location.text = picked.label;
+                    _pickedLat = picked.lat;
+                    _pickedLng = picked.lng;
+                  });
+                }
+              },
+              decoration: InputDecoration(
+                labelText: 'Location',
+                hintText: 'Tap to pick on the map',
+                prefixIcon: const Icon(Icons.location_on_outlined),
+                suffixIcon: location.text.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => setState(() {
+                          location.clear();
+                          _pickedLat = null;
+                          _pickedLng = null;
+                        }),
+                      ),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
