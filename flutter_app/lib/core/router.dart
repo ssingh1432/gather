@@ -15,6 +15,7 @@ import '../features/communities/community_detail_screen.dart';
 import '../features/communities/create_community_screen.dart';
 import '../features/home/home_feed_screen.dart';
 import '../features/home/post_detail_screen.dart';
+import '../features/home/post_replies_screen.dart';
 import '../features/media/media_viewer_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/posts/create_post_screen.dart';
@@ -124,6 +125,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/monetization', builder: (_, __) => const MonetizationSettingsScreen()),
     GoRoute(path: '/close-friends', builder: (_, __) => const CloseFriendsScreen()),
     GoRoute(path: '/post', builder: (_, s) => PostDetailScreen(postId: s.uri.queryParameters['id'] ?? '')),
+    GoRoute(path: '/post/replies', builder: (_, s) => PostRepliesScreen(postId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(
       path: '/media',
       builder: (_, s) => MediaViewerScreen(

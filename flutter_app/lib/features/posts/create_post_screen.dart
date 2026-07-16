@@ -131,6 +131,7 @@ class _P extends State<CreatePostScreen> {
         'tags': _parsedTags,
         'reply_to_post_id': widget.quotePostId,
         'mentioned_user_ids': _taggedFriends.values.toList(),
+        'mentioned_usernames': _taggedFriends.keys.toList(),
       }))['id'].toString();
 
       if (video != null) {

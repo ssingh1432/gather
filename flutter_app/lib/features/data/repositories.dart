@@ -20,6 +20,19 @@ class FeedRepository {
     return (data as List).map((e) => PostModel.fromMap(e)).toList();
   }
 
+  /// Posts that reply/quote a given post (the reverse of `replyTo` on a
+  /// post) — powers the "N replies" list opened from the feed.
+  Future<List<PostModel>> repliesTo(String postId, {int limit = 50}) async {
+    final data = await _c
+        .from('posts')
+        .select('*, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url, media_type)')
+        .eq('reply_to_post_id', postId)
+        .eq('is_removed', false)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return (data as List).map((e) => PostModel.fromMap(e)).toList();
+  }
+
   /// A user's own published posts, newest first — backs the photo/video
   /// grid on their profile.
   Future<List<PostModel>> postsByUser(String userId, {int limit = 30}) async {

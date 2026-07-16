@@ -145,7 +145,9 @@ class PostCard extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             _PostHeader(post: post, onTapAuthor: () => _openAuthorProfile(context), onTapMore: () => _openOverflowMenu(context)),
-            if (post.location != null && post.location!.isNotEmpty || post.feeling != null && post.feeling!.isNotEmpty) ...[
+            if ((post.location != null && post.location!.isNotEmpty) ||
+                (post.feeling != null && post.feeling!.isNotEmpty) ||
+                post.mentionedUsernames.isNotEmpty) ...[
               const SizedBox(height: 6),
               _FeelingLocationLine(post: post),
             ],
@@ -501,6 +503,9 @@ class _FeelingLocationLine extends StatelessWidget {
     final parts = <String>[];
     if (post.feeling != null && post.feeling!.isNotEmpty) parts.add('is feeling ${post.feeling}');
     if (post.location != null && post.location!.isNotEmpty) parts.add('📍 ${post.location}');
+    if (post.mentionedUsernames.isNotEmpty) {
+      parts.add('with ${post.mentionedUsernames.map((n) => '@$n').join(', ')}');
+    }
     if (parts.isEmpty) return const SizedBox.shrink();
     return Text(
       parts.join('  ·  '),
@@ -646,6 +651,14 @@ class _PostActionBar extends StatelessWidget {
         label: post.commentCount > 0 ? '${post.commentCount}' : null,
         onTap: onComment,
       ),
+      if (post.replyCount > 0) ...[
+        const SizedBox(width: 4),
+        _ActionButton(
+          icon: Icons.forum_outlined,
+          label: '${post.replyCount}',
+          onTap: () => context.push('/post/replies?id=${post.id}'),
+        ),
+      ],
       const SizedBox(width: 4),
       _ActionButton(
         icon: Icons.repeat,

@@ -59,6 +59,8 @@ class PostModel {
   final QuotedPostPreview? replyTo;
   final String? mediaType;
   final bool authorAdsEligible;
+  final List<String> mentionedUsernames;
+  final int replyCount;
 
   PostModel({
     required this.id,
@@ -82,6 +84,8 @@ class PostModel {
     this.replyTo,
     this.mediaType,
     this.authorAdsEligible = false,
+    this.mentionedUsernames = const [],
+    this.replyCount = 0,
   });
 
   factory PostModel.fromMap(Map<String, dynamic> map) {
@@ -112,6 +116,8 @@ class PostModel {
       replyTo: QuotedPostPreview.fromMap(map),
       mediaType: map['media_type'] as String? ?? (media != null && media.isNotEmpty ? media.first['media_type'] as String? : null),
       authorAdsEligible: map['author_ads_eligible'] == true,
+      mentionedUsernames: ((map['mentioned_usernames'] as List?) ?? const []).map((e) => e.toString()).toList(),
+      replyCount: _intFromMap(map, 'reply_count'),
     );
   }
 
@@ -141,6 +147,9 @@ class PostModel {
         tags: tags,
         replyTo: replyTo,
         mediaType: mediaType,
+        authorAdsEligible: authorAdsEligible,
+        mentionedUsernames: mentionedUsernames,
+        replyCount: replyCount,
       );
 
   String? get displayImageUrl => thumbnailUrl ?? _derivedThumbnailUrl ?? imageUrl;
