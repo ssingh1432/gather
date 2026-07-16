@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
 
 /// Result of the map picker: a human-readable label plus the coordinates,
 /// so a post can show both "📍 Kathmandu, Nepal" in the feed and (later)
@@ -41,17 +43,34 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     }
   }
 
+  static const _mapsApiKey = 'AIzaSyAEiXDNwVSa_gtvUML_TWeUFMoOiAiZWWo';
+
   Future<void> _resolveLabel(LatLng point) async {
     setState(() => _resolvingLabel = true);
     try {
-      final placemarks = await placemarkFromCoordinates(point.latitude, point.longitude);
-      if (!mounted) return;
-      if (placemarks.isNotEmpty) {
-        final p = placemarks.first;
-        final parts = [p.locality, p.administrativeArea, p.country].where((s) => s != null && s.isNotEmpty).toList();
-        setState(() => _label = parts.isNotEmpty ? parts.join(', ') : '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}');
+      final uri = Uri.parse(
+        'https://maps.googleapis.com/maps/api/geocode/json'
+        '?latlng=${point.latitude},${point.longitude}&key=$_mapsApiKey',
+      );
+      final res = await http.get(uri);
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      final results = body['results'] as List?;
+      if (body['status'] == 'OK' && results != null && results.isNotEmpty) {
+        // Prefer a short "locality, admin area, country" label over the
+        // full street-level formatted_address, which is often too long
+        // for a post's location line.
+        final components = (results.first['address_components'] as List).cast<Map<String, dynamic>>();
+        String? find(String type) => components
+            .firstWhere((c) => (c['types'] as List).contains(type), orElse: () => const {})['long_name'] as String?;
+        final locality = find('locality') ?? find('administrative_area_level_2');
+        final admin = find('administrative_area_level_1');
+        final country = find('country');
+        final parts = [locality, admin, country].where((s) => s != null && s.isNotEmpty).toList();
+        if (mounted) {
+          setState(() => _label = parts.isNotEmpty ? parts.join(', ') : results.first['formatted_address'] as String?);
+        }
       } else {
-        setState(() => _label = '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}');
+        if (mounted) setState(() => _label = '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}');
       }
     } catch (_) {
       if (mounted) setState(() => _label = '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}');
