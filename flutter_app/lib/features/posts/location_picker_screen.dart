@@ -33,6 +33,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   String? _label;
   bool _resolvingLabel = false;
   bool _locating = false;
+  bool _searching = false;
+  String? _lastApiError;
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -43,10 +46,32 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   static const _mapsApiKey = 'AIzaSyAEiXDNwVSa_gtvUML_TWeUFMoOiAiZWWo';
 
+  /// Extracts a short "locality, admin area, country" label from a
+  /// Geocoding API result, falling back to its full formatted_address.
+  String _shortLabel(Map<String, dynamic> result) {
+    final components = (result['address_components'] as List).cast<Map<String, dynamic>>();
+    String? find(String type) =>
+        components.firstWhere((c) => (c['types'] as List).contains(type), orElse: () => const {})['long_name'] as String?;
+    final locality = find('locality') ?? find('administrative_area_level_2');
+    final admin = find('administrative_area_level_1');
+    final country = find('country');
+    final parts = [locality, admin, country].where((s) => s != null && s.isNotEmpty).toList();
+    return parts.isNotEmpty ? parts.join(', ') : result['formatted_address'] as String? ?? '';
+  }
+
   Future<void> _resolveLabel(LatLng point) async {
-    setState(() => _resolvingLabel = true);
+    setState(() {
+      _resolvingLabel = true;
+      _lastApiError = null;
+    });
     try {
       final uri = Uri.parse(
         'https://maps.googleapis.com/maps/api/geocode/json'
@@ -54,28 +79,70 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       );
       final res = await http.get(uri);
       final body = jsonDecode(res.body) as Map<String, dynamic>;
+      final status = body['status'] as String?;
       final results = body['results'] as List?;
-      if (body['status'] == 'OK' && results != null && results.isNotEmpty) {
-        // Prefer a short "locality, admin area, country" label over the
-        // full street-level formatted_address, which is often too long
-        // for a post's location line.
-        final components = (results.first['address_components'] as List).cast<Map<String, dynamic>>();
-        String? find(String type) => components
-            .firstWhere((c) => (c['types'] as List).contains(type), orElse: () => const {})['long_name'] as String?;
-        final locality = find('locality') ?? find('administrative_area_level_2');
-        final admin = find('administrative_area_level_1');
-        final country = find('country');
-        final parts = [locality, admin, country].where((s) => s != null && s.isNotEmpty).toList();
-        if (mounted) {
-          setState(() => _label = parts.isNotEmpty ? parts.join(', ') : results.first['formatted_address'] as String?);
-        }
+      if (status == 'OK' && results != null && results.isNotEmpty) {
+        if (mounted) setState(() => _label = _shortLabel(results.first as Map<String, dynamic>));
       } else {
-        if (mounted) setState(() => _label = '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}');
+        // Surface the real reason (e.g. REQUEST_DENIED means the API key
+        // isn't allowed to call the Geocoding API yet) instead of
+        // silently falling back to raw coordinates.
+        if (mounted) {
+          setState(() {
+            _lastApiError = '${status ?? 'unknown error'}${body['error_message'] != null ? ': ${body['error_message']}' : ''}';
+            _label = '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}';
+          });
+        }
       }
-    } catch (_) {
-      if (mounted) setState(() => _label = '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}');
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _lastApiError = 'Request failed: $e';
+          _label = '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}';
+        });
+      }
     } finally {
       if (mounted) setState(() => _resolvingLabel = false);
+    }
+  }
+
+  Future<void> _searchPlace(String query) async {
+    if (query.trim().isEmpty) return;
+    setState(() {
+      _searching = true;
+      _lastApiError = null;
+    });
+    try {
+      final uri = Uri.parse(
+        'https://maps.googleapis.com/maps/api/geocode/json'
+        '?address=${Uri.encodeComponent(query.trim())}&key=$_mapsApiKey',
+      );
+      final res = await http.get(uri);
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      final status = body['status'] as String?;
+      final results = body['results'] as List?;
+      if (status == 'OK' && results != null && results.isNotEmpty) {
+        final first = results.first as Map<String, dynamic>;
+        final loc = (first['geometry'] as Map)['location'] as Map;
+        final point = LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble());
+        setState(() {
+          _selected = point;
+          _label = _shortLabel(first);
+        });
+        _mapController?.animateCamera(CameraUpdate.newLatLngZoom(point, 13));
+      } else {
+        if (mounted) {
+          setState(() => _lastApiError = '${status ?? 'unknown error'}${body['error_message'] != null ? ': ${body['error_message']}' : ''}');
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No results for "$query".')));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _lastApiError = 'Request failed: $e');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Search failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _searching = false);
     }
   }
 
@@ -150,6 +217,35 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             zoomControlsEnabled: false,
           ),
           Positioned(
+            left: 12,
+            right: 12,
+            top: 12,
+            child: Material(
+              elevation: 3,
+              borderRadius: BorderRadius.circular(24),
+              child: TextField(
+                controller: _searchController,
+                textInputAction: TextInputAction.search,
+                onSubmitted: _searchPlace,
+                decoration: InputDecoration(
+                  hintText: 'Search for a place',
+                  filled: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searching
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      : IconButton(
+                          icon: const Icon(Icons.arrow_forward),
+                          onPressed: () => _searchPlace(_searchController.text),
+                        ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
             right: 16,
             bottom: 96,
             child: FloatingActionButton(
@@ -166,17 +262,30 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             child: Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.location_on_outlined),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _resolvingLabel ? 'Finding address...' : (_label ?? 'Tap the map or use your location'),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _resolvingLabel ? 'Finding address...' : (_label ?? 'Tap the map, search, or use your location'),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
+                    if (_lastApiError != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _lastApiError!,
+                        style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 11),
+                      ),
+                    ],
                   ],
                 ),
               ),
