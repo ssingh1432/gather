@@ -199,6 +199,23 @@ class ProfileRepository {
     return row != null;
   }
 
+  /// People the user follows, for the "tag friends" picker default list.
+  Future<List<Map<String, dynamic>>> followingUsers(String userId, {int limit = 30}) async {
+    final rows = await _c
+        .from('user_follows')
+        .select('users!user_follows_following_id_fkey(id, username, profile_photo_url)')
+        .eq('follower_id', userId)
+        .limit(limit);
+    return (rows as List).map((r) => Map<String, dynamic>.from(r['users'] as Map)).toList();
+  }
+
+  /// Username search for the "tag friends" picker, once the person types.
+  Future<List<Map<String, dynamic>>> searchUsersByUsername(String query, {int limit = 20}) async {
+    if (query.trim().isEmpty) return const [];
+    final rows = await _c.from('users').select('id, username, profile_photo_url').ilike('username', '%${query.trim()}%').limit(limit);
+    return List<Map<String, dynamic>>.from(rows as List);
+  }
+
   /// Published (non-removed) post count — the "Posts" stat on a profile.
   Future<int> postCount(String userId) async =>
       await _c.from('posts').count(CountOption.exact).eq('author_id', userId).eq('is_removed', false);

@@ -37,6 +37,9 @@ class _P extends State<CreatePostScreen> {
   PostModel? _quotedPost;
   bool _loadingQuote = false;
 
+  // username -> id, so chips can show the name while we submit ids.
+  final Map<String, String> _taggedFriends = {};
+
   @override
   void initState() {
     super.initState();
@@ -127,6 +130,7 @@ class _P extends State<CreatePostScreen> {
         'feeling': _feeling?.stored,
         'tags': _parsedTags,
         'reply_to_post_id': widget.quotePostId,
+        'mentioned_user_ids': _taggedFriends.values.toList(),
       }))['id'].toString();
 
       if (video != null) {
@@ -160,7 +164,120 @@ class _P extends State<CreatePostScreen> {
     }
   }
 
-  Future<void> _pickFeeling() async {
+  Future<void> _pickFriends() async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return;
+    final selected = Map<String, String>.from(_taggedFriends);
+    var results = <Map<String, dynamic>>[];
+    var loading = true;
+    var loadedDefault = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          if (!loadedDefault) {
+            loadedDefault = true;
+            ProfileRepository().followingUsers(uid).then((people) {
+              results = people;
+              loading = false;
+              setSheetState(() {});
+            });
+          }
+          return DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.4,
+            maxChildSize: 0.9,
+            expand: false,
+            builder: (context, scrollController) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Tag friends', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  TextField(
+                    autofocus: false,
+                    decoration: const InputDecoration(
+                      hintText: 'Search by username',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (q) async {
+                      loading = true;
+                      setSheetState(() {});
+                      final found = q.trim().isEmpty
+                          ? await ProfileRepository().followingUsers(uid)
+                          : await ProfileRepository().searchUsersByUsername(q);
+                      results = found;
+                      loading = false;
+                      setSheetState(() {});
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : results.isEmpty
+                            ? const Center(child: Text('No one found'))
+                            : ListView.builder(
+                                controller: scrollController,
+                                itemCount: results.length,
+                                itemBuilder: (context, i) {
+                                  final person = results[i];
+                                  final id = person['id'] as String;
+                                  final name = person['username'] as String? ?? 'Unknown';
+                                  if (id == uid) return const SizedBox.shrink(); // can't tag yourself
+                                  final isSelected = selected.containsKey(name);
+                                  return CheckboxListTile(
+                                    value: isSelected,
+                                    secondary: ProfileAvatar(url: person['profile_photo_url'] as String?, radius: 16),
+                                    title: Text(name),
+                                    onChanged: (checked) {
+                                      setSheetState(() {
+                                        if (checked == true) {
+                                          selected[name] = id;
+                                        } else {
+                                          selected.remove(name);
+                                        }
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
+                  ),
+                  SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: () => Navigator.pop(sheetContext),
+                          child: Text(selected.isEmpty ? 'Done' : 'Tag ${selected.length}'),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    if (mounted) {
+      setState(() {
+        _taggedFriends
+          ..clear()
+          ..addAll(selected);
+      });
+    }
+  }
+
+
     final selected = await showModalBottomSheet<FeelingOption>(
       context: context,
       showDragHandle: true,
@@ -243,8 +360,26 @@ class _P extends State<CreatePostScreen> {
                   icon: Text(_feeling?.emoji ?? '🙂'),
                   label: Text(_feeling == null ? 'Feeling' : _feeling!.label),
                 ),
+                OutlinedButton.icon(
+                  onPressed: _pickFriends,
+                  icon: const Icon(Icons.person_add_alt_1_outlined),
+                  label: Text(_taggedFriends.isEmpty ? 'Tag friends' : 'Tagged ${_taggedFriends.length}'),
+                ),
               ],
             ),
+            if (_taggedFriends.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _taggedFriends.keys
+                    .map((name) => Chip(
+                          label: Text('@$name'),
+                          onDeleted: () => setState(() => _taggedFriends.remove(name)),
+                        ))
+                    .toList(),
+              ),
+            ],
             if (video != null) ...[
               const SizedBox(height: 8),
               Text('Videos up to 5 minutes are supported.', style: Theme.of(context).textTheme.bodySmall),
