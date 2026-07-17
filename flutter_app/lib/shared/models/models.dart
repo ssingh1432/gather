@@ -266,3 +266,60 @@ class CommentModel {
     );
   }
 }
+
+/// One author's row in the story bar: their story ring + unseen status.
+/// Individual stories are fetched separately (StoryRepository.storiesFor)
+/// only once someone taps into the viewer, to avoid loading every story's
+/// media metadata for the whole feed up front.
+class StoryFeedEntry {
+  const StoryFeedEntry({
+    required this.authorId,
+    required this.authorUsername,
+    required this.authorAvatarUrl,
+    required this.storyCount,
+    required this.hasUnseen,
+  });
+
+  final String authorId;
+  final String authorUsername;
+  final String? authorAvatarUrl;
+  final int storyCount;
+  final bool hasUnseen;
+
+  factory StoryFeedEntry.fromMap(Map<String, dynamic> map) => StoryFeedEntry(
+        authorId: map['author_id'].toString(),
+        authorUsername: map['author_username'] as String? ?? 'Unknown',
+        authorAvatarUrl: map['author_avatar_url'] as String?,
+        storyCount: (map['story_count'] as num?)?.toInt() ?? 0,
+        hasUnseen: map['has_unseen'] == true,
+      );
+}
+
+class StoryModel {
+  const StoryModel({
+    required this.id,
+    required this.authorId,
+    required this.mediaUrl,
+    required this.mediaType,
+    required this.createdAt,
+    required this.expiresAt,
+  });
+
+  final String id;
+  final String authorId;
+  final String mediaUrl;
+  final String mediaType; // 'image' | 'video'
+  final DateTime createdAt;
+  final DateTime expiresAt;
+
+  bool get isVideo => mediaType == 'video';
+
+  factory StoryModel.fromMap(Map<String, dynamic> map) => StoryModel(
+        id: map['id'].toString(),
+        authorId: map['author_id'].toString(),
+        mediaUrl: map['media_url'] as String,
+        mediaType: map['media_type'] as String,
+        createdAt: DateTime.parse(map['created_at']),
+        expiresAt: DateTime.parse(map['expires_at']),
+      );
+}

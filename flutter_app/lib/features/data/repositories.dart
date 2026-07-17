@@ -474,3 +474,32 @@ class BetaOpsRepository {
         'notes': notes,
       });
 }
+
+class StoryRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
+
+  Future<List<StoryFeedEntry>> storyFeed(String userId) async {
+    final data = await _c.rpc('get_story_feed', params: {'p_user_id': userId});
+    return (data as List).map((e) => StoryFeedEntry.fromMap(Map<String, dynamic>.from(e))).toList();
+  }
+
+  Future<List<StoryModel>> storiesFor(String authorId) async {
+    final data = await _c
+        .from('stories')
+        .select()
+        .eq('author_id', authorId)
+        .gt('expires_at', DateTime.now().toIso8601String())
+        .order('created_at', ascending: true);
+    return (data as List).map((e) => StoryModel.fromMap(Map<String, dynamic>.from(e))).toList();
+  }
+
+  Future<void> markViewed(String storyId) => _c.rpc('mark_story_viewed', params: {'p_story_id': storyId});
+
+  Future<Map<String, dynamic>> createStory({required String mediaUrl, required String mediaType}) => _c
+      .from('stories')
+      .insert({'media_url': mediaUrl, 'media_type': mediaType})
+      .select()
+      .single();
+
+  Future<void> deleteStory(String storyId) => _c.from('stories').delete().eq('id', storyId);
+}

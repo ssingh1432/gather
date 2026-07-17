@@ -179,41 +179,55 @@ class PostCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Card(
-        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _PostHeader(post: post, onTapAuthor: () => _openAuthorProfile(context), onTapMore: () => _openOverflowMenu(context)),
-            if ((post.location != null && post.location!.isNotEmpty) ||
-                (post.feeling != null && post.feeling!.isNotEmpty) ||
-                post.mentionedUsernames.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              _FeelingLocationLine(post: post),
-            ],
-            if (post.textContent.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(post.textContent),
-            ],
-            if (post.tags.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              _TagChips(tags: post.tags),
-            ],
-            if (post.linkPreviewUrl != null) ...[
-              const SizedBox(height: 8),
-              _FeedLinkPreview(post: post),
-            ],
-            if (post.replyTo != null) ...[
-              const SizedBox(height: 10),
-              _QuotedPostCard(quoted: post.replyTo!),
-            ],
-            if (post.displayImageUrl != null || post.isVideo)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: _PostMedia(post: post, liked: liked, onLike: onLike),
-              ),
-            const SizedBox(height: 4),
-            _PostActionBar(
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 8)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: _PostHeader(post: post, onTapAuthor: () => _openAuthorProfile(context), onTapMore: () => _openOverflowMenu(context)),
+          ),
+          if ((post.location != null && post.location!.isNotEmpty) ||
+              (post.feeling != null && post.feeling!.isNotEmpty) ||
+              post.mentionedUsernames.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+              child: _FeelingLocationLine(post: post),
+            ),
+          if (post.textContent.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Text(post.textContent),
+            ),
+          if (post.tags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: _TagChips(tags: post.tags),
+            ),
+          if (post.linkPreviewUrl != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: _FeedLinkPreview(post: post),
+            ),
+          if (post.replyTo != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: _QuotedPostCard(quoted: post.replyTo!),
+            ),
+          // Media is deliberately outside any horizontal padding — full
+          // device width, flush left and right, no rounded corners.
+          // Facebook-style, not a card-inset thumbnail.
+          if (post.displayImageUrl != null || post.isVideo)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: _PostMedia(post: post, liked: liked, onLike: onLike),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            child: _PostActionBar(
               post: post,
               liked: liked,
               bookmarked: bookmarked,
@@ -225,8 +239,8 @@ class PostCard extends StatelessWidget {
               onShowSharers: () => _openSharersSheet(context),
               onShowDownloaders: () => _openDownloadersSheet(context),
             ),
-          ]),
-        ),
+          ),
+        ]),
       );
 }
 
@@ -322,8 +336,7 @@ class _PostMediaState extends State<_PostMedia> with SingleTickerProviderStateMi
       onVisibilityChanged: (info) {
         if (info.visibleFraction > 0.6) PostViewTracker.instance.maybeCount(widget.post.id);
       },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
+      child: ClipRect(
         child: GestureDetector(
           onTap: () => _openViewer(context),
           onDoubleTap: _handleDoubleTap,

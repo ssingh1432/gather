@@ -32,6 +32,7 @@ class UploadedPostImage {
 class MediaUploadService {
   static const String bucket = 'post-media';
   static const String avatarsBucket = 'avatars';
+  static const String storyBucket = 'story-media';
 
   SupabaseClient get _client => SupabaseConfig.client;
 
@@ -105,6 +106,25 @@ class MediaUploadService {
     // Only the original is needed for profile images; skip the thumbnail
     // upload to save a storage call.
     await prepared.original.uploadTo(storage, path, options);
+    return storage.getPublicUrl(path);
+  }
+
+  /// Uploads a story's media to `{userId}/{storyId}` in the `story-media`
+  /// bucket — user-scoped path (not post-scoped) so storage RLS can check
+  /// folder == auth.uid(), same convention as the avatars bucket.
+  Future<String> uploadStoryImage({required String userId, required String storyId, required PreparedImageSet image}) async {
+    final options = FileOptions(contentType: image.contentType, cacheControl: '86400', upsert: true);
+    final storage = _client.storage.from(storyBucket);
+    final path = '$userId/$storyId';
+    await image.original.uploadTo(storage, path, options);
+    return storage.getPublicUrl(path);
+  }
+
+  Future<String> uploadStoryVideo({required String userId, required String storyId, required PreparedPostVideo video}) async {
+    final options = FileOptions(contentType: video.contentType, cacheControl: '86400', upsert: true);
+    final storage = _client.storage.from(storyBucket);
+    final path = '$userId/$storyId';
+    await video.uploadTo(storage, path, options);
     return storage.getPublicUrl(path);
   }
 }

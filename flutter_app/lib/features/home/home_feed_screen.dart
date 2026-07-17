@@ -16,6 +16,7 @@ import '../../shared/widgets/reusables.dart';
 import '../../shared/widgets/composer_prompt.dart';
 import '../../shared/widgets/people_you_may_know.dart';
 import '../../shared/widgets/feed_ad_card.dart';
+import '../../shared/widgets/story_bar.dart';
 import '../../shared/services/remote_config_service.dart';
 
 class HomeFeedScreen extends ConsumerStatefulWidget {
@@ -268,6 +269,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
                       child: CustomScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: const [
+                          SliverToBoxAdapter(child: StoryBar()),
                           SliverToBoxAdapter(child: ComposerPrompt()),
                           SliverToBoxAdapter(child: PeopleYouMayKnow()),
                           SliverFillRemaining(
@@ -281,11 +283,12 @@ class _S extends ConsumerState<HomeFeedScreen> {
                       child: ListView.builder(
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: 2 + feedRows.length + (_loadingMore ? 1 : 0),
+                        itemCount: 3 + feedRows.length + (_loadingMore ? 1 : 0),
                         itemBuilder: (context, rawIndex) {
-                          if (rawIndex == 0) return const ComposerPrompt();
-                          if (rawIndex == 1) return const PeopleYouMayKnow();
-                          final index = rawIndex - 2;
+                          if (rawIndex == 0) return const StoryBar();
+                          if (rawIndex == 1) return const ComposerPrompt();
+                          if (rawIndex == 2) return const PeopleYouMayKnow();
+                          final index = rawIndex - 3;
                           if (index >= feedRows.length) {
                             return const Padding(
                               padding: EdgeInsets.all(16),
