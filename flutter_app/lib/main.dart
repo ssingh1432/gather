@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import 'core/env.dart';
 import 'core/router.dart';
@@ -75,8 +76,43 @@ Future<void> main() async {
   });
 }
 
-class GatherApp extends StatelessWidget {
+class GatherApp extends StatefulWidget {
   const GatherApp({super.key});
+
+  @override
+  State<GatherApp> createState() => _GatherAppState();
+}
+
+class _GatherAppState extends State<GatherApp> {
+  StreamSubscription<List<SharedMediaFile>>? _shareSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _listenForSharedContent();
+  }
+
+  void _listenForSharedContent() {
+    // Someone tapped "Share" from Facebook/TikTok/a news site/etc into
+    // Gather (see the SEND intent-filter in AndroidManifest.xml) — open
+    // compose pre-filled with whatever text/link they shared, rather than
+    // trying to import the other platform's content directly.
+    void handle(List<SharedMediaFile> files) {
+      if (files.isEmpty) return;
+      final shared = files.first.path;
+      if (shared.isEmpty) return;
+      appRouter.push('/create-post?sharedText=${Uri.encodeComponent(shared)}');
+    }
+
+    ReceiveSharingIntent.instance.getInitialMedia().then(handle).catchError((_) {});
+    _shareSub = ReceiveSharingIntent.instance.getMediaStream().listen(handle, onError: (_) {});
+  }
+
+  @override
+  void dispose() {
+    _shareSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

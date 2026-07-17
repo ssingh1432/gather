@@ -63,6 +63,13 @@ class PostModel {
   final int replyCount;
   final double? locationLat;
   final double? locationLng;
+  final int viewCount;
+  final int downloadCount;
+  final String? linkPreviewUrl;
+  final String? linkPreviewTitle;
+  final String? linkPreviewDescription;
+  final String? linkPreviewImageUrl;
+  final String? linkPreviewSiteName;
 
   PostModel({
     required this.id,
@@ -90,6 +97,13 @@ class PostModel {
     this.replyCount = 0,
     this.locationLat,
     this.locationLng,
+    this.viewCount = 0,
+    this.downloadCount = 0,
+    this.linkPreviewUrl,
+    this.linkPreviewTitle,
+    this.linkPreviewDescription,
+    this.linkPreviewImageUrl,
+    this.linkPreviewSiteName,
   });
 
   factory PostModel.fromMap(Map<String, dynamic> map) {
@@ -124,6 +138,13 @@ class PostModel {
       replyCount: _intFromMap(map, 'reply_count'),
       locationLat: (map['location_lat'] as num?)?.toDouble(),
       locationLng: (map['location_lng'] as num?)?.toDouble(),
+      viewCount: _intFromMap(map, 'view_count'),
+      downloadCount: map.containsKey('download_count') ? _intFromMap(map, 'download_count') : _intFromMap(map, 'download_count_cached'),
+      linkPreviewUrl: map['link_preview_url'] as String?,
+      linkPreviewTitle: map['link_preview_title'] as String?,
+      linkPreviewDescription: map['link_preview_description'] as String?,
+      linkPreviewImageUrl: map['link_preview_image_url'] as String?,
+      linkPreviewSiteName: map['link_preview_site_name'] as String?,
     );
   }
 
@@ -158,6 +179,13 @@ class PostModel {
         replyCount: replyCount,
         locationLat: locationLat,
         locationLng: locationLng,
+        viewCount: viewCount,
+        downloadCount: downloadCount,
+        linkPreviewUrl: linkPreviewUrl,
+        linkPreviewTitle: linkPreviewTitle,
+        linkPreviewDescription: linkPreviewDescription,
+        linkPreviewImageUrl: linkPreviewImageUrl,
+        linkPreviewSiteName: linkPreviewSiteName,
       );
 
   String? get displayImageUrl => thumbnailUrl ?? _derivedThumbnailUrl ?? imageUrl;

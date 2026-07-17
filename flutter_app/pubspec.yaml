@@ -30,6 +30,8 @@ dependencies:
   google_mobile_ads: ^5.2.0
   google_maps_flutter: ^2.10.0
   geolocator: ^13.0.2
+  visibility_detector: ^0.4.0+2
+  receive_sharing_intent: ^1.8.1
 
 dev_dependencies:
   flutter_test:

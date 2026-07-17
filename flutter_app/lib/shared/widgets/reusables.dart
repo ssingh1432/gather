@@ -1,13 +1,20 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../core/supabase_client.dart';
 import '../../features/data/repositories.dart';
 import '../models/models.dart';
+import '../services/feed_video_manager.dart';
 import '../services/media_download_service.dart';
+import '../services/post_view_tracker.dart';
 import '../utils/time_ago.dart';
 import 'auth_redirects.dart';
 
@@ -134,7 +141,40 @@ class PostCard extends StatelessWidget {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (sheetContext) => _LikersSheet(postId: post.id, likeCount: post.likeCount),
+      builder: (sheetContext) => _PeopleSheet(
+        title: 'Liked by ${post.likeCount}',
+        fetcher: () => FeedRepository().likersOf(post.id),
+        emptyLabel: 'No likes yet',
+        emptyIcon: Icons.favorite_border,
+      ),
+    );
+  }
+
+  void _openSharersSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => _PeopleSheet(
+        title: 'Shared by ${post.shareCount}',
+        fetcher: () => FeedRepository().sharersOf(post.id),
+        emptyLabel: 'No shares yet',
+        emptyIcon: Icons.repeat,
+      ),
+    );
+  }
+
+  void _openDownloadersSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => _PeopleSheet(
+        title: 'Downloaded by ${post.downloadCount}',
+        fetcher: () => FeedRepository().downloadersOf(post.id),
+        emptyLabel: 'No downloads yet',
+        emptyIcon: Icons.download_outlined,
+      ),
     );
   }
 
@@ -159,6 +199,10 @@ class PostCard extends StatelessWidget {
               const SizedBox(height: 8),
               _TagChips(tags: post.tags),
             ],
+            if (post.linkPreviewUrl != null) ...[
+              const SizedBox(height: 8),
+              _FeedLinkPreview(post: post),
+            ],
             if (post.replyTo != null) ...[
               const SizedBox(height: 10),
               _QuotedPostCard(quoted: post.replyTo!),
@@ -178,6 +222,8 @@ class PostCard extends StatelessWidget {
               onBookmark: onBookmark,
               onShare: () => _openShareSheet(context),
               onShowLikers: () => _openLikersSheet(context),
+              onShowSharers: () => _openSharersSheet(context),
+              onShowDownloaders: () => _openDownloadersSheet(context),
             ),
           ]),
         ),
@@ -251,6 +297,12 @@ class _PostMediaState extends State<_PostMedia> with SingleTickerProviderStateMi
     setState(() => _downloading = true);
     try {
       await saveMediaToDevice(url: _mediaUrl, isVideo: widget.post.isVideo);
+      final uid = SupabaseConfig.maybeClient?.auth.currentUser?.id;
+      if (uid != null) {
+        // Best-effort — a missed download log shouldn't block the save
+        // the person actually cares about.
+        unawaited(SupabaseConfig.client.rpc('log_post_download', params: {'p_post_id': widget.post.id}));
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.post.isVideo ? 'Video saved.' : 'Photo saved.')));
       }
@@ -265,90 +317,210 @@ class _PostMediaState extends State<_PostMedia> with SingleTickerProviderStateMi
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: GestureDetector(
-        onTap: () => _openViewer(context),
-        onDoubleTap: _handleDoubleTap,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            SizedBox(
-              height: 220,
-              width: double.infinity,
-              child: widget.post.isVideo ? const _VideoPlaceholder() : _ImageThumbnail(post: widget.post),
-            ),
-            IgnorePointer(
-              child: AnimatedOpacity(
-                opacity: _showHeart ? 1 : 0,
-                duration: const Duration(milliseconds: 150),
-                child: ScaleTransition(
-                  scale: _heartScale,
-                  child: const Icon(Icons.favorite, color: Colors.white, size: 84, shadows: [Shadow(blurRadius: 12, color: Colors.black45)]),
+    return VisibilityDetector(
+      key: ValueKey('post-view-${widget.post.id}'),
+      onVisibilityChanged: (info) {
+        if (info.visibleFraction > 0.6) PostViewTracker.instance.maybeCount(widget.post.id);
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: GestureDetector(
+          onTap: () => _openViewer(context),
+          onDoubleTap: _handleDoubleTap,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
+                child: widget.post.isVideo
+                    ? _AutoplayVideo(postId: widget.post.id, url: _mediaUrl)
+                    : _AutoAspectImage(post: widget.post),
+              ),
+              IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _showHeart ? 1 : 0,
+                  duration: const Duration(milliseconds: 150),
+                  child: ScaleTransition(
+                    scale: _heartScale,
+                    child: const Icon(Icons.favorite, color: Colors.white, size: 84, shadows: [Shadow(blurRadius: 12, color: Colors.black45)]),
+                  ),
                 ),
               ),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: _MediaIconButton(
-                icon: _downloading ? null : Icons.download_outlined,
-                loading: _downloading,
-                onTap: () => _download(context),
-                tooltip: 'Download',
+              Positioned(
+                top: 8,
+                right: 8,
+                child: _MediaIconButton(
+                  icon: _downloading ? null : Icons.download_outlined,
+                  loading: _downloading,
+                  onTap: () => _download(context),
+                  tooltip: 'Download',
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _ImageThumbnail extends StatelessWidget {
-  const _ImageThumbnail({required this.post});
+/// Shows the image at its real aspect ratio (letterboxed within a max
+/// height, never cropped) instead of force-fitting a fixed 220px box —
+/// matches "full screen / as it is originally" rather than Instagram's
+/// classic square crop.
+class _AutoAspectImage extends StatefulWidget {
+  const _AutoAspectImage({required this.post});
   final PostModel post;
 
   @override
+  State<_AutoAspectImage> createState() => _AutoAspectImageState();
+}
+
+class _AutoAspectImageState extends State<_AutoAspectImage> {
+  double? _aspectRatio;
+  ImageStream? _stream;
+  late final ImageStreamListener _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    _listener = ImageStreamListener((info, _) {
+      if (!mounted) return;
+      final w = info.image.width.toDouble();
+      final h = info.image.height.toDouble();
+      if (h > 0) setState(() => _aspectRatio = w / h);
+    });
+  }
+
+  @override
+  void dispose() {
+    _stream?.removeListener(_listener);
+    super.dispose();
+  }
+
+  void _resolve(ImageProvider provider) {
+    final stream = provider.resolve(const ImageConfiguration());
+    if (stream.key == _stream?.key) return;
+    _stream?.removeListener(_listener);
+    _stream = stream..addListener(_listener);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final url = post.displayImageUrl;
+    final url = widget.post.displayImageUrl;
     if (url == null) return const SizedBox.shrink();
-    return CachedNetworkImage(
-      imageUrl: url,
-      cacheKey: post.imageCacheKey,
-      fit: BoxFit.cover,
-      memCacheWidth: 1080,
-      fadeInDuration: const Duration(milliseconds: 120),
-      placeholder: (context, url) => const SkeletonBox(height: 220),
-      errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image_outlined)),
+    final provider = CachedNetworkImageProvider(url, cacheKey: widget.post.imageCacheKey);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _resolve(provider));
+    // Clamp extreme aspect ratios (a 1:5 screenshot etc.) so one outlier
+    // post can't dominate the whole screen — everything in between shows
+    // completely uncropped.
+    final ratio = (_aspectRatio ?? (4 / 5)).clamp(0.5, 1.91);
+    return AspectRatio(
+      aspectRatio: ratio,
+      child: CachedNetworkImage(
+        imageUrl: url,
+        cacheKey: widget.post.imageCacheKey,
+        fit: BoxFit.contain,
+        memCacheWidth: 1080,
+        fadeInDuration: const Duration(milliseconds: 120),
+        placeholder: (context, url) => const SkeletonBox(height: 220),
+        errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image_outlined)),
+      ),
     );
   }
 }
 
-class _VideoPlaceholder extends StatelessWidget {
-  const _VideoPlaceholder();
+/// Autoplays muted, looping, and without sound controls right in the feed
+/// — like every short-video feed does — but only while it's the single
+/// "most visible" video across the whole scroll (see [FeedVideoManager]).
+/// Falls back to a static play-button placeholder otherwise, so only one
+/// real `VideoPlayerController` is ever alive at a time.
+class _AutoplayVideo extends StatefulWidget {
+  const _AutoplayVideo({required this.postId, required this.url});
+  final String postId;
+  final String url;
 
   @override
-  Widget build(BuildContext context) => Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF2B2B2B), Color(0xFF161616)]),
-        ),
+  State<_AutoplayVideo> createState() => _AutoplayVideoState();
+}
+
+class _AutoplayVideoState extends State<_AutoplayVideo> {
+  VideoPlayerController? _controller;
+  bool _initializing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    FeedVideoManager.instance.activePostId.addListener(_onActiveChanged);
+  }
+
+  @override
+  void dispose() {
+    FeedVideoManager.instance.activePostId.removeListener(_onActiveChanged);
+    FeedVideoManager.instance.reportDisposed(widget.postId);
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  bool get _isActive => FeedVideoManager.instance.activePostId.value == widget.postId;
+
+  Future<void> _onActiveChanged() async {
+    if (!mounted) return;
+    if (_isActive && _controller == null && !_initializing) {
+      _initializing = true;
+      final c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+      try {
+        await c.initialize();
+        await c.setVolume(0); // muted autoplay, same as every app does this
+        await c.setLooping(true);
+        if (!mounted || !_isActive) {
+          await c.dispose();
+        } else {
+          await c.play();
+          setState(() => _controller = c);
+        }
+      } catch (_) {
+        await c.dispose();
+      } finally {
+        _initializing = false;
+      }
+    } else if (!_isActive && _controller != null) {
+      final c = _controller;
+      setState(() => _controller = null);
+      await c?.dispose();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return VisibilityDetector(
+      key: ValueKey('post-video-${widget.postId}'),
+      onVisibilityChanged: (info) => FeedVideoManager.instance.reportVisibility(widget.postId, info.visibleFraction),
+      child: AspectRatio(
+        aspectRatio: _controller?.value.isInitialized == true ? _controller!.value.aspectRatio : 4 / 5,
         child: Stack(
           alignment: Alignment.center,
+          fit: StackFit.expand,
           children: [
             Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.35), shape: BoxShape.circle),
-              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 40),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF2B2B2B), Color(0xFF161616)]),
+              ),
             ),
-            const Positioned(
-              left: 10,
-              bottom: 10,
-              child: _MediaBadge(label: 'VIDEO', icon: Icons.videocam_outlined),
-            ),
+            if (_controller?.value.isInitialized == true)
+              VideoPlayer(_controller!)
+            else
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.35), shape: BoxShape.circle),
+                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 40),
+              ),
+            const Positioned(left: 10, bottom: 10, child: _MediaBadge(label: 'VIDEO', icon: Icons.videocam_outlined)),
           ],
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _MediaBadge extends StatelessWidget {
@@ -393,22 +565,24 @@ class _MediaIconButton extends StatelessWidget {
 }
 
 /// Bottom sheet listing the people who liked a post.
-class _LikersSheet extends StatefulWidget {
-  const _LikersSheet({required this.postId, required this.likeCount});
-  final String postId;
-  final int likeCount;
+class _PeopleSheet extends StatefulWidget {
+  const _PeopleSheet({required this.title, required this.fetcher, required this.emptyLabel, required this.emptyIcon});
+  final String title;
+  final Future<List<RecommendedUser>> Function() fetcher;
+  final String emptyLabel;
+  final IconData emptyIcon;
 
   @override
-  State<_LikersSheet> createState() => _LikersSheetState();
+  State<_PeopleSheet> createState() => _PeopleSheetState();
 }
 
-class _LikersSheetState extends State<_LikersSheet> {
+class _PeopleSheetState extends State<_PeopleSheet> {
   late Future<List<RecommendedUser>> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = FeedRepository().likersOf(widget.postId);
+    _future = widget.fetcher();
   }
 
   @override
@@ -420,7 +594,7 @@ class _LikersSheetState extends State<_LikersSheet> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Text('Liked by ${widget.likeCount}', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              child: Text(widget.title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
             ),
             Expanded(
               child: FutureBuilder<List<RecommendedUser>>(
@@ -430,16 +604,16 @@ class _LikersSheetState extends State<_LikersSheet> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (snapshot.hasError) {
-                    return const EmptyState(icon: Icons.error_outline, title: 'Could not load likes');
+                    return const EmptyState(icon: Icons.error_outline, title: 'Could not load');
                   }
-                  final likers = snapshot.data ?? const [];
-                  if (likers.isEmpty) {
-                    return const EmptyState(icon: Icons.favorite_border, title: 'No likes yet');
+                  final people = snapshot.data ?? const [];
+                  if (people.isEmpty) {
+                    return EmptyState(icon: widget.emptyIcon, title: widget.emptyLabel);
                   }
                   return ListView.builder(
-                    itemCount: likers.length,
+                    itemCount: people.length,
                     itemBuilder: (context, index) {
-                      final user = likers[index];
+                      final user = people[index];
                       return ListTile(
                         leading: ProfileAvatar(url: user.avatarUrl, radius: 20),
                         title: Text(user.username),
@@ -534,8 +708,59 @@ class _TagChips extends StatelessWidget {
       );
 }
 
-/// Embedded preview shown when a post is a quote/reply-share of another
-/// post — tapping it opens the original.
+class _FeedLinkPreview extends StatelessWidget {
+  const _FeedLinkPreview({required this.post});
+  final PostModel post;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = post.linkPreviewUrl;
+    if (url == null) return const SizedBox.shrink();
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (post.linkPreviewImageUrl != null && post.linkPreviewImageUrl!.isNotEmpty)
+              SizedBox(
+                width: 84,
+                height: 84,
+                child: CachedNetworkImage(
+                  imageUrl: post.linkPreviewImageUrl!,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (post.linkPreviewSiteName != null)
+                      Text(
+                        post.linkPreviewSiteName!.toUpperCase(),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.outline),
+                      ),
+                    if (post.linkPreviewTitle != null)
+                      Text(post.linkPreviewTitle!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    if (post.linkPreviewDescription != null)
+                      Text(post.linkPreviewDescription!, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ),
+            const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.open_in_new, size: 16)),
+          ],
+        ),
+      ),
+    );
+  }
+}
 class _QuotedPostCard extends StatelessWidget {
   final QuotedPostPreview quoted;
   const _QuotedPostCard({required this.quoted});
@@ -612,6 +837,8 @@ class _PostActionBar extends StatelessWidget {
   final VoidCallback onBookmark;
   final VoidCallback onShare;
   final VoidCallback onShowLikers;
+  final VoidCallback onShowSharers;
+  final VoidCallback onShowDownloaders;
 
   const _PostActionBar({
     required this.post,
@@ -622,55 +849,94 @@ class _PostActionBar extends StatelessWidget {
     required this.onBookmark,
     required this.onShare,
     required this.onShowLikers,
+    required this.onShowSharers,
+    required this.onShowDownloaders,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(children: [
-      InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onLike,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-          child: Icon(liked ? Icons.favorite : Icons.favorite_border, size: 20, color: liked ? Colors.redAccent : null),
-        ),
-      ),
-      if (post.likeCount > 0)
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
         InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onShowLikers,
+          borderRadius: BorderRadius.circular(20),
+          onTap: onLike,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-            child: Text('${post.likeCount}', style: theme.textTheme.bodySmall),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            child: Icon(liked ? Icons.favorite : Icons.favorite_border, size: 20, color: liked ? Colors.redAccent : null),
           ),
         ),
-      const SizedBox(width: 4),
-      _ActionButton(
-        icon: Icons.mode_comment_outlined,
-        label: post.commentCount > 0 ? '${post.commentCount}' : null,
-        onTap: onComment,
-      ),
-      if (post.replyCount > 0) ...[
+        if (post.likeCount > 0)
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onShowLikers,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Text('${post.likeCount}', style: theme.textTheme.bodySmall),
+            ),
+          ),
         const SizedBox(width: 4),
         _ActionButton(
-          icon: Icons.forum_outlined,
-          label: '${post.replyCount}',
-          onTap: () => context.push('/post/replies?id=${post.id}'),
+          icon: Icons.mode_comment_outlined,
+          label: post.commentCount > 0 ? '${post.commentCount}' : null,
+          onTap: onComment,
         ),
-      ],
-      const SizedBox(width: 4),
-      _ActionButton(
-        icon: Icons.repeat,
-        label: post.shareCount > 0 ? '${post.shareCount}' : null,
-        onTap: onShare,
-      ),
-      const Spacer(),
-      IconButton(
-        onPressed: onBookmark,
-        icon: Icon(bookmarked ? Icons.bookmark : Icons.bookmark_border, color: bookmarked ? theme.colorScheme.primary : null),
-        tooltip: 'Save',
-      ),
+        if (post.replyCount > 0) ...[
+          const SizedBox(width: 4),
+          _ActionButton(
+            icon: Icons.forum_outlined,
+            label: '${post.replyCount}',
+            onTap: () => context.push('/post/replies?id=${post.id}'),
+          ),
+        ],
+        const SizedBox(width: 4),
+        InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onShare,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            child: const Icon(Icons.repeat, size: 20),
+          ),
+        ),
+        if (post.shareCount > 0)
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onShowSharers,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Text('${post.shareCount}', style: theme.textTheme.bodySmall),
+            ),
+          ),
+        if (post.downloadCount > 0) ...[
+          const SizedBox(width: 4),
+          InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: onShowDownloaders,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              child: Row(children: [
+                const Icon(Icons.download_outlined, size: 20),
+                const SizedBox(width: 4),
+                Text('${post.downloadCount}', style: theme.textTheme.bodySmall),
+              ]),
+            ),
+          ),
+        ],
+        const Spacer(),
+        IconButton(
+          onPressed: onBookmark,
+          icon: Icon(bookmarked ? Icons.bookmark : Icons.bookmark_border, color: bookmarked ? theme.colorScheme.primary : null),
+          tooltip: 'Save',
+        ),
+      ]),
+      if (post.viewCount > 0)
+        Padding(
+          padding: const EdgeInsets.only(left: 6, bottom: 2),
+          child: Text(
+            '${post.viewCount} ${post.viewCount == 1 ? 'view' : 'views'}',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+          ),
+        ),
     ]);
   }
 }

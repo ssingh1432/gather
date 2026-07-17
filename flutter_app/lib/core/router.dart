@@ -100,6 +100,7 @@ final appRouter = GoRouter(
           builder: (_, s) => CreatePostScreen(
             communityId: s.uri.queryParameters['communityId'],
             quotePostId: s.uri.queryParameters['quotePostId'],
+            sharedText: s.uri.queryParameters['sharedText'],
           ),
         ),
         GoRoute(path: '/search', builder: (_, __) => const SearchScreen()),

@@ -164,6 +164,34 @@ class FeedRepository {
         .map(RecommendedUser.fromMap)
         .toList();
   }
+
+  Future<List<RecommendedUser>> sharersOf(String postId, {int limit = 50}) async {
+    final data = await _c
+        .from('post_shares')
+        .select('user_id, created_at, users!post_shares_user_id_fkey(id, username, profile_photo_url)')
+        .eq('post_id', postId)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return (data as List)
+        .map((row) => row['users'])
+        .whereType<Map<String, dynamic>>()
+        .map(RecommendedUser.fromMap)
+        .toList();
+  }
+
+  Future<List<RecommendedUser>> downloadersOf(String postId, {int limit = 50}) async {
+    final data = await _c
+        .from('post_downloads')
+        .select('user_id, created_at, users!post_downloads_user_id_fkey(id, username, profile_photo_url)')
+        .eq('post_id', postId)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return (data as List)
+        .map((row) => row['users'])
+        .whereType<Map<String, dynamic>>()
+        .map(RecommendedUser.fromMap)
+        .toList();
+  }
 }
 
 class CommunityRepository {

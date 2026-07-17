@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,18 +8,24 @@ import '../../core/supabase_client.dart';
 import '../../shared/models/models.dart';
 import '../../shared/services/analytics_service.dart';
 import '../../shared/services/beta_error_logging_service.dart';
+import '../../shared/services/link_preview_service.dart';
 import '../../shared/utils/feelings.dart';
 import '../../shared/widgets/reusables.dart';
 import '../data/repositories.dart';
 import 'location_picker_screen.dart';
 
 class CreatePostScreen extends StatefulWidget {
-  const CreatePostScreen({super.key, this.communityId, this.quotePostId});
+  const CreatePostScreen({super.key, this.communityId, this.quotePostId, this.sharedText});
   final String? communityId;
 
   /// When set, this post is published as a quote/reply-share of the given
   /// post id (the "Share to your feed" flow from the post card).
   final String? quotePostId;
+
+  /// Text/link received via the OS "Share" sheet from another app (see
+  /// the SEND intent-filter in AndroidManifest.xml + main.dart's
+  /// receive_sharing_intent listener) — pre-fills the compose box.
+  final String? sharedText;
 
   @override
   State<CreatePostScreen> createState() => _P();
@@ -42,6 +50,10 @@ class _P extends State<CreatePostScreen> {
   final Map<String, String> _taggedFriends = {};
   double? _pickedLat;
   double? _pickedLng;
+  LinkPreview? _linkPreview;
+  bool _loadingLinkPreview = false;
+  String? _lastCheckedUrl;
+  Timer? _linkDebounce;
 
   @override
   void initState() {
@@ -56,6 +68,10 @@ class _P extends State<CreatePostScreen> {
     }
     if (widget.quotePostId != null) {
       _loadQuotedPost();
+    }
+    if (widget.sharedText != null && widget.sharedText!.isNotEmpty) {
+      text.text = widget.sharedText!;
+      _onTextChanged(widget.sharedText!);
     }
   }
 
@@ -82,6 +98,7 @@ class _P extends State<CreatePostScreen> {
         hadImage: image != null || video != null,
       );
     }
+    _linkDebounce?.cancel();
     text.dispose();
     location.dispose();
     tagsCtrl.dispose();
@@ -137,6 +154,11 @@ class _P extends State<CreatePostScreen> {
         'reply_to_post_id': widget.quotePostId,
         'mentioned_user_ids': _taggedFriends.values.toList(),
         'mentioned_usernames': _taggedFriends.keys.toList(),
+        'link_preview_url': _linkPreview?.url,
+        'link_preview_title': _linkPreview?.title,
+        'link_preview_description': _linkPreview?.description,
+        'link_preview_image_url': _linkPreview?.imageUrl,
+        'link_preview_site_name': _linkPreview?.siteName,
       }))['id'].toString();
 
       if (video != null) {
@@ -168,6 +190,28 @@ class _P extends State<CreatePostScreen> {
         setState(() => loading = false);
       }
     }
+  }
+
+  void _onTextChanged(String value) {
+    _linkDebounce?.cancel();
+    _linkDebounce = Timer(const Duration(milliseconds: 600), () async {
+      final url = firstUrlIn(value);
+      if (url == null) {
+        if (_linkPreview != null && mounted) setState(() => _linkPreview = null);
+        _lastCheckedUrl = null;
+        return;
+      }
+      if (url == _lastCheckedUrl) return;
+      _lastCheckedUrl = url;
+      setState(() => _loadingLinkPreview = true);
+      final preview = await LinkPreviewService().fetch(url);
+      if (mounted && _lastCheckedUrl == url) {
+        setState(() {
+          _linkPreview = preview;
+          _loadingLinkPreview = false;
+        });
+      }
+    });
   }
 
   Future<void> _pickFriends() async {
@@ -325,8 +369,20 @@ class _P extends State<CreatePostScreen> {
               controller: text,
               minLines: 3,
               maxLines: 8,
+              onChanged: _onTextChanged,
               decoration: const InputDecoration(labelText: 'Text content', hintText: "What's on your mind?"),
             ),
+            if (_loadingLinkPreview) const Padding(padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()),
+            if (_linkPreview != null) ...[
+              const SizedBox(height: 10),
+              _LinkPreviewCard(
+                preview: _linkPreview!,
+                onRemove: () => setState(() {
+                  _linkPreview = null;
+                  _lastCheckedUrl = null;
+                }),
+              ),
+            ],
             const SizedBox(height: 12),
             if (_loadingQuote) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator()),
             if (_quotedPost != null) ...[
@@ -481,6 +537,61 @@ class _QuotedPostPreviewCard extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinkPreviewCard extends StatelessWidget {
+  const _LinkPreviewCard({required this.preview, this.onRemove});
+  final LinkPreview preview;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (preview.imageUrl != null && preview.imageUrl!.isNotEmpty)
+                SizedBox(
+                  width: 84,
+                  height: 84,
+                  child: Image.network(preview.imageUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (preview.siteName != null)
+                        Text(preview.siteName!.toUpperCase(), style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.outline)),
+                      if (preview.title != null)
+                        Text(preview.title!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      if (preview.description != null)
+                        Text(preview.description!, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (onRemove != null)
+            Positioned(
+              top: 2,
+              right: 2,
+              child: IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: onRemove,
+                style: IconButton.styleFrom(backgroundColor: Colors.black.withValues(alpha: 0.35), foregroundColor: Colors.white, minimumSize: const Size(28, 28)),
+              ),
+            ),
         ],
       ),
     );
