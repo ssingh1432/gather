@@ -69,6 +69,7 @@ class _StoryBarState extends State<StoryBar> {
     if (uid == null) return;
 
     setState(() => _uploading = true);
+    String? createdStoryId;
     try {
       final upload = MediaUploadService();
       final story = await StoryRepository().createStory(
@@ -83,6 +84,7 @@ class _StoryBarState extends State<StoryBar> {
         muteOriginalAudio: track != null && mediaType == 'video',
       );
       final storyId = story['id'] as String;
+      createdStoryId = storyId;
       final String url;
       String? thumbnailUrl;
       if (mediaType == 'video') {
@@ -98,8 +100,20 @@ class _StoryBarState extends State<StoryBar> {
         'media_url': url,
         if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
       }).eq('id', storyId);
+      createdStoryId = null; // fully committed, nothing left to roll back
       _refresh();
     } catch (e) {
+      // The story row (with a placeholder media_url) may have already been
+      // inserted before the media upload or the follow-up update failed.
+      // Leaving it behind would show up as a broken, empty story in the
+      // viewer — so clean it up rather than orphaning it.
+      if (createdStoryId != null) {
+        try {
+          await StoryRepository().deleteStory(createdStoryId);
+        } catch (_) {
+          // Best-effort cleanup; the original error is what we report below.
+        }
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not post story: $e')));
       }
