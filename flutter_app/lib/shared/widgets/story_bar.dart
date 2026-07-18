@@ -235,7 +235,7 @@ class _MusicPickerSheet extends StatefulWidget {
 }
 
 class _MusicPickerSheetState extends State<_MusicPickerSheet> {
-  late Future<List<StoryAudioTrack>> _future = StoryRepository().audioTracks();
+  final Future<List<StoryAudioTrack>> _future = StoryRepository().audioTracks();
   final _player = AudioPlayer();
   String? _previewingId;
 
