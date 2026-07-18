@@ -128,21 +128,38 @@ class _StoryBarState extends State<StoryBar> {
     if (uid == null) return const SizedBox.shrink();
 
     return SizedBox(
-      height: 124,
+      height: 128,
       child: FutureBuilder<List<StoryFeedEntry>>(
         future: _future,
         builder: (context, snapshot) {
           final entries = snapshot.data ?? const [];
-          final hasOwnStory = entries.any((e) => e.authorId == uid);
-          final others = entries.where((e) => e.authorId != uid).toList();
+          StoryFeedEntry? ownEntry;
+          final others = <StoryFeedEntry>[];
+          for (final e in entries) {
+            if (e.authorId == uid) {
+              ownEntry = e;
+            } else {
+              others.add(e);
+            }
+          }
           return ListView.separated(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             itemCount: others.length + 1,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            separatorBuilder: (_, __) => const SizedBox(width: 3),
             itemBuilder: (context, i) {
               if (i == 0) {
-                return _AddStoryTile(uploading: _uploading, hasOwnStory: hasOwnStory, onTap: _addStory);
+                return _AddStoryTile(
+                  uploading: _uploading,
+                  ownEntry: ownEntry,
+                  onAdd: _addStory,
+                  onViewOwn: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => StoryViewerScreen(authorIds: entries.map((e) => e.authorId).toList(), startAuthorId: uid)),
+                    );
+                    _refresh();
+                  },
+                );
               }
               final entry = others[i - 1];
               return _StoryTile(
@@ -163,52 +180,84 @@ class _StoryBarState extends State<StoryBar> {
 }
 
 class _AddStoryTile extends StatelessWidget {
-  const _AddStoryTile({required this.uploading, required this.hasOwnStory, required this.onTap});
+  const _AddStoryTile({required this.uploading, required this.ownEntry, required this.onAdd, required this.onViewOwn});
   final bool uploading;
-  final bool hasOwnStory;
-  final VoidCallback onTap;
+  final StoryFeedEntry? ownEntry;
+  final VoidCallback onAdd;
+  final VoidCallback onViewOwn;
 
   @override
   Widget build(BuildContext context) {
+    final own = ownEntry;
+    final thumbUrl = own != null && (own.latestThumbnailUrl?.isNotEmpty ?? false) ? own.latestThumbnailUrl : own?.authorAvatarUrl;
+    final hasThumb = thumbUrl != null && thumbUrl.isNotEmpty;
+
     return GestureDetector(
-      onTap: uploading ? null : onTap,
+      onTap: uploading ? null : (own != null ? onViewOwn : onAdd),
       child: SizedBox(
-        width: 72,
-        height: 108,
+        width: 76,
+        height: 124,
         child: Stack(
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: Container(
-                width: 72,
-                height: 108,
+                width: 76,
+                height: 124,
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 alignment: Alignment.center,
-                child: uploading ? const CircularProgressIndicator(strokeWidth: 2) : Icon(Icons.add_a_photo_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                child: uploading
+                    ? const CircularProgressIndicator(strokeWidth: 2)
+                    : hasThumb
+                        ? Image.network(thumbUrl, fit: BoxFit.cover, width: 76, height: 124)
+                        : Icon(Icons.add_a_photo_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             ),
+            if (own != null && !uploading)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(colors: [Colors.transparent, Colors.black87], begin: Alignment.topCenter, end: Alignment.bottomCenter),
+                  ),
+                  child: Text(
+                    'Your story',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
             if (!uploading)
               Positioned(
                 right: 6,
-                bottom: 6,
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-                  child: const Icon(Icons.add, size: 14, color: Colors.white),
+                bottom: own != null ? 22 : 6,
+                child: GestureDetector(
+                  onTap: onAdd,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                    child: const Icon(Icons.add, size: 14, color: Colors.white),
+                  ),
                 ),
               ),
-            Positioned(
-              left: 4,
-              right: 4,
-              bottom: 4,
-              child: Text(
-                hasOwnStory ? 'Your story' : 'Add story',
-                style: Theme.of(context).textTheme.labelSmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
+            if (own == null)
+              Positioned(
+                left: 4,
+                right: 4,
+                bottom: 4,
+                child: Text(
+                  'Add story',
+                  style: Theme.of(context).textTheme.labelSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -230,8 +279,8 @@ class _StoryTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 72,
-        height: 108,
+        width: 76,
+        height: 124,
         padding: const EdgeInsets.all(2.5),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
