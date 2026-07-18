@@ -1,3 +1,4 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -5,6 +6,7 @@ import '../../core/supabase_client.dart';
 import '../models/models.dart';
 import '../services/media_upload_service.dart';
 import '../../features/data/repositories.dart';
+import 'reusables.dart';
 import 'story_viewer_screen.dart';
 
 class StoryBar extends StatefulWidget {
@@ -27,6 +29,17 @@ class _StoryBarState extends State<StoryBar> {
   void _refresh() => setState(() => _future = _load());
 
   Future<void> _addStory() async {
+    final mediaType = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(children: [
+          ListTile(leading: const Icon(Icons.photo_camera_outlined), title: const Text('Photo'), onTap: () => Navigator.pop(context, 'image')),
+          ListTile(leading: const Icon(Icons.videocam_outlined), title: const Text('Video'), onTap: () => Navigator.pop(context, 'video')),
+        ]),
+      ),
+    );
+    if (mediaType == null || !mounted) return;
+
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (context) => SafeArea(
@@ -36,10 +49,21 @@ class _StoryBarState extends State<StoryBar> {
         ]),
       ),
     );
-    if (source == null) return;
+    if (source == null || !mounted) return;
 
-    final picked = await ImagePicker().pickImage(source: source, imageQuality: 85);
-    if (picked == null) return;
+    final picker = ImagePicker();
+    final picked = mediaType == 'video'
+        ? await picker.pickVideo(source: source, maxDuration: const Duration(seconds: 60))
+        : await picker.pickImage(source: source, imageQuality: 85);
+    if (picked == null || !mounted) return;
+
+    // Music is optional for either photo or video stories.
+    final track = await showModalBottomSheet<StoryAudioTrack?>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _MusicPickerSheet(),
+    );
+    if (!mounted) return;
 
     final uid = SupabaseConfig.maybeClient?.auth.currentUser?.id;
     if (uid == null) return;
@@ -47,10 +71,26 @@ class _StoryBarState extends State<StoryBar> {
     setState(() => _uploading = true);
     try {
       final upload = MediaUploadService();
-      final prepared = await upload.preparePostImage(picked);
-      final story = await StoryRepository().createStory(mediaUrl: '', mediaType: 'image');
+      final story = await StoryRepository().createStory(
+        mediaUrl: '',
+        mediaType: mediaType,
+        audioTrackId: track?.id,
+        audioUrl: track?.audioUrl,
+        audioTitle: track != null ? [track.title, if (track.artist != null) track.artist].join(' · ') : null,
+        // A music track replaces a video's own sound by default, matching
+        // Instagram/TikTok — the person can still remove the track and
+        // repost if they'd rather keep the original audio.
+        muteOriginalAudio: track != null && mediaType == 'video',
+      );
       final storyId = story['id'] as String;
-      final url = await upload.uploadStoryImage(userId: uid, storyId: storyId, image: prepared);
+      final String url;
+      if (mediaType == 'video') {
+        final prepared = await upload.preparePostVideo(picked);
+        url = await upload.uploadStoryVideo(userId: uid, storyId: storyId, video: prepared);
+      } else {
+        final prepared = await upload.preparePostImage(picked);
+        url = await upload.uploadStoryImage(userId: uid, storyId: storyId, image: prepared);
+      }
       await SupabaseConfig.client.from('stories').update({'media_url': url}).eq('id', storyId);
       _refresh();
     } catch (e) {
@@ -179,6 +219,98 @@ class _StoryTile extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(entry.authorUsername, style: Theme.of(context).textTheme.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Optional "add music" step, shown after picking a story's media.
+/// Empty by default — populate story_audio_tracks with tracks you have
+/// the rights to use.
+class _MusicPickerSheet extends StatefulWidget {
+  @override
+  State<_MusicPickerSheet> createState() => _MusicPickerSheetState();
+}
+
+class _MusicPickerSheetState extends State<_MusicPickerSheet> {
+  late Future<List<StoryAudioTrack>> _future = StoryRepository().audioTracks();
+  final _player = AudioPlayer();
+  String? _previewingId;
+
+  @override
+  void dispose() {
+    _player.stop();
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _togglePreview(StoryAudioTrack track) async {
+    if (_previewingId == track.id) {
+      await _player.stop();
+      setState(() => _previewingId = null);
+    } else {
+      await _player.stop();
+      await _player.play(UrlSource(track.audioUrl));
+      setState(() => _previewingId = track.id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.6,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Add music', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Skip')),
+                ],
+              ),
+            ),
+            Expanded(
+              child: FutureBuilder<List<StoryAudioTrack>>(
+                future: _future,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final tracks = snapshot.data ?? const [];
+                  if (tracks.isEmpty) {
+                    return const EmptyState(icon: Icons.music_off_outlined, title: 'No tracks yet', message: 'Post without music for now.');
+                  }
+                  return ListView.builder(
+                    itemCount: tracks.length,
+                    itemBuilder: (context, i) {
+                      final track = tracks[i];
+                      final previewing = _previewingId == track.id;
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage: track.coverUrl != null ? NetworkImage(track.coverUrl!) : null,
+                          child: track.coverUrl == null ? const Icon(Icons.music_note) : null,
+                        ),
+                        title: Text(track.title),
+                        subtitle: track.artist != null ? Text(track.artist!) : null,
+                        trailing: IconButton(
+                          icon: Icon(previewing ? Icons.stop_circle_outlined : Icons.play_circle_outline),
+                          onPressed: () => _togglePreview(track),
+                        ),
+                        onTap: () {
+                          _player.stop();
+                          Navigator.pop(context, track);
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),

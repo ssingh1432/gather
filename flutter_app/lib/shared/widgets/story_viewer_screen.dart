@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -29,6 +30,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> with SingleTicker
 
   late final AnimationController _progress;
   VideoPlayerController? _videoController;
+  final AudioPlayer _musicPlayer = AudioPlayer();
   bool _paused = false;
 
   @override
@@ -46,6 +48,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> with SingleTicker
   void dispose() {
     _progress.dispose();
     _videoController?.dispose();
+    _musicPlayer.dispose();
     super.dispose();
   }
 
@@ -70,16 +73,25 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> with SingleTicker
     _progress.stop();
     _videoController?.dispose();
     _videoController = null;
+    await _musicPlayer.stop();
     if (_stories.isEmpty) return;
 
     final story = _stories[_storyIndex];
     unawaited(StoryRepository().markViewed(story.id));
 
+    if (story.hasMusic) {
+      unawaited(_musicPlayer.play(UrlSource(story.audioUrl!)));
+    }
+
     if (story.isVideo) {
       final controller = VideoPlayerController.networkUrl(Uri.parse(story.mediaUrl));
       try {
-        await controller.initialize();
+        await controller.initialize().timeout(const Duration(seconds: 12));
         if (!mounted) return;
+        // A music track replaces the video's own sound by default (set at
+        // creation time) — otherwise the video plays with its own audio,
+        // same as any camera recording.
+        await controller.setVolume(story.muteOriginalAudio ? 0 : 1);
         setState(() => _videoController = controller);
         _progress.duration = controller.value.duration;
         controller.play();
@@ -133,9 +145,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> with SingleTicker
     if (_paused) {
       _progress.stop();
       _videoController?.pause();
+      _musicPlayer.pause();
     } else {
       _progress.forward();
       _videoController?.play();
+      _musicPlayer.resume();
     }
   }
 
@@ -205,6 +219,31 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> with SingleTicker
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
+              if (story != null && story.hasMusic)
+                Positioned(
+                  bottom: 20,
+                  left: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(20)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.music_note, color: Colors.white, size: 14),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            story.audioTitle ?? 'Music',
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

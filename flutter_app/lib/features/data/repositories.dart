@@ -495,11 +495,31 @@ class StoryRepository {
 
   Future<void> markViewed(String storyId) => _c.rpc('mark_story_viewed', params: {'p_story_id': storyId});
 
-  Future<Map<String, dynamic>> createStory({required String mediaUrl, required String mediaType}) => _c
-      .from('stories')
-      .insert({'media_url': mediaUrl, 'media_type': mediaType})
-      .select()
-      .single();
+  Future<List<StoryAudioTrack>> audioTracks() async {
+    final data = await _c.from('story_audio_tracks').select().eq('is_active', true).order('created_at', ascending: false);
+    return (data as List).map((e) => StoryAudioTrack.fromMap(Map<String, dynamic>.from(e))).toList();
+  }
+
+  Future<Map<String, dynamic>> createStory({
+    required String mediaUrl,
+    required String mediaType,
+    String? audioTrackId,
+    String? audioUrl,
+    String? audioTitle,
+    bool muteOriginalAudio = false,
+  }) =>
+      _c
+          .from('stories')
+          .insert({
+            'media_url': mediaUrl,
+            'media_type': mediaType,
+            'audio_track_id': audioTrackId,
+            'audio_url': audioUrl,
+            'audio_title': audioTitle,
+            'mute_original_audio': muteOriginalAudio,
+          })
+          .select()
+          .single();
 
   Future<void> deleteStory(String storyId) => _c.from('stories').delete().eq('id', storyId);
 }

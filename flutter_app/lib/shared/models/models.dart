@@ -303,6 +303,9 @@ class StoryModel {
     required this.mediaType,
     required this.createdAt,
     required this.expiresAt,
+    this.audioUrl,
+    this.audioTitle,
+    this.muteOriginalAudio = false,
   });
 
   final String id;
@@ -311,8 +314,12 @@ class StoryModel {
   final String mediaType; // 'image' | 'video'
   final DateTime createdAt;
   final DateTime expiresAt;
+  final String? audioUrl;
+  final String? audioTitle;
+  final bool muteOriginalAudio;
 
   bool get isVideo => mediaType == 'video';
+  bool get hasMusic => audioUrl != null && audioUrl!.isNotEmpty;
 
   factory StoryModel.fromMap(Map<String, dynamic> map) => StoryModel(
         id: map['id'].toString(),
@@ -321,5 +328,27 @@ class StoryModel {
         mediaType: map['media_type'] as String,
         createdAt: DateTime.parse(map['created_at']),
         expiresAt: DateTime.parse(map['expires_at']),
+        audioUrl: map['audio_url'] as String?,
+        audioTitle: map['audio_title'] as String?,
+        muteOriginalAudio: map['mute_original_audio'] == true,
+      );
+}
+
+class StoryAudioTrack {
+  const StoryAudioTrack({required this.id, required this.title, this.artist, required this.audioUrl, this.coverUrl, this.durationSeconds});
+  final String id;
+  final String title;
+  final String? artist;
+  final String audioUrl;
+  final String? coverUrl;
+  final int? durationSeconds;
+
+  factory StoryAudioTrack.fromMap(Map<String, dynamic> map) => StoryAudioTrack(
+        id: map['id'].toString(),
+        title: map['title'] as String,
+        artist: map['artist'] as String?,
+        audioUrl: map['audio_url'] as String,
+        coverUrl: map['cover_url'] as String?,
+        durationSeconds: (map['duration_seconds'] as num?)?.toInt(),
       );
 }
