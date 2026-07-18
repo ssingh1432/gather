@@ -392,6 +392,7 @@ class _AutoAspectImage extends StatefulWidget {
 class _AutoAspectImageState extends State<_AutoAspectImage> {
   double? _aspectRatio;
   ImageStream? _stream;
+  String? _resolvedUrl;
   late final ImageStreamListener _listener;
 
   @override
@@ -423,21 +424,33 @@ class _AutoAspectImageState extends State<_AutoAspectImage> {
     final url = widget.post.displayImageUrl;
     if (url == null) return const SizedBox.shrink();
     final provider = CachedNetworkImageProvider(url, cacheKey: widget.post.imageCacheKey);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _resolve(provider));
-    // Clamp extreme aspect ratios (a 1:5 screenshot etc.) so one outlier
-    // post can't dominate the whole screen — everything in between shows
-    // completely uncropped.
-    final ratio = (_aspectRatio ?? (4 / 5)).clamp(0.5, 1.91);
-    return AspectRatio(
-      aspectRatio: ratio,
-      child: CachedNetworkImage(
-        imageUrl: url,
-        cacheKey: widget.post.imageCacheKey,
-        fit: BoxFit.contain,
-        memCacheWidth: 1080,
-        fadeInDuration: const Duration(milliseconds: 120),
-        placeholder: (context, url) => const SkeletonBox(height: 220),
-        errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image_outlined)),
+    if (_resolvedUrl != url) {
+      _resolvedUrl = url;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _resolve(provider));
+    }
+    // No clamp here: clamping the box's ratio away from the image's real
+    // ratio was exactly what caused tall screenshots to letterbox with
+    // gaps on the sides instead of filling the width. SizedBox below
+    // forces full width unconditionally; AspectRatio then derives height
+    // from the real ratio, so the box always matches the image exactly —
+    // full-bleed left and right with nothing cropped, no gaps.
+    final ratio = _aspectRatio ?? (4 / 5);
+    return SizedBox(
+      width: double.infinity,
+      child: AspectRatio(
+        aspectRatio: ratio,
+        child: CachedNetworkImage(
+          imageUrl: url,
+          cacheKey: widget.post.imageCacheKey,
+          // Box now always matches the image's true ratio, so cover and
+          // contain are equivalent here — cover avoids any 1px rounding
+          // gap at the edges.
+          fit: BoxFit.cover,
+          memCacheWidth: 1080,
+          fadeInDuration: const Duration(milliseconds: 120),
+          placeholder: (context, url) => const SkeletonBox(height: 220),
+          errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image_outlined)),
+        ),
       ),
     );
   }
@@ -460,6 +473,11 @@ class _AutoplayVideo extends StatefulWidget {
 class _AutoplayVideoState extends State<_AutoplayVideo> {
   VideoPlayerController? _controller;
   bool _initializing = false;
+  bool _failed = false;
+  // Bumped every time we start a new init attempt so a slow/hung request
+  // from a previous scroll position can't clobber state after the user
+  // has already scrolled past and a newer request has taken over.
+  int _generation = 0;
 
   @override
   void initState() {
@@ -471,6 +489,7 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
   void dispose() {
     FeedVideoManager.instance.activePostId.removeListener(_onActiveChanged);
     FeedVideoManager.instance.reportDisposed(widget.postId);
+    _generation++; // invalidate any in-flight init for this instance
     _controller?.dispose();
     super.dispose();
   }
@@ -480,27 +499,36 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
   Future<void> _onActiveChanged() async {
     if (!mounted) return;
     if (_isActive && _controller == null && !_initializing) {
-      _initializing = true;
-      final c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
-      try {
-        await c.initialize();
-        await c.setVolume(0); // muted autoplay, same as every app does this
-        await c.setLooping(true);
-        if (!mounted || !_isActive) {
-          await c.dispose();
-        } else {
-          await c.play();
-          setState(() => _controller = c);
-        }
-      } catch (_) {
-        await c.dispose();
-      } finally {
-        _initializing = false;
-      }
+      await _startInit();
     } else if (!_isActive && _controller != null) {
       final c = _controller;
       setState(() => _controller = null);
       await c?.dispose();
+    }
+  }
+
+  Future<void> _startInit() async {
+    _initializing = true;
+    _failed = false;
+    final myGeneration = ++_generation;
+    final c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    try {
+      // A hung network request would otherwise freeze this post forever
+      // with no feedback — cap it so it fails gracefully instead.
+      await c.initialize().timeout(const Duration(seconds: 12));
+      await c.setVolume(0); // muted autoplay, same as every app does this
+      await c.setLooping(true);
+      if (myGeneration != _generation || !mounted || !_isActive) {
+        await c.dispose();
+      } else {
+        await c.play();
+        setState(() => _controller = c);
+      }
+    } catch (_) {
+      await c.dispose();
+      if (myGeneration == _generation && mounted) setState(() => _failed = true);
+    } finally {
+      if (myGeneration == _generation) _initializing = false;
     }
   }
 
@@ -509,27 +537,44 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
     return VisibilityDetector(
       key: ValueKey('post-video-${widget.postId}'),
       onVisibilityChanged: (info) => FeedVideoManager.instance.reportVisibility(widget.postId, info.visibleFraction),
-      child: AspectRatio(
-        aspectRatio: _controller?.value.isInitialized == true ? _controller!.value.aspectRatio : 4 / 5,
-        child: Stack(
-          alignment: Alignment.center,
-          fit: StackFit.expand,
-          children: [
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF2B2B2B), Color(0xFF161616)]),
-              ),
+      child: SizedBox(
+        width: double.infinity,
+        child: AspectRatio(
+          aspectRatio: _controller?.value.isInitialized == true ? _controller!.value.aspectRatio : 4 / 5,
+          child: GestureDetector(
+            onTap: _failed ? _startInit : null,
+            child: Stack(
+              alignment: Alignment.center,
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF2B2B2B), Color(0xFF161616)]),
+                  ),
+                ),
+                if (_controller?.value.isInitialized == true)
+                  VideoPlayer(_controller!)
+                else if (_initializing)
+                  const CircularProgressIndicator(color: Colors.white)
+                else
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.35), shape: BoxShape.circle),
+                        child: Icon(_failed ? Icons.refresh : Icons.play_arrow_rounded, color: Colors.white, size: 40),
+                      ),
+                      if (_failed) ...[
+                        const SizedBox(height: 6),
+                        const Text('Tap to retry', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      ],
+                    ],
+                  ),
+                const Positioned(left: 10, bottom: 10, child: _MediaBadge(label: 'VIDEO', icon: Icons.videocam_outlined)),
+              ],
             ),
-            if (_controller?.value.isInitialized == true)
-              VideoPlayer(_controller!)
-            else
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.35), shape: BoxShape.circle),
-                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 40),
-              ),
-            const Positioned(left: 10, bottom: 10, child: _MediaBadge(label: 'VIDEO', icon: Icons.videocam_outlined)),
-          ],
+          ),
         ),
       ),
     );
