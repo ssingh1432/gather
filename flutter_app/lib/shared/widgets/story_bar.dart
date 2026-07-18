@@ -84,14 +84,20 @@ class _StoryBarState extends State<StoryBar> {
       );
       final storyId = story['id'] as String;
       final String url;
+      String? thumbnailUrl;
       if (mediaType == 'video') {
         final prepared = await upload.preparePostVideo(picked);
         url = await upload.uploadStoryVideo(userId: uid, storyId: storyId, video: prepared);
       } else {
         final prepared = await upload.preparePostImage(picked);
-        url = await upload.uploadStoryImage(userId: uid, storyId: storyId, image: prepared);
+        final uploaded = await upload.uploadStoryImage(userId: uid, storyId: storyId, image: prepared);
+        url = uploaded.originalUrl;
+        thumbnailUrl = uploaded.thumbnailUrl;
       }
-      await SupabaseConfig.client.from('stories').update({'media_url': url}).eq('id', storyId);
+      await SupabaseConfig.client.from('stories').update({
+        'media_url': url,
+        if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
+      }).eq('id', storyId);
       _refresh();
     } catch (e) {
       if (mounted) {
@@ -203,7 +209,10 @@ class _StoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasAvatar = entry.authorAvatarUrl != null && entry.authorAvatarUrl!.isNotEmpty;
+    final imageUrl = (entry.latestThumbnailUrl != null && entry.latestThumbnailUrl!.isNotEmpty)
+        ? entry.latestThumbnailUrl
+        : entry.authorAvatarUrl;
+    final hasImage = imageUrl != null && imageUrl.isNotEmpty;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -224,8 +233,8 @@ class _StoryTile extends StatelessWidget {
             children: [
               Container(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: hasAvatar
-                    ? Image.network(entry.authorAvatarUrl!, fit: BoxFit.cover)
+                child: hasImage
+                    ? Image.network(imageUrl, fit: BoxFit.cover)
                     : Icon(Icons.person, size: 32, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
               Positioned(

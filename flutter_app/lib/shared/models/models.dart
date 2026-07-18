@@ -278,6 +278,7 @@ class StoryFeedEntry {
     required this.authorAvatarUrl,
     required this.storyCount,
     required this.hasUnseen,
+    this.latestThumbnailUrl,
   });
 
   final String authorId;
@@ -285,6 +286,7 @@ class StoryFeedEntry {
   final String? authorAvatarUrl;
   final int storyCount;
   final bool hasUnseen;
+  final String? latestThumbnailUrl;
 
   factory StoryFeedEntry.fromMap(Map<String, dynamic> map) => StoryFeedEntry(
         authorId: map['author_id'].toString(),
@@ -292,6 +294,7 @@ class StoryFeedEntry {
         authorAvatarUrl: map['author_avatar_url'] as String?,
         storyCount: (map['story_count'] as num?)?.toInt() ?? 0,
         hasUnseen: map['has_unseen'] == true,
+        latestThumbnailUrl: map['latest_thumbnail_url'] as String?,
       );
 }
 

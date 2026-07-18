@@ -112,14 +112,27 @@ class MediaUploadService {
   /// Uploads a story's media to `{userId}/{storyId}` in the `story-media`
   /// bucket — user-scoped path (not post-scoped) so storage RLS can check
   /// folder == auth.uid(), same convention as the avatars bucket.
-  Future<String> uploadStoryImage({required String userId, required String storyId, required PreparedImageSet image}) async {
+  ///
+  /// Also uploads the already-generated compressed thumbnail (same one used
+  /// for post images) to `{userId}/{storyId}_thumb`, so the story bar can
+  /// show the actual photo instead of just the poster's avatar.
+  Future<UploadedStoryImage> uploadStoryImage({required String userId, required String storyId, required PreparedImageSet image}) async {
     final options = FileOptions(contentType: image.contentType, cacheControl: '86400', upsert: true);
     final storage = _client.storage.from(storyBucket);
     final path = '$userId/$storyId';
+    final thumbPath = '$userId/${storyId}_thumb';
     await image.original.uploadTo(storage, path, options);
-    return storage.getPublicUrl(path);
+    await image.thumbnail.uploadTo(storage, thumbPath, options);
+    return UploadedStoryImage(
+      originalUrl: storage.getPublicUrl(path),
+      thumbnailUrl: storage.getPublicUrl(thumbPath),
+    );
   }
 
+  /// Uploads a story video. There is no client-side video-frame extraction
+  /// in this app yet (unlike images, which reuse the post-thumbnail
+  /// pipeline), so video stories fall back to the author's avatar in the
+  /// story bar rather than a real frame from the clip.
   Future<String> uploadStoryVideo({required String userId, required String storyId, required PreparedPostVideo video}) async {
     final options = FileOptions(contentType: video.contentType, cacheControl: '86400', upsert: true);
     final storage = _client.storage.from(storyBucket);
@@ -127,6 +140,15 @@ class MediaUploadService {
     await video.uploadTo(storage, path, options);
     return storage.getPublicUrl(path);
   }
+}
+
+/// Result of uploading a story image: the full-size original plus a
+/// compressed thumbnail for use in the story bar.
+class UploadedStoryImage {
+  const UploadedStoryImage({required this.originalUrl, required this.thumbnailUrl});
+
+  final String originalUrl;
+  final String thumbnailUrl;
 }
 
 enum ProfileImageKind { avatar, cover }
