@@ -108,28 +108,33 @@ class _StoryBarState extends State<StoryBar> {
     if (uid == null) return const SizedBox.shrink();
 
     return SizedBox(
-      height: 96,
+      height: 124,
       child: FutureBuilder<List<StoryFeedEntry>>(
         future: _future,
         builder: (context, snapshot) {
           final entries = snapshot.data ?? const [];
           final hasOwnStory = entries.any((e) => e.authorId == uid);
-          return ListView(
+          final others = entries.where((e) => e.authorId != uid).toList();
+          return ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            children: [
-              _AddStoryTile(uploading: _uploading, hasOwnStory: hasOwnStory, onTap: _addStory),
-              for (final entry in entries.where((e) => e.authorId != uid))
-                _StoryTile(
-                  entry: entry,
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => StoryViewerScreen(authorIds: entries.map((e) => e.authorId).toList(), startAuthorId: entry.authorId)),
-                    );
-                    _refresh();
-                  },
-                ),
-            ],
+            itemCount: others.length + 1,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              if (i == 0) {
+                return _AddStoryTile(uploading: _uploading, hasOwnStory: hasOwnStory, onTap: _addStory);
+              }
+              final entry = others[i - 1];
+              return _StoryTile(
+                entry: entry,
+                onTap: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => StoryViewerScreen(authorIds: entries.map((e) => e.authorId).toList(), startAuthorId: entry.authorId)),
+                  );
+                  _refresh();
+                },
+              );
+            },
           );
         },
       ),
@@ -148,34 +153,42 @@ class _AddStoryTile extends StatelessWidget {
     return GestureDetector(
       onTap: uploading ? null : onTap,
       child: SizedBox(
-        width: 68,
-        child: Column(
+        width: 72,
+        height: 108,
+        child: Stack(
           children: [
-            SizedBox(
-              width: 60,
-              height: 60,
-              child: Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    child: uploading ? const CircularProgressIndicator(strokeWidth: 2) : const Icon(Icons.add_a_photo_outlined),
-                  ),
-                  if (!uploading)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-                        child: const Icon(Icons.add, size: 14, color: Colors.white),
-                      ),
-                    ),
-                ],
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                width: 72,
+                height: 108,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                alignment: Alignment.center,
+                child: uploading ? const CircularProgressIndicator(strokeWidth: 2) : Icon(Icons.add_a_photo_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             ),
-            const SizedBox(height: 4),
-            Text(hasOwnStory ? 'Your story' : 'Add story', style: Theme.of(context).textTheme.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+            if (!uploading)
+              Positioned(
+                right: 6,
+                bottom: 6,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                  child: const Icon(Icons.add, size: 14, color: Colors.white),
+                ),
+              ),
+            Positioned(
+              left: 4,
+              right: 4,
+              bottom: 4,
+              child: Text(
+                hasOwnStory ? 'Your story' : 'Add story',
+                style: Theme.of(context).textTheme.labelSmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ),
           ],
         ),
       ),
@@ -190,36 +203,51 @@ class _StoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasAvatar = entry.authorAvatarUrl != null && entry.authorAvatarUrl!.isNotEmpty;
     return GestureDetector(
       onTap: onTap,
-      child: SizedBox(
-        width: 68,
-        child: Column(
-          children: [
-            Container(
-              width: 60,
-              height: 60,
-              padding: const EdgeInsets.all(2.5),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: entry.hasUnseen
-                    ? const LinearGradient(colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)], begin: Alignment.topLeft, end: Alignment.bottomRight)
-                    : null,
-                color: entry.hasUnseen ? null : Theme.of(context).colorScheme.outlineVariant,
+      child: Container(
+        width: 72,
+        height: 108,
+        padding: const EdgeInsets.all(2.5),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          gradient: entry.hasUnseen
+              ? const LinearGradient(colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)], begin: Alignment.topLeft, end: Alignment.bottomRight)
+              : null,
+          color: entry.hasUnseen ? null : Theme.of(context).colorScheme.outlineVariant,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11.5),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: hasAvatar
+                    ? Image.network(entry.authorAvatarUrl!, fit: BoxFit.cover)
+                    : Icon(Icons.person, size: 32, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: CircleAvatar(
-                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  backgroundImage: entry.authorAvatarUrl != null && entry.authorAvatarUrl!.isNotEmpty ? NetworkImage(entry.authorAvatarUrl!) : null,
-                  child: entry.authorAvatarUrl == null || entry.authorAvatarUrl!.isEmpty ? const Icon(Icons.person) : null,
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(colors: [Colors.transparent, Colors.black87], begin: Alignment.topCenter, end: Alignment.bottomCenter),
+                  ),
+                  child: Text(
+                    entry.authorUsername,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(entry.authorUsername, style: Theme.of(context).textTheme.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ],
+            ],
+          ),
         ),
       ),
     );
