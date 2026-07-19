@@ -16,9 +16,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class SecureLocalStorage extends LocalStorage {
   const SecureLocalStorage();
 
-  static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
+  static const _storage = FlutterSecureStorage();
 
   @override
   Future<void> initialize() async {}
