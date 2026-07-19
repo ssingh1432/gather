@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
@@ -69,23 +71,38 @@ class AuthService {
       _client.auth.resend(type: OtpType.signup, email: email.trim().toLowerCase());
 
   Future<AuthResponse> signIn(String email, String password) async {
-    final res = await _client.auth.signInWithPassword(email: email.trim().toLowerCase(), password: password);
-    final uid = res.user?.id;
-    if (uid != null) {
-      final user = await _client.from('users').select('status').eq('id', uid).maybeSingle();
-      if (user?['status'] == 'banned' || user?['status'] == 'suspended') {
-        await signOut();
-        throw Exception('Account not active');
-      }
-      final betaAllowed = await _betaAccess.claimForCurrentUser();
-      if (!betaAllowed) {
-        await signOut();
-        throw Exception('This account is not on the closed beta allowlist.');
-      }
-      AnalyticsService.instance.userLoggedIn();
-      AnalyticsService.instance.dailyActiveUser();
+    final normalizedEmail = email.trim().toLowerCase();
+
+    final lockout = await _client.rpc('check_login_lockout', params: {'p_email': normalizedEmail}) as Map;
+    if (lockout['locked'] == true) {
+      final seconds = (lockout['retry_after_seconds'] as num).toInt();
+      final minutes = (seconds / 60).ceil();
+      throw Exception('Too many failed attempts. Try again in $minutes minute${minutes == 1 ? '' : 's'}.');
     }
-    return res;
+
+    try {
+      final res = await _client.auth.signInWithPassword(email: normalizedEmail, password: password);
+      final uid = res.user?.id;
+      if (uid != null) {
+        final user = await _client.from('users').select('status').eq('id', uid).maybeSingle();
+        if (user?['status'] == 'banned' || user?['status'] == 'suspended') {
+          await signOut();
+          throw Exception('Account not active');
+        }
+        final betaAllowed = await _betaAccess.claimForCurrentUser();
+        if (!betaAllowed) {
+          await signOut();
+          throw Exception('This account is not on the closed beta allowlist.');
+        }
+        AnalyticsService.instance.userLoggedIn();
+        AnalyticsService.instance.dailyActiveUser();
+        unawaited(_client.rpc('record_login_attempt', params: {'p_email': normalizedEmail, 'p_success': true}));
+      }
+      return res;
+    } on AuthApiException {
+      unawaited(_client.rpc('record_login_attempt', params: {'p_email': normalizedEmail, 'p_success': false}));
+      rethrow;
+    }
   }
 
   /// Converts a normalized 10-digit Nepali number into E.164 for Supabase/Twilio.
