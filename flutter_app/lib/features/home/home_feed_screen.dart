@@ -333,7 +333,6 @@ class _S extends ConsumerState<HomeFeedScreen> {
                       child: ListView.builder(
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
-                        scrollCacheExtent: const ScrollCacheExtent.pixels(1200),
                         itemCount: 2 + rows.length + (_loadingMore ? 1 : 0),
                         itemBuilder: (context, rawIndex) {
                           if (rawIndex == 0) return const StoryBar();
