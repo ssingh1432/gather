@@ -164,7 +164,7 @@ class PostCard extends StatelessWidget {
                       if (!opened) {
                         await launchUrl(Uri.parse('https://www.tiktok.com/'), mode: LaunchMode.externalApplication);
                       }
-                      if (uid != null) await FeedRepository().sharePost(post.id, uid, target: 'external');
+                      await FeedRepository().sharePost(post.id, uid, target: 'external');
                     },
                   ),
                   _ShareAppButton(
@@ -189,7 +189,7 @@ class PostCard extends StatelessWidget {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied.')));
                       }
-                      if (uid != null) await FeedRepository().sharePost(post.id, uid, target: 'external');
+                      await FeedRepository().sharePost(post.id, uid, target: 'external');
                     },
                   ),
                 ],
@@ -203,7 +203,7 @@ class PostCard extends StatelessWidget {
               onTap: () async {
                 Navigator.pop(sheetContext);
                 await Share.share('$_shareText\n\n$_shareUrl');
-                if (uid != null) await FeedRepository().sharePost(post.id, uid, target: 'external');
+                await FeedRepository().sharePost(post.id, uid, target: 'external');
               },
             ),
             ListTile(
