@@ -46,6 +46,15 @@ class _P extends State<CreatePostScreen> {
   PostModel? _quotedPost;
   bool _loadingQuote = false;
 
+  // Defaults from the user's Settings > "Who can see your posts by
+  // default", but editable per post right here in the composer.
+  String _visibility = 'public';
+  static const _visibilityOptions = {
+    'public': ('Public', Icons.public),
+    'friends': ('Friends', Icons.people_alt_outlined),
+    'only_me': ('Only me', Icons.lock_outline),
+  };
+
   // username -> id, so chips can show the name while we submit ids.
   final Map<String, String> _taggedFriends = {};
   double? _pickedLat;
@@ -72,6 +81,22 @@ class _P extends State<CreatePostScreen> {
     if (widget.sharedText != null && widget.sharedText!.isNotEmpty) {
       text.text = widget.sharedText!;
       _onTextChanged(widget.sharedText!);
+    }
+    _loadDefaultVisibility();
+  }
+
+  Future<void> _loadDefaultVisibility() async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return;
+    try {
+      final profile = await ProfileRepository().loadProfile(uid);
+      final defaultVisibility = profile?['default_post_visibility'] as String?;
+      if (mounted && defaultVisibility != null && _visibilityOptions.containsKey(defaultVisibility)) {
+        setState(() => _visibility = defaultVisibility);
+      }
+    } catch (_) {
+      // Falls back to 'public' — not worth blocking or erroring the
+      // composer over a preference lookup.
     }
   }
 
@@ -146,6 +171,7 @@ class _P extends State<CreatePostScreen> {
         'author_id': uid,
         'community_id': widget.communityId,
         'text_content': text.text.trim(),
+        'visibility': _visibility,
         'location': location.text.trim().isEmpty ? null : location.text.trim(),
         'location_lat': _pickedLat,
         'location_lng': _pickedLng,
@@ -384,6 +410,12 @@ class _P extends State<CreatePostScreen> {
               ),
             ],
             const SizedBox(height: 12),
+            _VisibilityPicker(
+              value: _visibility,
+              options: _visibilityOptions,
+              onChanged: (v) => setState(() => _visibility = v),
+            ),
+            const SizedBox(height: 12),
             if (_loadingQuote) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator()),
             if (_quotedPost != null) ...[
               _QuotedPostPreviewCard(post: _quotedPost!),
@@ -508,6 +540,52 @@ class _P extends State<CreatePostScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Compact "who can see this" selector shown in the composer. Opens a
+/// bottom sheet with the three visibility levels (mirrors the wording used
+/// in Settings > Privacy so it reads consistently across the app).
+class _VisibilityPicker extends StatelessWidget {
+  const _VisibilityPicker({required this.value, required this.options, required this.onChanged});
+
+  final String value;
+  final Map<String, (String, IconData)> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, icon) = options[value] ?? options['public']!;
+    return OutlinedButton.icon(
+      onPressed: () async {
+        final selected = await showModalBottomSheet<String>(
+          context: context,
+          showDragHandle: true,
+          builder: (sheetContext) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Align(alignment: Alignment.centerLeft, child: Text('Who can see this post?')),
+                ),
+                for (final entry in options.entries)
+                  RadioListTile<String>(
+                    value: entry.key,
+                    groupValue: value,
+                    secondary: Icon(entry.value.$2),
+                    title: Text(entry.value.$1),
+                    onChanged: (v) => Navigator.pop(sheetContext, v),
+                  ),
+              ],
+            ),
+          ),
+        );
+        if (selected != null) onChanged(selected);
+      },
+      icon: Icon(icon),
+      label: Text(label),
     );
   }
 }

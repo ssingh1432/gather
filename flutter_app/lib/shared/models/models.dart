@@ -70,6 +70,7 @@ class PostModel {
   final String? linkPreviewDescription;
   final String? linkPreviewImageUrl;
   final String? linkPreviewSiteName;
+  final String visibility;
 
   PostModel({
     required this.id,
@@ -104,6 +105,7 @@ class PostModel {
     this.linkPreviewDescription,
     this.linkPreviewImageUrl,
     this.linkPreviewSiteName,
+    this.visibility = 'public',
   });
 
   factory PostModel.fromMap(Map<String, dynamic> map) {
@@ -145,6 +147,7 @@ class PostModel {
       linkPreviewDescription: map['link_preview_description'] as String?,
       linkPreviewImageUrl: map['link_preview_image_url'] as String?,
       linkPreviewSiteName: map['link_preview_site_name'] as String?,
+      visibility: map['visibility'] as String? ?? 'public',
     );
   }
 
@@ -186,6 +189,7 @@ class PostModel {
         linkPreviewDescription: linkPreviewDescription,
         linkPreviewImageUrl: linkPreviewImageUrl,
         linkPreviewSiteName: linkPreviewSiteName,
+        visibility: visibility,
       );
 
   String? get displayImageUrl => thumbnailUrl ?? _derivedThumbnailUrl ?? imageUrl;
