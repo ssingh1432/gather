@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -17,6 +18,17 @@ import '../services/media_download_service.dart';
 import '../services/post_view_tracker.dart';
 import '../utils/time_ago.dart';
 import 'auth_redirects.dart';
+
+/// A crisp 1px bottom border for AppBars. The app's AppBarTheme runs at
+/// elevation 0 (flat, no shadow), which reads clean on its own but leaves
+/// the top bar with no visible edge against the content below — this
+/// gives it a definite, professional separation line instead, the way
+/// Instagram/Facebook/X's top bars are hairline-bordered rather than
+/// shadowed.
+PreferredSizeWidget appBarBottomBorder(BuildContext context) => PreferredSize(
+      preferredSize: const Size.fromHeight(1),
+      child: Container(height: 1, color: Theme.of(context).dividerColor),
+    );
 
 class ProfileAvatar extends StatelessWidget {
   final String? url;
@@ -57,6 +69,22 @@ class PostCard extends StatelessWidget {
     context.push('/user?id=${post.authorId}');
   }
 
+  String get _shareUrl => 'https://eiquoab.xyz/post?id=${post.id}';
+
+  String get _shareText => post.textContent.isNotEmpty ? post.textContent : 'Check out this post on Gather';
+
+  Future<void> _launchShare(BuildContext context, Uri uri, {String target = 'external'}) async {
+    final uid = SupabaseConfig.currentUserId;
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't open that app. It may not be installed.")),
+      );
+      return;
+    }
+    if (uid != null) await FeedRepository().sharePost(post.id, uid, target: target);
+  }
+
   Future<void> _openShareSheet(BuildContext context) async {
     final uid = SupabaseConfig.currentUserId;
     if (uid == null) {
@@ -71,15 +99,111 @@ class PostCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Align(alignment: Alignment.centerLeft, child: Text('Share to', style: TextStyle(fontWeight: FontWeight.w600))),
+            ),
+            SizedBox(
+              height: 92,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  _ShareAppButton(
+                    label: 'WhatsApp',
+                    icon: FontAwesomeIcons.whatsapp,
+                    color: const Color(0xFF25D366),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _launchShare(context, Uri.parse('https://wa.me/?text=${Uri.encodeComponent('$_shareText\n\n$_shareUrl')}'));
+                    },
+                  ),
+                  _ShareAppButton(
+                    label: 'Facebook',
+                    icon: FontAwesomeIcons.facebook,
+                    color: const Color(0xFF1877F2),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _launchShare(context, Uri.parse('https://www.facebook.com/sharer/sharer.php?u=${Uri.encodeComponent(_shareUrl)}'));
+                    },
+                  ),
+                  _ShareAppButton(
+                    label: 'X',
+                    icon: FontAwesomeIcons.xTwitter,
+                    color: Theme.of(sheetContext).colorScheme.onSurface,
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _launchShare(context, Uri.parse('https://twitter.com/intent/tweet?text=${Uri.encodeComponent(_shareText)}&url=${Uri.encodeComponent(_shareUrl)}'));
+                    },
+                  ),
+                  _ShareAppButton(
+                    label: 'Telegram',
+                    icon: FontAwesomeIcons.telegram,
+                    color: const Color(0xFF26A5E4),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _launchShare(context, Uri.parse('https://t.me/share/url?url=${Uri.encodeComponent(_shareUrl)}&text=${Uri.encodeComponent(_shareText)}'));
+                    },
+                  ),
+                  _ShareAppButton(
+                    label: 'TikTok',
+                    icon: FontAwesomeIcons.tiktok,
+                    color: Theme.of(sheetContext).colorScheme.onSurface,
+                    // TikTok has no public web-share intent for arbitrary links, so this
+                    // just opens the app (if installed) — the link is already on the
+                    // clipboard so it's a one-paste share into a TikTok post/bio/DM.
+                    onTap: () async {
+                      Navigator.pop(sheetContext);
+                      await Clipboard.setData(ClipboardData(text: _shareUrl));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Link copied — opening TikTok to paste it in.')),
+                        );
+                      }
+                      final opened = await launchUrl(Uri.parse('tiktok://'), mode: LaunchMode.externalApplication);
+                      if (!opened) {
+                        await launchUrl(Uri.parse('https://www.tiktok.com/'), mode: LaunchMode.externalApplication);
+                      }
+                      if (uid != null) await FeedRepository().sharePost(post.id, uid, target: 'external');
+                    },
+                  ),
+                  _ShareAppButton(
+                    label: 'Mail',
+                    icon: FontAwesomeIcons.envelope,
+                    color: Theme.of(sheetContext).colorScheme.secondary,
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _launchShare(
+                        context,
+                        Uri(scheme: 'mailto', queryParameters: {'subject': 'Check this out on Gather', 'body': '$_shareText\n\n$_shareUrl'}),
+                      );
+                    },
+                  ),
+                  _ShareAppButton(
+                    label: 'Copy link',
+                    icon: FontAwesomeIcons.link,
+                    color: Theme.of(sheetContext).colorScheme.outline,
+                    onTap: () async {
+                      Navigator.pop(sheetContext);
+                      await Clipboard.setData(ClipboardData(text: _shareUrl));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied.')));
+                      }
+                      if (uid != null) await FeedRepository().sharePost(post.id, uid, target: 'external');
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 20),
             ListTile(
-              leading: const Icon(Icons.ios_share),
-              title: const Text('Share to...'),
-              subtitle: const Text('System share sheet or copy link'),
+              leading: const Icon(Icons.more_horiz),
+              title: const Text('More apps'),
+              subtitle: const Text('Everything else installed on your device'),
               onTap: () async {
                 Navigator.pop(sheetContext);
-                final snippet = post.textContent.isNotEmpty ? post.textContent : 'Check out this post on Gather';
-                await Share.share('$snippet\n\nhttps://eiquoab.xyz/post?id=${post.id}');
-                await FeedRepository().sharePost(post.id, uid, target: 'external');
+                await Share.share('$_shareText\n\n$_shareUrl');
+                if (uid != null) await FeedRepository().sharePost(post.id, uid, target: 'external');
               },
             ),
             ListTile(
@@ -581,6 +705,35 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
   }
 }
 
+/// One tappable app icon in the "Share to" row (WhatsApp, Facebook, X,
+/// Telegram, TikTok, Mail, Copy link) — a circular brand-colored tile with
+/// a label underneath, matching how every major app's native share sheet
+/// presents its quick-share row.
+class _ShareAppButton extends StatelessWidget {
+  const _ShareAppButton({required this.label, required this.icon, required this.color, required this.onTap});
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(radius: 24, backgroundColor: color.withValues(alpha: 0.12), child: Icon(icon, color: color, size: 22)),
+              const SizedBox(height: 6),
+              Text(label, style: Theme.of(context).textTheme.labelSmall),
+            ],
+          ),
+        ),
+      );
+}
+
 class _MediaBadge extends StatelessWidget {
   const _MediaBadge({required this.label, required this.icon});
   final String label;
@@ -732,16 +885,36 @@ class _FeelingLocationLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final parts = <String>[];
-    if (post.feeling != null && post.feeling!.isNotEmpty) parts.add('is feeling ${post.feeling}');
-    if (post.location != null && post.location!.isNotEmpty) parts.add('📍 ${post.location}');
-    if (post.mentionedUsernames.isNotEmpty) {
-      parts.add('with ${post.mentionedUsernames.map((n) => '@$n').join(', ')}');
-    }
-    if (parts.isEmpty) return const SizedBox.shrink();
-    return Text(
-      parts.join('  ·  '),
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline, fontStyle: FontStyle.italic),
+    final theme = Theme.of(context);
+    final style = theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline, fontStyle: FontStyle.italic);
+    final linkStyle = theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w600);
+
+    final prefixParts = <String>[];
+    if (post.feeling != null && post.feeling!.isNotEmpty) prefixParts.add('is feeling ${post.feeling}');
+    if (post.location != null && post.location!.isNotEmpty) prefixParts.add('📍 ${post.location}');
+
+    if (prefixParts.isEmpty && post.mentionedUsernames.isEmpty) return const SizedBox.shrink();
+
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (prefixParts.isNotEmpty) Text(prefixParts.join('  ·  '), style: style),
+        if (prefixParts.isNotEmpty && post.mentionedUsernames.isNotEmpty) Text('  ·  ', style: style),
+        if (post.mentionedUsernames.isNotEmpty) ...[
+          Text('with ', style: style),
+          for (var i = 0; i < post.mentionedUsernames.length; i++) ...[
+            InkWell(
+              borderRadius: BorderRadius.circular(4),
+              onTap: () {
+                final id = i < post.mentionedUserIds.length ? post.mentionedUserIds[i] : null;
+                if (id != null && id.isNotEmpty) context.push('/user?id=$id');
+              },
+              child: Text('@${post.mentionedUsernames[i]}', style: linkStyle),
+            ),
+            if (i != post.mentionedUsernames.length - 1) Text(', ', style: style),
+          ],
+        ],
+      ],
     );
   }
 }
@@ -916,74 +1089,49 @@ class _PostActionBar extends StatelessWidget {
     final theme = Theme.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onLike,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            child: Icon(liked ? Icons.favorite : Icons.favorite_border, size: 20, color: liked ? Colors.redAccent : null),
-          ),
+        _CountedAction(
+          icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+          iconColor: liked ? Colors.redAccent : null,
+          count: post.likeCount,
+          onTapIcon: onLike,
+          onTapCount: onShowLikers,
         ),
-        if (post.likeCount > 0)
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: onShowLikers,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-              child: Text('${post.likeCount}', style: theme.textTheme.bodySmall),
-            ),
-          ),
-        const SizedBox(width: 4),
-        _ActionButton(
-          icon: Icons.mode_comment_outlined,
-          label: post.commentCount > 0 ? '${post.commentCount}' : null,
-          onTap: onComment,
+        const SizedBox(width: 16),
+        _CountedAction(
+          icon: Icons.chat_bubble_outline_rounded,
+          count: post.commentCount,
+          onTapIcon: onComment,
+          onTapCount: onComment,
         ),
         if (post.replyCount > 0) ...[
-          const SizedBox(width: 4),
-          _ActionButton(
+          const SizedBox(width: 16),
+          _CountedAction(
             icon: Icons.forum_outlined,
-            label: '${post.replyCount}',
-            onTap: () => context.push('/post/replies?id=${post.id}'),
+            count: post.replyCount,
+            onTapIcon: () => context.push('/post/replies?id=${post.id}'),
+            onTapCount: () => context.push('/post/replies?id=${post.id}'),
           ),
         ],
-        const SizedBox(width: 4),
-        InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onShare,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            child: const Icon(Icons.repeat, size: 20),
-          ),
+        const SizedBox(width: 16),
+        _CountedAction(
+          icon: Icons.send_outlined,
+          count: post.shareCount,
+          onTapIcon: onShare,
+          onTapCount: onShowSharers,
         ),
-        if (post.shareCount > 0)
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: onShowSharers,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-              child: Text('${post.shareCount}', style: theme.textTheme.bodySmall),
-            ),
-          ),
         if (post.downloadCount > 0) ...[
-          const SizedBox(width: 4),
-          InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: onShowDownloaders,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-              child: Row(children: [
-                const Icon(Icons.download_outlined, size: 20),
-                const SizedBox(width: 4),
-                Text('${post.downloadCount}', style: theme.textTheme.bodySmall),
-              ]),
-            ),
+          const SizedBox(width: 16),
+          _CountedAction(
+            icon: Icons.file_download_outlined,
+            count: post.downloadCount,
+            onTapIcon: onShowDownloaders,
+            onTapCount: onShowDownloaders,
           ),
         ],
         const Spacer(),
         IconButton(
           onPressed: onBookmark,
-          icon: Icon(bookmarked ? Icons.bookmark : Icons.bookmark_border, color: bookmarked ? theme.colorScheme.primary : null),
+          icon: Icon(bookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, color: bookmarked ? theme.colorScheme.primary : null),
           tooltip: 'Save',
         ),
       ]),
@@ -999,26 +1147,41 @@ class _PostActionBar extends StatelessWidget {
   }
 }
 
-class _ActionButton extends StatelessWidget {
+/// A single feed action rendered as icon + count as one visual unit —
+/// tapping the icon performs the action (like/comment/share), tapping the
+/// count opens the "who liked/shared" list where that applies. Replaces
+/// the old ad-hoc mix of separately-padded InkWells with inconsistent
+/// 4px gaps between them.
+class _CountedAction extends StatelessWidget {
+  const _CountedAction({required this.icon, required this.count, required this.onTapIcon, required this.onTapCount, this.iconColor});
   final IconData icon;
-  final String? label;
-  final VoidCallback onTap;
-  const _ActionButton({required this.icon, required this.onTap, this.label});
+  final int count;
+  final Color? iconColor;
+  final VoidCallback onTapIcon;
+  final VoidCallback onTapCount;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-          child: Row(children: [
-            Icon(icon, size: 20),
-            if (label != null) ...[
-              const SizedBox(width: 4),
-              Text(label!, style: Theme.of(context).textTheme.bodySmall),
-            ],
-          ]),
-        ),
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: onTapIcon,
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(icon, size: 21, color: iconColor),
+            ),
+          ),
+          if (count > 0)
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: onTapCount,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+                child: Text('$count', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
+              ),
+            ),
+        ],
       );
 }
 

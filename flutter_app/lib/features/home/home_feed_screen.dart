@@ -306,6 +306,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
           ],
         ),
         actions: const [TopBarProfileLink()],
+        bottom: appBarBottomBorder(c),
       ),
       body: Stack(
         children: [

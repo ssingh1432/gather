@@ -60,6 +60,7 @@ class PostModel {
   final String? mediaType;
   final bool authorAdsEligible;
   final List<String> mentionedUsernames;
+  final List<String> mentionedUserIds;
   final int replyCount;
   final double? locationLat;
   final double? locationLng;
@@ -95,6 +96,7 @@ class PostModel {
     this.mediaType,
     this.authorAdsEligible = false,
     this.mentionedUsernames = const [],
+    this.mentionedUserIds = const [],
     this.replyCount = 0,
     this.locationLat,
     this.locationLng,
@@ -137,6 +139,7 @@ class PostModel {
       mediaType: map['media_type'] as String? ?? (media != null && media.isNotEmpty ? media.first['media_type'] as String? : null),
       authorAdsEligible: map['author_ads_eligible'] == true,
       mentionedUsernames: ((map['mentioned_usernames'] as List?) ?? const []).map((e) => e.toString()).toList(),
+      mentionedUserIds: ((map['mentioned_user_ids'] as List?) ?? const []).map((e) => e.toString()).toList(),
       replyCount: _intFromMap(map, 'reply_count'),
       locationLat: (map['location_lat'] as num?)?.toDouble(),
       locationLng: (map['location_lng'] as num?)?.toDouble(),
@@ -179,6 +182,7 @@ class PostModel {
         mediaType: mediaType,
         authorAdsEligible: authorAdsEligible,
         mentionedUsernames: mentionedUsernames,
+        mentionedUserIds: mentionedUserIds,
         replyCount: replyCount,
         locationLat: locationLat,
         locationLng: locationLng,
