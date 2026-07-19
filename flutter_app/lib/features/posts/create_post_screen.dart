@@ -563,22 +563,26 @@ class _VisibilityPicker extends StatelessWidget {
           context: context,
           showDragHandle: true,
           builder: (sheetContext) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Align(alignment: Alignment.centerLeft, child: Text('Who can see this post?')),
-                ),
-                for (final entry in options.entries)
-                  RadioListTile<String>(
-                    value: entry.key,
-                    groupValue: value,
-                    secondary: Icon(entry.value.$2),
-                    title: Text(entry.value.$1),
-                    onChanged: (v) => Navigator.pop(sheetContext, v),
+            child: RadioGroup<String>(
+              groupValue: value,
+              onChanged: (v) {
+                if (v != null) Navigator.pop(sheetContext, v);
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Align(alignment: Alignment.centerLeft, child: Text('Who can see this post?')),
                   ),
-              ],
+                  for (final entry in options.entries)
+                    RadioListTile<String>(
+                      value: entry.key,
+                      secondary: Icon(entry.value.$2),
+                      title: Text(entry.value.$1),
+                    ),
+                ],
+              ),
             ),
           ),
         );
