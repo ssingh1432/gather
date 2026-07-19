@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'env.dart';
+import 'secure_local_storage.dart';
 
 /// Thin wrapper around the Supabase singleton so the rest of the app can
 /// call `SupabaseConfig.client` / `.maybeClient` / `.currentUserId` without
@@ -12,6 +13,9 @@ class SupabaseConfig {
     await Supabase.initialize(
       url: AppEnv.supabaseUrl,
       anonKey: AppEnv.supabaseAnonKey,
+      authOptions: const FlutterAuthClientOptions(
+        localStorage: SecureLocalStorage(),
+      ),
     );
   }
 
