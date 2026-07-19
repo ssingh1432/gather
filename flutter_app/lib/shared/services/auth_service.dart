@@ -164,13 +164,22 @@ class AuthService {
     }
     await _client.auth.signOut();
   }
-  Future<void> resetPassword(String email) => _client.auth.resetPasswordForEmail(
-        email.trim().toLowerCase(),
-        redirectTo: 'https://eiquoab.xyz/reset-password',
-      );
+  Future<void> resetPassword(String email) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    await _client.auth.resetPasswordForEmail(
+      normalizedEmail,
+      redirectTo: 'https://eiquoab.xyz/reset-password',
+    );
+    unawaited(_client.rpc('log_security_event', params: {
+      'p_event_type': 'password_reset_requested',
+      'p_metadata': {'email': normalizedEmail},
+    }));
+  }
 
   /// Sets a new password for the currently-active recovery session (i.e.
   /// after the user has opened the password-reset email link).
-  Future<void> updatePassword(String newPassword) =>
-      _client.auth.updateUser(UserAttributes(password: newPassword));
+  Future<void> updatePassword(String newPassword) async {
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
+    unawaited(_client.rpc('log_security_event', params: {'p_event_type': 'password_reset_completed'}));
+  }
 }

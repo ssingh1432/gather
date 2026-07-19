@@ -34,16 +34,39 @@ class MediaUploadService {
   static const String avatarsBucket = 'avatars';
   static const String storyBucket = 'story-media';
 
+  // Mirrors the file_size_limit set on each Supabase Storage bucket, so we
+  // can reject an oversized pick instantly instead of letting the user
+  // wait through compression/upload only for the server to reject it.
+  // These are a client-side courtesy, not the enforcement boundary — the
+  // bucket limits are what actually protect storage/bandwidth, since a
+  // client can always be bypassed.
+  static const int maxPostMediaBytes = 100 * 1024 * 1024; // 100MB — post-media, story-media
+  static const int maxAvatarBytes = 5 * 1024 * 1024; // 5MB — avatars
+
+  static Future<void> _assertWithinLimit(XFile file, int maxBytes, String label) async {
+    final size = await file.length();
+    if (size > maxBytes) {
+      final maxMb = (maxBytes / (1024 * 1024)).toStringAsFixed(0);
+      throw MediaUploadException('$label must be $maxMb MB or smaller.');
+    }
+  }
+
   SupabaseClient get _client => SupabaseConfig.client;
 
   /// Prepares [image] for upload. On mobile this compresses to temp files;
   /// on Web it reads the raw bytes. See `media/post_image_preparer.dart`.
-  Future<PreparedImageSet> preparePostImage(XFile image) => preparer.preparePostImage(image);
+  Future<PreparedImageSet> preparePostImage(XFile image) async {
+    await _assertWithinLimit(image, maxPostMediaBytes, 'Image');
+    return preparer.preparePostImage(image);
+  }
 
   /// Prepares a picked video for upload — same io/File-vs-Web/bytes seam as
   /// [preparePostImage], but with no client-side re-encoding (videos are
   /// uploaded as picked). See `media/post_video_preparer.dart`.
-  Future<PreparedPostVideo> preparePostVideo(XFile video) => video_preparer.preparePostVideo(video);
+  Future<PreparedPostVideo> preparePostVideo(XFile video) async {
+    await _assertWithinLimit(video, maxPostMediaBytes, 'Video');
+    return video_preparer.preparePostVideo(video);
+  }
 
   /// Uploads a post video to `posts/{postId}/video`. Deterministic path +
   /// upsert mirrors [uploadPostImage] so a retried publish overwrites the
@@ -94,7 +117,8 @@ class MediaUploadService {
     required XFile image,
     required ProfileImageKind kind,
   }) async {
-    final prepared = await preparePostImage(image);
+    await _assertWithinLimit(image, maxAvatarBytes, 'Profile image');
+    final prepared = await preparer.preparePostImage(image);
     final options = FileOptions(
       contentType: prepared.contentType,
       cacheControl: '31536000',
