@@ -322,11 +322,10 @@ class _OptionTile extends StatelessWidget {
               child: Text(title, style: Theme.of(sheetContext).textTheme.titleMedium),
             ),
             for (final entry in options.entries)
-              RadioListTile<String>(
-                value: entry.key,
-                groupValue: value,
+              ListTile(
                 title: Text(entry.value),
-                onChanged: (v) => Navigator.pop(sheetContext, v),
+                trailing: entry.key == value ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(sheetContext, entry.key),
               ),
             const SizedBox(height: 8),
           ],
