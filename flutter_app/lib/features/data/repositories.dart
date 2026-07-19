@@ -303,6 +303,18 @@ class ProfileRepository {
   Future<String> uploadProfileImage(String userId, XFile file, ProfileImageKind kind) =>
       MediaUploadService().uploadProfileImage(userId: userId, image: file, kind: kind);
 
+  /// People [userId] has blocked — backs the "Blocked accounts" list in
+  /// Settings, where they can be unblocked one at a time.
+  Future<List<RecommendedUser>> blockedUsersList(String userId, {int limit = 200}) async {
+    final data = await _c
+        .from('user_blocks')
+        .select('users!user_blocks_blocked_id_fkey(id, username, profile_photo_url)')
+        .eq('blocker_id', userId)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return (data as List).map((row) => row['users']).whereType<Map<String, dynamic>>().map(RecommendedUser.fromMap).toList();
+  }
+
   /// A small, shuffled batch of people [userId] doesn't already follow (and
   /// isn't blocked by/hasn't blocked) — backs the "You may know these
   /// people" row on the home feed.

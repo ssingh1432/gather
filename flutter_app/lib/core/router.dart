@@ -23,6 +23,7 @@ import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/user_profile_screen.dart';
 import '../features/profile/monetization_settings_screen.dart';
+import '../features/profile/settings_screen.dart';
 import '../features/profile/close_friends_screen.dart';
 import 'responsive.dart';
 import '../features/reports/report_screen.dart';
@@ -124,6 +125,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/bookmarks', builder: (_, __) => const BookmarksScreen()),
     GoRoute(path: '/edit-profile', builder: (_, __) => const EditProfileScreen()),
     GoRoute(path: '/monetization', builder: (_, __) => const MonetizationSettingsScreen()),
+    GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
     GoRoute(path: '/close-friends', builder: (_, __) => const CloseFriendsScreen()),
     GoRoute(path: '/post', builder: (_, s) => PostDetailScreen(postId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/post/replies', builder: (_, s) => PostRepliesScreen(postId: s.uri.queryParameters['id'] ?? '')),
@@ -233,6 +235,7 @@ const _protectedRoutes = {
   '/edit-profile',
   '/verify-phone',
   '/monetization',
+  '/settings',
   '/close-friends',
   '/bookmarks',
   '/notifications',

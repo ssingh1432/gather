@@ -17,6 +17,7 @@ import '../../shared/widgets/composer_prompt.dart';
 import '../../shared/widgets/people_you_may_know.dart';
 import '../../shared/widgets/feed_ad_card.dart';
 import '../../shared/widgets/story_bar.dart';
+import '../../shared/widgets/top_bar_profile_link.dart';
 import '../../shared/services/remote_config_service.dart';
 
 class HomeFeedScreen extends ConsumerStatefulWidget {
@@ -30,6 +31,13 @@ class HomeFeedScreen extends ConsumerStatefulWidget {
 class _AdSlot {
   const _AdSlot(this.postId);
   final String postId;
+}
+
+/// Marker row for the "People you may know" section, so it can be
+/// interleaved into the same row list as posts/ads instead of living at a
+/// fixed index.
+class _PYMKSlot {
+  const _PYMKSlot();
 }
 
 class _S extends ConsumerState<HomeFeedScreen> {
@@ -242,10 +250,34 @@ class _S extends ConsumerState<HomeFeedScreen> {
     return rows;
   }
 
+  /// A brand-new account (created within the last 3 days) hasn't had time
+  /// to build a feed worth scrolling through, so friend suggestions stay
+  /// front and center at the top — same idea as Instagram/Facebook
+  /// pushing "find people" hard right after signup. Once someone's more
+  /// established, the same section moves down a few posts so it reads as
+  /// a feed break rather than the first thing they see every time.
+  bool _isNewAccount(WidgetRef ref) {
+    final profile = ref.watch(currentUserProfileProvider).asData?.value;
+    final createdAt = profile != null ? DateTime.tryParse(profile['created_at']?.toString() ?? '') : null;
+    if (createdAt == null) return false;
+    return DateTime.now().difference(createdAt) < const Duration(days: 3);
+  }
+
+  /// Interleaves the "People you may know" row into [feedRows]: at the top
+  /// for brand-new accounts, otherwise after the 3rd row so it reads as a
+  /// natural break rather than blocking the feed.
+  List<Object> _rowsWithSuggestions(List<Object> feedRows, bool isNewAccount) {
+    if (SupabaseConfig.currentUserId == null) return feedRows;
+    if (isNewAccount || feedRows.length <= 3) {
+      return [const _PYMKSlot(), ...feedRows];
+    }
+    return [...feedRows.sublist(0, 3), const _PYMKSlot(), ...feedRows.sublist(3)];
+  }
+
   @override
   Widget build(BuildContext c) {
     final uid = SupabaseConfig.currentUserId;
-    final feedRows = _feedRows();
+    final rows = _rowsWithSuggestions(_feedRows(), _isNewAccount(ref));
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -256,6 +288,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
             const Text('Gather'),
           ],
         ),
+        actions: const [TopBarProfileLink()],
       ),
       body: Stack(
         children: [
@@ -283,19 +316,19 @@ class _S extends ConsumerState<HomeFeedScreen> {
                       child: ListView.builder(
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: 3 + feedRows.length + (_loadingMore ? 1 : 0),
+                        itemCount: 2 + rows.length + (_loadingMore ? 1 : 0),
                         itemBuilder: (context, rawIndex) {
                           if (rawIndex == 0) return const StoryBar();
                           if (rawIndex == 1) return const ComposerPrompt();
-                          if (rawIndex == 2) return const PeopleYouMayKnow();
-                          final index = rawIndex - 3;
-                          if (index >= feedRows.length) {
+                          final index = rawIndex - 2;
+                          if (index >= rows.length) {
                             return const Padding(
                               padding: EdgeInsets.all(16),
                               child: Center(child: CircularProgressIndicator()),
                             );
                           }
-                          final rowPost = feedRows[index];
+                          final rowPost = rows[index];
+                          if (rowPost is _PYMKSlot) return const PeopleYouMayKnow();
                           if (rowPost is _AdSlot) return FeedAdCard(postId: rowPost.postId);
                           final p = rowPost as PostModel;
                           return PostCard(

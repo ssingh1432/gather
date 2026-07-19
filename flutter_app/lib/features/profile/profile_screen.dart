@@ -105,6 +105,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             tooltip: 'Edit profile',
             onPressed: () => context.push('/edit-profile').then((_) => _refresh()),
           ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () => context.push('/settings'),
+          ),
           PopupMenuButton<String>(
             icon: _signingOut ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.more_vert),
             onSelected: (value) {
@@ -216,6 +221,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.settings_outlined),
+                        title: const Text('Settings'),
+                        subtitle: const Text('Privacy, notifications, and account'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/settings'),
+                      ),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.bookmark_outline),

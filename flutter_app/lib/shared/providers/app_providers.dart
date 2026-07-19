@@ -28,6 +28,17 @@ final homeFeedProvider = FutureProvider.family<List<PostModel>, int>((ref, page)
   return repo.homeFeed(uid, page: page);
 });
 
+/// The current user's own row from `users` — backs the top-bar profile
+/// avatar link and the "is this a brand-new account" check used to decide
+/// where "People you may know" appears in the feed. `autoDispose` so it
+/// picks up avatar/name changes made in Edit Profile the next time it's
+/// watched, rather than caching a stale copy for the whole session.
+final currentUserProfileProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+  final uid = SupabaseConfig.currentUserId;
+  if (uid == null) return null;
+  return ref.watch(profileRepositoryProvider).loadProfile(uid);
+});
+
 /// A small, shuffled batch of people the current user doesn't already
 /// follow — powers the "You may know these people" row on the home feed.
 /// `autoDispose` so it re-fetches with a fresh shuffle each time the row

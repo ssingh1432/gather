@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
+import '../../shared/providers/app_providers.dart';
 import '../../shared/services/media_upload_service.dart';
 import '../../shared/widgets/profile_view.dart';
 import '../data/repositories.dart';
@@ -24,14 +26,14 @@ const _nepalLocations = [
   'Hetauda', 'Janakpur', 'Itahari', 'Dhangadhi', 'Other / Abroad',
 ];
 
-class EditProfileScreen extends StatefulWidget {
+class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
 
   @override
-  State<EditProfileScreen> createState() => _EditProfileScreenState();
+  ConsumerState<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
-class _EditProfileScreenState extends State<EditProfileScreen> {
+class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _displayName = TextEditingController();
   final _bio = TextEditingController();
   final _website = TextEditingController();
@@ -165,6 +167,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       });
 
       if (!mounted) return;
+      ref.invalidate(currentUserProfileProvider);
       context.pop();
     } catch (e) {
       setState(() => _error = 'Could not save profile. $e');
