@@ -712,7 +712,7 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
 class _ShareAppButton extends StatelessWidget {
   const _ShareAppButton({required this.label, required this.icon, required this.color, required this.onTap});
   final String label;
-  final IconData icon;
+  final FaIconData icon;
   final Color color;
   final VoidCallback onTap;
 
@@ -725,7 +725,7 @@ class _ShareAppButton extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircleAvatar(radius: 24, backgroundColor: color.withValues(alpha: 0.12), child: Icon(icon, color: color, size: 22)),
+              CircleAvatar(radius: 24, backgroundColor: color.withValues(alpha: 0.12), child: FaIcon(icon, color: color, size: 20)),
               const SizedBox(height: 6),
               Text(label, style: Theme.of(context).textTheme.labelSmall),
             ],
