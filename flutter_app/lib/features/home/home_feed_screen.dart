@@ -170,10 +170,11 @@ class _S extends ConsumerState<HomeFeedScreen> {
       final page = _nextPage;
       final posts = await _fetchPage(page);
       final seen = _posts.map((p) => p.id).toSet();
-      _posts = [..._posts, ...posts.where((p) => !seen.contains(p.id))];
+      final newPosts = posts.where((p) => !seen.contains(p.id)).toList();
+      _posts = [..._posts, ...newPosts];
       _nextPage = page + 1;
       _hasMore = posts.length == _pageSize;
-      await _refreshStates(_posts.map((e) => e.id).toList());
+      await _mergeStates(newPosts.map((e) => e.id).toList());
     } catch (error, stackTrace) {
       BetaErrorLoggingService.instance.record(error, stackTrace, context: 'home_feed_next_page', metadata: {'page': _nextPage});
       if (mounted) {
@@ -213,6 +214,9 @@ class _S extends ConsumerState<HomeFeedScreen> {
     _noInteractionTimer?.cancel();
   }
 
+  /// Replaces `liked`/`bookmarked` wholesale — use for the initial load only.
+  /// Pagination should call [_mergeStates] instead so it doesn't re-query
+  /// state for every post loaded so far on every single page.
   Future<void> _refreshStates(List<String> ids) async {
     final uid = SupabaseConfig.currentUserId;
     if (uid == null || ids.isEmpty) {
@@ -222,6 +226,18 @@ class _S extends ConsumerState<HomeFeedScreen> {
     }
     liked = await repo.likedPostIds(uid, ids);
     bookmarked = await repo.bookmarkedPostIds(uid, ids);
+  }
+
+  /// Fetches liked/bookmarked state for just the given (newly-loaded) ids
+  /// and unions it into the existing sets, rather than re-fetching state
+  /// for the whole accumulated post list on every page.
+  Future<void> _mergeStates(List<String> newIds) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null || newIds.isEmpty) return;
+    final newLiked = await repo.likedPostIds(uid, newIds);
+    final newBookmarked = await repo.bookmarkedPostIds(uid, newIds);
+    liked = {...liked, ...newLiked};
+    bookmarked = {...bookmarked, ...newBookmarked};
   }
 
   /// Posts with ad slots interleaved. Unlike a plain fixed-interval house
@@ -317,6 +333,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
                       child: ListView.builder(
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
+                        cacheExtent: 1200,
                         itemCount: 2 + rows.length + (_loadingMore ? 1 : 0),
                         itemBuilder: (context, rawIndex) {
                           if (rawIndex == 0) return const StoryBar();
@@ -329,10 +346,11 @@ class _S extends ConsumerState<HomeFeedScreen> {
                             );
                           }
                           final rowPost = rows[index];
-                          if (rowPost is _PYMKSlot) return const PeopleYouMayKnow();
-                          if (rowPost is _AdSlot) return FeedAdCard(postId: rowPost.postId);
+                          if (rowPost is _PYMKSlot) return const PeopleYouMayKnow(key: ValueKey('pymk'));
+                          if (rowPost is _AdSlot) return FeedAdCard(key: ValueKey('ad-${rowPost.postId}'), postId: rowPost.postId);
                           final p = rowPost as PostModel;
                           return PostCard(
+                            key: ValueKey('post-${p.id}'),
                             post: p,
                             liked: liked.contains(p.id) || p.isLiked,
                             bookmarked: bookmarked.contains(p.id) || p.isBookmarked,
@@ -343,13 +361,20 @@ class _S extends ConsumerState<HomeFeedScreen> {
                               }
                               _markFeedInteracted();
                               AnalyticsService.instance.firstActionCompleted(action: 'post_liked');
-                              if (liked.contains(p.id) || p.isLiked) {
-                                await repo.unlikePost(p.id, uid);
-                              } else {
-                                await repo.likePost(p.id, uid);
+                              final wasLiked = liked.contains(p.id) || p.isLiked;
+                              // Optimistic: flip the local flag immediately so the tap feels
+                              // instant, instead of round-tripping liked/bookmarked state for
+                              // every loaded post (previously refetched on every single tap).
+                              setState(() => wasLiked ? liked.remove(p.id) : liked.add(p.id));
+                              try {
+                                if (wasLiked) {
+                                  await repo.unlikePost(p.id, uid);
+                                } else {
+                                  await repo.likePost(p.id, uid);
+                                }
+                              } catch (_) {
+                                if (mounted) setState(() => wasLiked ? liked.add(p.id) : liked.remove(p.id));
                               }
-                              await _refreshStates(_posts.map((e) => e.id).toList());
-                              if (mounted) setState(() {});
                             },
                             onComment: () {
                               if (uid == null) {
@@ -366,13 +391,17 @@ class _S extends ConsumerState<HomeFeedScreen> {
                               }
                               _markFeedInteracted();
                               AnalyticsService.instance.firstActionCompleted(action: 'post_bookmarked');
-                              if (bookmarked.contains(p.id) || p.isBookmarked) {
-                                await repo.unbookmarkPost(p.id, uid);
-                              } else {
-                                await repo.bookmarkPost(p.id, uid);
+                              final wasBookmarked = bookmarked.contains(p.id) || p.isBookmarked;
+                              setState(() => wasBookmarked ? bookmarked.remove(p.id) : bookmarked.add(p.id));
+                              try {
+                                if (wasBookmarked) {
+                                  await repo.unbookmarkPost(p.id, uid);
+                                } else {
+                                  await repo.bookmarkPost(p.id, uid);
+                                }
+                              } catch (_) {
+                                if (mounted) setState(() => wasBookmarked ? bookmarked.add(p.id) : bookmarked.remove(p.id));
                               }
-                              await _refreshStates(_posts.map((e) => e.id).toList());
-                              if (mounted) setState(() {});
                             },
                           );
                         },
