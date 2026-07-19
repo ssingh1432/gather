@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
 import '../../shared/providers/app_providers.dart';
+import '../../shared/utils/password_validator.dart';
 
 /// Where the "Reset password" email link lands (see
 /// `AuthService.resetPassword`'s `redirectTo`). supabase_flutter picks up
@@ -53,9 +54,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   Future<void> _submit() async {
     final pass = _password.text.trim();
     final confirm = _confirm.text.trim();
-    if (pass.length < 6) {
+    final passwordError = PasswordValidator.validate(pass);
+    if (passwordError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters.')),
+        SnackBar(content: Text(passwordError)),
       );
       return;
     }
@@ -125,6 +127,8 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                           obscureText: _obscure,
                           decoration: InputDecoration(
                             labelText: 'New password',
+                            helperText: 'At least 8 characters, with upper, lower case and a number',
+                            helperMaxLines: 2,
                             prefixIcon: const Icon(Icons.lock_outline),
                             border: const OutlineInputBorder(),
                             suffixIcon: IconButton(

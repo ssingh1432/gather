@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
 import '../../shared/providers/app_providers.dart';
+import '../../shared/utils/password_validator.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key, this.redirect});
@@ -75,9 +76,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         return;
       }
     }
-    if (pass.length < 6) {
+    final passwordError = PasswordValidator.validate(pass);
+    if (passwordError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters.')),
+        SnackBar(content: Text(passwordError)),
       );
       return;
     }
@@ -241,6 +243,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 obscureText: _obscurePassword,
                 decoration: InputDecoration(
                   labelText: 'Password',
+                  helperText: 'At least 8 characters, with upper, lower case and a number',
+                  helperMaxLines: 2,
                   prefixIcon: const Icon(Icons.lock_outline),
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
