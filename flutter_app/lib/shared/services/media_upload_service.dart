@@ -2,6 +2,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
+import 'media/media_upload_exception.dart';
 import 'media/post_image_preparer.dart' as preparer;
 import 'media/post_video_preparer.dart' as video_preparer;
 import 'media/prepared_post_image.dart';
