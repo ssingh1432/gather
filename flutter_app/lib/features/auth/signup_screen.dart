@@ -114,6 +114,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           policyVersion: '2026-07-19',
           granted: true,
         );
+        if (!mounted) return;
         if (normalizedPhone != null) {
           context.go('/verify-phone?phone=$normalizedPhone');
         } else {

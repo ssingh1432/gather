@@ -39,16 +39,14 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
     setState(() => _loading = true);
     try {
       final uid = SupabaseConfig.currentUserId;
-      final results = await Future.wait([
-        _repo.latestConsent('privacy_policy'),
-        _repo.exportRequests(),
-        if (uid != null) SupabaseConfig.client.from('users').select().eq('id', uid).single() else Future.value(null),
-      ]);
+      final latestConsent = await _repo.latestConsent('privacy_policy');
+      final exportRequests = await _repo.exportRequests();
+      final profile = uid == null ? null : await SupabaseConfig.client.from('users').select().eq('id', uid).single();
       if (!mounted) return;
       setState(() {
-        _latestPolicyConsent = results[0] as Map<String, dynamic>?;
-        _exportRequests = results[1] as List<Map<String, dynamic>>;
-        _profile = results[2] as Map<String, dynamic>?;
+        _latestPolicyConsent = latestConsent;
+        _exportRequests = exportRequests;
+        _profile = profile;
       });
     } finally {
       if (mounted) setState(() => _loading = false);
