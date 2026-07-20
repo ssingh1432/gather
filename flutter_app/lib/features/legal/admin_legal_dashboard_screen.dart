@@ -109,13 +109,61 @@ class _AdminLegalDashboardScreenState extends State<AdminLegalDashboardScreen> w
   }
 }
 
-class _ComplaintsTab extends StatelessWidget {
+class _ComplaintsTab extends StatefulWidget {
   const _ComplaintsTab({required this.rows, required this.onUpdate});
   final List<Map<String, dynamic>> rows;
   final Future<void> Function(Map<String, dynamic>, String) onUpdate;
 
   @override
+  State<_ComplaintsTab> createState() => _ComplaintsTabState();
+}
+
+class _ComplaintsTabState extends State<_ComplaintsTab> {
+  final _repo = LegalRepository();
+  bool _removing = false;
+
+  Future<void> _removeContent(Map<String, dynamic> row) async {
+    final reasonController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove this post?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('This takes the post down immediately and logs it against this complaint for the legal record.'),
+            const SizedBox(height: 12),
+            TextField(controller: reasonController, decoration: const InputDecoration(labelText: 'Reason'), maxLines: 2),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remove post'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _removing = true);
+    try {
+      await _repo.recordContentRemoval(
+        complaintId: row['id'] as String,
+        postId: row['target_post_id'] as String,
+        reason: reasonController.text.trim().isEmpty ? 'Legal complaint takedown' : reasonController.text.trim(),
+        legalBasisCode: row['legal_basis_code'] as String?,
+      );
+      await widget.onUpdate(row, 'action_taken');
+    } finally {
+      if (mounted) setState(() => _removing = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final rows = widget.rows;
     if (rows.isEmpty) return const Center(child: Text('No complaints.'));
     return ListView.separated(
       padding: const EdgeInsets.all(12),
@@ -124,6 +172,7 @@ class _ComplaintsTab extends StatelessWidget {
       itemBuilder: (context, i) {
         final row = rows[i];
         final complainant = (row['users'] as Map?)?['username'] as String? ?? 'unknown';
+        final hasTargetPost = row['target_post_id'] != null;
         return Card(
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -140,11 +189,18 @@ class _ComplaintsTab extends StatelessWidget {
                 ]),
                 const SizedBox(height: 8),
                 Wrap(spacing: 8, children: [
-                  OutlinedButton(onPressed: () => onUpdate(row, 'under_review'), child: const Text('Under review')),
-                  FilledButton(onPressed: () => onUpdate(row, 'action_taken'), child: const Text('Action taken')),
+                  OutlinedButton(onPressed: () => widget.onUpdate(row, 'under_review'), child: const Text('Under review')),
+                  if (hasTargetPost)
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                      onPressed: _removing ? null : () => _removeContent(row),
+                      child: const Text('Remove content'),
+                    )
+                  else
+                    FilledButton(onPressed: () => widget.onUpdate(row, 'action_taken'), child: const Text('Action taken')),
                   OutlinedButton(
                     style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                    onPressed: () => onUpdate(row, 'rejected'),
+                    onPressed: () => widget.onUpdate(row, 'rejected'),
                     child: const Text('Reject'),
                   ),
                 ]),

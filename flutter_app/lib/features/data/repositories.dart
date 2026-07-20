@@ -723,19 +723,30 @@ class LegalRepository {
         if (assignedAdminId != null) 'assigned_admin_id': assignedAdminId,
       }).eq('id', complaintId);
 
+  /// Removes a post for a legal reason and logs it to content_removal_actions
+  /// (the legal-specific audit trail — distinct from moderation_actions,
+  /// since this needs a legal_basis_code and is reportable to regulators).
+  /// Reuses the existing soft_remove_post RPC to actually flag the post,
+  /// rather than duplicating that logic.
   Future<void> recordContentRemoval({
     String? complaintId,
     required String postId,
     required String reason,
     String? legalBasisCode,
-  }) =>
-      _c.from('content_removal_actions').insert({
-        'complaint_id': complaintId,
-        'post_id': postId,
-        'removed_by': SupabaseConfig.currentUserId,
-        'reason': reason,
-        'legal_basis_code': legalBasisCode,
-      });
+  }) async {
+    await _c.rpc('soft_remove_post', params: {
+      'post_id': postId,
+      'report_id': null,
+      'note': complaintId == null ? reason : 'Legal complaint $complaintId: $reason',
+    });
+    await _c.from('content_removal_actions').insert({
+      'complaint_id': complaintId,
+      'post_id': postId,
+      'removed_by': SupabaseConfig.currentUserId,
+      'reason': reason,
+      'legal_basis_code': legalBasisCode,
+    });
+  }
 
   Future<List<Map<String, dynamic>>> adminAppeals({String? status}) async {
     var q = _c.from('user_appeals').select('*, users!user_appeals_appellant_id_fkey(username)');
