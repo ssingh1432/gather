@@ -162,7 +162,6 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
     }
 
     final pendingPurgeAt = _profile?['scheduled_purge_at'] as String?;
-    final hasPendingDeletion = pendingPurgeAt != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Data & Privacy')),
@@ -216,7 +215,7 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
             title: 'Delete your account',
             icon: Icons.delete_forever_outlined,
             children: [
-              if (hasPendingDeletion) ...[
+              if (pendingPurgeAt != null) ...[
                 Text('Your account is scheduled for deletion on ${pendingPurgeAt.split('T').first}.'),
                 const SizedBox(height: 8),
                 Align(
