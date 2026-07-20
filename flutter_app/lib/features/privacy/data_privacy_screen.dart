@@ -18,7 +18,7 @@ class DataPrivacyScreen extends StatefulWidget {
 // Bump this whenever the privacy policy text changes; consent is recorded
 // against this version so we always know exactly what a user agreed to.
 const _kPrivacyPolicyVersion = '2026-07-19';
-const _kPrivacyPolicyUrl = 'https://eiquoab.xyz/privacy-policy';
+const _kPrivacyPolicyUrl = 'https://eiquoab.xyz/privacy-policy/';
 
 class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
   final _repo = PrivacyRepository();
@@ -183,13 +183,18 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
                     : 'You have not yet accepted the current privacy policy.',
               ),
               const SizedBox(height: 8),
-              Row(
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   TextButton(
                     onPressed: () => launchUrl(Uri.parse(_kPrivacyPolicyUrl), mode: LaunchMode.externalApplication),
                     child: const Text('Read privacy policy'),
                   ),
-                  const Spacer(),
+                  TextButton(
+                    onPressed: () =>
+                        launchUrl(Uri.parse('https://eiquoab.xyz/terms/'), mode: LaunchMode.externalApplication),
+                    child: const Text('Terms of Service'),
+                  ),
                   if (!_hasCurrentConsent)
                     FilledButton(onPressed: _busy ? null : _acceptPolicy, child: const Text('Accept')),
                 ],

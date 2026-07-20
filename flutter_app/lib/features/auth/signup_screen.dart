@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
 import '../../shared/providers/app_providers.dart';
+import '../../shared/utils/external_link.dart';
 import '../../shared/utils/password_validator.dart';
 import '../data/repositories.dart';
 
@@ -291,9 +293,26 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 onChanged: (v) => setState(() => _agreedToPolicy = v ?? false),
                 controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: EdgeInsets.zero,
-                title: const Text(
-                  'I agree to the Privacy Policy and Terms of Service',
-                  style: TextStyle(fontSize: 13),
+                title: RichText(
+                  text: TextSpan(
+                    style: DefaultTextStyle.of(context).style.copyWith(fontSize: 13),
+                    children: [
+                      const TextSpan(text: 'I agree to the '),
+                      TextSpan(
+                        text: 'Privacy Policy',
+                        style: const TextStyle(color: Colors.teal, decoration: TextDecoration.underline),
+                        recognizer: TapGestureRecognizer()
+                          ..onTap = () => openExternalLink(context, 'https://eiquoab.xyz/privacy-policy/'),
+                      ),
+                      const TextSpan(text: ' and '),
+                      TextSpan(
+                        text: 'Terms of Service',
+                        style: const TextStyle(color: Colors.teal, decoration: TextDecoration.underline),
+                        recognizer: TapGestureRecognizer()
+                          ..onTap = () => openExternalLink(context, 'https://eiquoab.xyz/terms/'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
