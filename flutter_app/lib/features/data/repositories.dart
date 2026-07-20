@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -573,9 +575,25 @@ class PrivacyRepository {
     return list.isEmpty ? null : Map<String, dynamic>.from(list.first as Map);
   }
 
-  Future<String> requestDataExport() async {
+  /// Triggers the `data-export` edge function, which assembles the bundle
+  /// synchronously and returns the updated request row (status 'ready' with
+  /// a signed download URL in file_path, or 'failed' with error_message).
+  /// Falls back to the request_data_export() RPC (fire-and-forget, status
+  /// stays 'pending') if the function call itself fails — the request is
+  /// still recorded either way.
+  Future<Map<String, dynamic>> requestDataExport() async {
+    try {
+      final res = await _c.functions.invoke('data-export');
+      final data = res.data;
+      if (data is Map) return Map<String, dynamic>.from(data);
+      if (data is String) return Map<String, dynamic>.from(jsonDecode(data) as Map);
+    } catch (_) {
+      // Fall through to the RPC below — the export can be retried/picked
+      // up later even if the synchronous call failed (e.g. cold start
+      // timeout on a large account).
+    }
     final id = await _c.rpc('request_data_export');
-    return id as String;
+    return {'id': id, 'status': 'pending'};
   }
 
   Future<List<Map<String, dynamic>>> exportRequests() async =>

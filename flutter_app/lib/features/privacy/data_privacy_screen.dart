@@ -75,10 +75,17 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
   Future<void> _requestExport() async {
     setState(() => _busy = true);
     try {
-      await _repo.requestDataExport();
+      final result = await _repo.requestDataExport();
       if (mounted) {
+        final ready = result['status'] == 'ready';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("We're preparing your data. You'll be notified when it's ready.")),
+          SnackBar(
+            content: Text(
+              ready
+                  ? 'Your data is ready to download below.'
+                  : "We're preparing your data. You'll be notified when it's ready.",
+            ),
+          ),
         );
       }
       await _load();
@@ -195,11 +202,34 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
             children: [
               const Text('Get a copy of your profile, posts, comments, and activity in a downloadable file.'),
               const SizedBox(height: 8),
-              if (_exportRequests.isNotEmpty)
-                Text(
-                  'Last request: ${_exportRequests.first['status']}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+              if (_exportRequests.isNotEmpty) ...[
+                Builder(builder: (context) {
+                  final latest = _exportRequests.first;
+                  final status = latest['status'] as String? ?? 'pending';
+                  final filePath = latest['file_path'] as String?;
+                  if (status == 'ready' && filePath != null) {
+                    return Row(
+                      children: [
+                        const Icon(Icons.check_circle_outline, color: Colors.green, size: 18),
+                        const SizedBox(width: 6),
+                        const Expanded(child: Text('Your export is ready — link valid for 7 days.')),
+                        TextButton(
+                          onPressed: () => launchUrl(Uri.parse(filePath), mode: LaunchMode.externalApplication),
+                          child: const Text('Download'),
+                        ),
+                      ],
+                    );
+                  }
+                  if (status == 'failed') {
+                    return Text(
+                      'Last attempt failed: ${latest['error_message'] ?? 'unknown error'}. Try again below.',
+                      style: const TextStyle(color: Colors.red),
+                    );
+                  }
+                  return Text('Last request: $status', style: Theme.of(context).textTheme.bodySmall);
+                }),
+                const SizedBox(height: 8),
+              ],
               Align(
                 alignment: Alignment.centerRight,
                 child: FilledButton.tonal(
