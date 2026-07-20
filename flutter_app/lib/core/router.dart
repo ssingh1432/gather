@@ -16,6 +16,9 @@ import '../features/communities/create_community_screen.dart';
 import '../features/home/home_feed_screen.dart';
 import '../features/home/post_detail_screen.dart';
 import '../features/home/post_replies_screen.dart';
+import '../features/legal/admin_legal_dashboard_screen.dart';
+import '../features/legal/file_complaint_screen.dart';
+import '../features/legal/my_legal_screen.dart';
 import '../features/media/media_viewer_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/posts/create_post_screen.dart';
@@ -25,6 +28,8 @@ import '../features/profile/user_profile_screen.dart';
 import '../features/profile/monetization_settings_screen.dart';
 import '../features/profile/settings_screen.dart';
 import '../features/profile/close_friends_screen.dart';
+import '../features/privacy/data_privacy_screen.dart';
+import '../features/privacy/mute_list_screen.dart';
 import 'responsive.dart';
 import '../features/reports/report_screen.dart';
 import '../features/search/search_screen.dart';
@@ -144,6 +149,17 @@ final appRouter = GoRouter(
       ),
     ),
     GoRoute(path: '/admin', builder: (_, __) => const AdminModerationScreen()),
+    GoRoute(path: '/data-privacy', builder: (_, __) => const DataPrivacyScreen()),
+    GoRoute(path: '/muted-accounts', builder: (_, __) => const MuteListScreen()),
+    GoRoute(
+      path: '/file-complaint',
+      builder: (_, s) => FileComplaintScreen(
+        postId: s.uri.queryParameters['postId'],
+        userId: s.uri.queryParameters['userId'],
+      ),
+    ),
+    GoRoute(path: '/my-legal', builder: (_, __) => const MyLegalScreen()),
+    GoRoute(path: '/admin/legal', builder: (_, __) => const AdminLegalDashboardScreen()),
   ],
 );
 
@@ -241,6 +257,11 @@ const _protectedRoutes = {
   '/notifications',
   '/report',
   '/admin',
+  '/data-privacy',
+  '/muted-accounts',
+  '/file-complaint',
+  '/my-legal',
+  '/admin/legal',
 };
 
 String _loginLocation({required String redirect}) =>

@@ -118,6 +118,14 @@ class _ReportScreenState extends State<ReportScreen> {
                           )
                         : const Text('Submit report'),
                   ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    icon: const Icon(Icons.gavel_outlined, size: 18),
+                    label: const Text('This is illegal content or a privacy violation'),
+                    onPressed: () => context.push(
+                      '/file-complaint?${widget.postId != null ? 'postId=${widget.postId}' : ''}${widget.userId != null ? 'userId=${widget.userId}' : ''}',
+                    ),
+                  ),
                 ],
               ),
       ),

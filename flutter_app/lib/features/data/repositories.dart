@@ -535,3 +535,246 @@ class StoryRepository {
 
   Future<void> deleteStory(String storyId) => _c.from('stories').delete().eq('id', storyId);
 }
+
+class PrivacyRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
+
+  /// Records a consent decision (privacy policy, terms, cookie/storage,
+  /// data processing, marketing). Always inserts a new row — consent
+  /// history is append-only so we can prove what was agreed to and when.
+  Future<void> recordConsent({
+    required String consentType,
+    required String policyVersion,
+    required bool granted,
+    Map<String, dynamic> metadata = const {},
+  }) =>
+      _c.from('consent_records').insert({
+        'user_id': SupabaseConfig.currentUserId,
+        'consent_type': consentType,
+        'policy_version': policyVersion,
+        'granted': granted,
+        'metadata': metadata,
+      });
+
+  Future<List<Map<String, dynamic>>> consentHistory() async =>
+      ((await _c.from('consent_records').select().order('recorded_at', ascending: false)) as List)
+          .cast<Map<String, dynamic>>();
+
+  /// Latest decision per consent type, e.g. to check whether the user has
+  /// already accepted the current privacy policy version.
+  Future<Map<String, dynamic>?> latestConsent(String consentType) async {
+    final rows = await _c
+        .from('latest_consent')
+        .select()
+        .eq('user_id', SupabaseConfig.currentUserId!)
+        .eq('consent_type', consentType)
+        .limit(1);
+    final list = rows as List;
+    return list.isEmpty ? null : Map<String, dynamic>.from(list.first as Map);
+  }
+
+  Future<String> requestDataExport() async {
+    final id = await _c.rpc('request_data_export');
+    return id as String;
+  }
+
+  Future<List<Map<String, dynamic>>> exportRequests() async =>
+      ((await _c.from('data_export_requests').select().order('requested_at', ascending: false)) as List)
+          .cast<Map<String, dynamic>>();
+
+  Future<String> requestAccountDeletion({String? reason, int graceDays = 14}) async {
+    final id = await _c.rpc('request_account_deletion', params: {
+      'p_reason': reason,
+      'p_grace_days': graceDays,
+    });
+    return id as String;
+  }
+
+  Future<void> cancelAccountDeletion() => _c.rpc('cancel_account_deletion');
+
+  Future<void> updatePrivacySettings(Map<String, dynamic> fields) =>
+      _c.from('users').update(fields).eq('id', SupabaseConfig.currentUserId!);
+
+  // Mute list — one-directional, not disclosed to the muted user.
+  Future<void> muteUser(String userId) => _c.from('user_mutes').insert({
+        'muter_id': SupabaseConfig.currentUserId,
+        'muted_id': userId,
+      });
+
+  Future<void> unmuteUser(String userId) => _c
+      .from('user_mutes')
+      .delete()
+      .eq('muter_id', SupabaseConfig.currentUserId!)
+      .eq('muted_id', userId);
+
+  Future<List<Map<String, dynamic>>> mutedUsers() async {
+    final data = await _c
+        .from('user_mutes')
+        .select('muted_id, created_at, users!user_mutes_muted_id_fkey(username, profile_photo_url)')
+        .eq('muter_id', SupabaseConfig.currentUserId!)
+        .order('created_at', ascending: false);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+}
+
+class LegalRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
+
+  Future<List<Map<String, dynamic>>> legalFrameworks() async =>
+      ((await _c.from('legal_frameworks').select().eq('active', true)) as List).cast<Map<String, dynamic>>();
+
+  /// Files a formal grievance/legal complaint — distinct from the
+  /// lightweight peer-to-peer `reports` flow. Used for illegal content,
+  /// privacy violations, defamation, etc.
+  Future<String> fileComplaint({
+    required String complaintType,
+    required String description,
+    String? legalBasisCode,
+    String? targetPostId,
+    String? targetUserId,
+    List<String> evidenceUrls = const [],
+  }) async {
+    final row = await _c
+        .from('legal_complaints')
+        .insert({
+          'complainant_id': SupabaseConfig.currentUserId,
+          'complaint_type': complaintType,
+          'legal_basis_code': legalBasisCode,
+          'description': description,
+          'target_post_id': targetPostId,
+          'target_user_id': targetUserId,
+          'evidence_urls': evidenceUrls,
+        })
+        .select('id')
+        .single();
+    return row['id'] as String;
+  }
+
+  Future<List<Map<String, dynamic>>> myComplaints() async =>
+      ((await _c.from('legal_complaints').select().order('created_at', ascending: false)) as List)
+          .cast<Map<String, dynamic>>();
+
+  Future<String> fileAppeal({
+    required String statement,
+    String? moderationActionId,
+    String? contentRemovalActionId,
+    String? legalComplaintId,
+  }) async {
+    final row = await _c
+        .from('user_appeals')
+        .insert({
+          'appellant_id': SupabaseConfig.currentUserId,
+          'statement': statement,
+          'moderation_action_id': moderationActionId,
+          'content_removal_action_id': contentRemovalActionId,
+          'legal_complaint_id': legalComplaintId,
+        })
+        .select('id')
+        .single();
+    return row['id'] as String;
+  }
+
+  Future<List<Map<String, dynamic>>> myAppeals() async =>
+      ((await _c.from('user_appeals').select().order('created_at', ascending: false)) as List)
+          .cast<Map<String, dynamic>>();
+
+  Future<String> submitVerification({required String idDocumentType, required String idDocumentUrl}) async {
+    final row = await _c
+        .from('user_verification_requests')
+        .insert({
+          'user_id': SupabaseConfig.currentUserId,
+          'id_document_type': idDocumentType,
+          'id_document_url': idDocumentUrl,
+        })
+        .select('id')
+        .single();
+    return row['id'] as String;
+  }
+
+  // --- Admin legal dashboard ---
+  Future<List<Map<String, dynamic>>> adminComplaints({String? status}) async {
+    var q = _c.from('legal_complaints').select('*, users!legal_complaints_complainant_id_fkey(username)');
+    final data = await (status == null ? q : q.eq('status', status)).order('created_at', ascending: false);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> updateComplaintStatus(String complaintId, {required String status, String? resolutionNotes, String? assignedAdminId}) =>
+      _c.from('legal_complaints').update({
+        'status': status,
+        if (resolutionNotes != null) 'resolution_notes': resolutionNotes,
+        if (assignedAdminId != null) 'assigned_admin_id': assignedAdminId,
+      }).eq('id', complaintId);
+
+  Future<void> recordContentRemoval({
+    String? complaintId,
+    required String postId,
+    required String reason,
+    String? legalBasisCode,
+  }) =>
+      _c.from('content_removal_actions').insert({
+        'complaint_id': complaintId,
+        'post_id': postId,
+        'removed_by': SupabaseConfig.currentUserId,
+        'reason': reason,
+        'legal_basis_code': legalBasisCode,
+      });
+
+  Future<List<Map<String, dynamic>>> adminAppeals({String? status}) async {
+    var q = _c.from('user_appeals').select('*, users!user_appeals_appellant_id_fkey(username)');
+    final data = await (status == null ? q : q.eq('status', status)).order('created_at', ascending: false);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> resolveAppeal(String appealId, {required String status, String? reviewNotes}) =>
+      _c.from('user_appeals').update({
+        'status': status,
+        'review_notes': reviewNotes,
+        'reviewed_by': SupabaseConfig.currentUserId,
+        'resolved_at': DateTime.now().toIso8601String(),
+      }).eq('id', appealId);
+
+  Future<List<Map<String, dynamic>>> legalDataRequests({String? status}) async {
+    var q = _c.from('legal_data_requests').select();
+    final data = await (status == null ? q : q.eq('status', status)).order('received_at', ascending: false);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> logLegalDataRequest({
+    required String requestingAuthority,
+    required String requestDetails,
+    String? authorityContact,
+    String? legalBasisCode,
+    String? referenceNumber,
+    String? targetUserId,
+  }) =>
+      _c.from('legal_data_requests').insert({
+        'requesting_authority': requestingAuthority,
+        'authority_contact': authorityContact,
+        'legal_basis_code': legalBasisCode,
+        'reference_number': referenceNumber,
+        'target_user_id': targetUserId,
+        'request_details': requestDetails,
+      });
+
+  Future<void> respondToLegalDataRequest(String requestId, {required String status, String? responseNotes}) =>
+      _c.from('legal_data_requests').update({
+        'status': status,
+        'response_notes': responseNotes,
+        'handled_by': SupabaseConfig.currentUserId,
+        'responded_at': DateTime.now().toIso8601String(),
+      }).eq('id', requestId);
+
+  Future<List<Map<String, dynamic>>> adminVerificationRequests({String? status}) async {
+    var q = _c.from('user_verification_requests').select('*, users!user_verification_requests_user_id_fkey(username)');
+    final data = await (status == null ? q : q.eq('status', status)).order('submitted_at', ascending: false);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> reviewVerification(String requestId, {required String status, String? notes}) =>
+      _c.from('user_verification_requests').update({
+        'status': status,
+        'review_notes': notes,
+        'reviewed_by': SupabaseConfig.currentUserId,
+        'reviewed_at': DateTime.now().toIso8601String(),
+      }).eq('id', requestId);
+}

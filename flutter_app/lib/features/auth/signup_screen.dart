@@ -6,6 +6,7 @@ import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
 import '../../shared/providers/app_providers.dart';
 import '../../shared/utils/password_validator.dart';
+import '../data/repositories.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key, this.redirect});
@@ -26,6 +27,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _resending = false;
+  bool _agreedToPolicy = false;
   // Non-null once signup succeeds but the account still needs email
   // confirmation (i.e. there's no session yet). Drives the "check your
   // email" state below instead of a snackbar that's easy to miss.
@@ -89,6 +91,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       );
       return;
     }
+    if (!_agreedToPolicy) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please agree to the Privacy Policy and Terms of Service to continue.')),
+      );
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -97,7 +105,15 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
       if (SupabaseConfig.currentUserId != null) {
         // Email confirmation is off (or this address was pre-confirmed) —
-        // there's already a session, so the person is logged in.
+        // there's already a session, so the person is logged in. Record
+        // consent now while we have an authenticated session; if
+        // confirmation is required instead, DataPrivacyScreen prompts for
+        // it after they first log in.
+        await PrivacyRepository().recordConsent(
+          consentType: 'privacy_policy',
+          policyVersion: '2026-07-19',
+          granted: true,
+        );
         if (normalizedPhone != null) {
           context.go('/verify-phone?phone=$normalizedPhone');
         } else {
@@ -268,7 +284,18 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 ),
                 onSubmitted: (_) => _loading ? null : _submit(),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              CheckboxListTile(
+                value: _agreedToPolicy,
+                onChanged: (v) => setState(() => _agreedToPolicy = v ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'I agree to the Privacy Policy and Terms of Service',
+                  style: TextStyle(fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 4),
               FilledButton(
                 onPressed: _loading ? null : _submit,
                 style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),

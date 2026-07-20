@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
 import '../data/repositories.dart';
+import '../legal/my_legal_screen.dart';
+import '../privacy/data_privacy_screen.dart';
+import '../privacy/mute_list_screen.dart';
 import 'blocked_accounts_screen.dart';
 
 /// Full settings screen: privacy/audience controls, notification
@@ -32,6 +35,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _tagPrivacy = 'everyone';
   bool _showActivityStatus = true;
   bool _showReadReceipts = true;
+  String _searchVisibility = 'everyone';
+  bool _showLastSeen = true;
   Map<String, dynamic> _notifications = const {};
 
   String? get _uid => SupabaseConfig.currentUserId;
@@ -56,6 +61,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _tagPrivacy = (profile['tag_privacy'] as String?) ?? 'everyone';
           _showActivityStatus = (profile['show_activity_status'] as bool?) ?? true;
           _showReadReceipts = (profile['show_read_receipts'] as bool?) ?? true;
+          _searchVisibility = (profile['search_visibility'] as String?) ?? 'everyone';
+          _showLastSeen = (profile['show_last_seen'] as bool?) ?? true;
           _notifications = Map<String, dynamic>.from((profile['notification_settings'] as Map?) ?? {});
         });
       }
@@ -215,11 +222,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _patch({'show_read_receipts': v});
               },
             ),
+            _OptionTile(
+              title: 'Who can find you in search',
+              value: _searchVisibility,
+              options: const {'everyone': 'Everyone', 'friends': 'Friends', 'no_one': 'No one'},
+              onChanged: (v) {
+                setState(() => _searchVisibility = v);
+                _patch({'search_visibility': v});
+              },
+            ),
+            SwitchListTile(
+              title: const Text('Show last seen'),
+              subtitle: const Text('Let friends see when you were last active'),
+              value: _showLastSeen,
+              onChanged: (v) {
+                setState(() => _showLastSeen = v);
+                _patch({'show_last_seen': v});
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.block_outlined),
               title: const Text('Blocked accounts'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BlockedAccountsScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.volume_off_outlined),
+              title: const Text('Muted accounts'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MuteListScreen())),
+            ),
+
+            const _SectionHeader('Data & Privacy'),
+            ListTile(
+              leading: const Icon(Icons.privacy_tip_outlined),
+              title: const Text('Data, consent & account deletion'),
+              subtitle: const Text('Download your data, review consent history, or delete your account'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DataPrivacyScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.gavel_outlined),
+              title: const Text('Grievances & legal requests'),
+              subtitle: const Text('File or track a complaint, illegal content report, or appeal'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyLegalScreen())),
             ),
 
             const _SectionHeader('Notifications'),

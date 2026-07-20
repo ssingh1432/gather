@@ -258,7 +258,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/close-friends'),
                       ),
-                      if ((u['role'] as String?) == 'admin' || (u['role'] as String?) == 'moderator')
+                      if ((u['role'] as String?) == 'admin' || (u['role'] as String?) == 'moderator') ...[
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.shield_outlined),
@@ -266,6 +266,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () => context.push('/admin'),
                         ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.gavel_outlined),
+                          title: const Text('Legal Dashboard'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/admin/legal'),
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       Text('Posts', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
                     ],
