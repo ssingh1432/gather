@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
+import '../../shared/utils/external_link.dart';
 import '../data/repositories.dart';
 import '../legal/my_legal_screen.dart';
 import '../privacy/data_privacy_screen.dart';
@@ -269,6 +270,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyLegalScreen())),
             ),
 
+            const _SectionHeader('Legal & Policies'),
+            const _LegalLinkTile(
+              icon: Icons.description_outlined,
+              title: 'Privacy Policy',
+              url: 'https://eiquoab.xyz/privacy-policy/',
+            ),
+            const _LegalLinkTile(
+              icon: Icons.rule_outlined,
+              title: 'Terms of Service',
+              url: 'https://eiquoab.xyz/terms/',
+            ),
+            const _LegalLinkTile(
+              icon: Icons.diversity_3_outlined,
+              title: 'Community Guidelines',
+              url: 'https://eiquoab.xyz/community-guidelines/',
+            ),
+            const _LegalLinkTile(
+              icon: Icons.cookie_outlined,
+              title: 'Cookie Policy',
+              url: 'https://eiquoab.xyz/cookie-policy/',
+            ),
+            const _LegalLinkTile(
+              icon: Icons.copyright_outlined,
+              title: 'Copyright & IP Policy',
+              url: 'https://eiquoab.xyz/copyright-policy/',
+            ),
+            const _LegalLinkTile(
+              icon: Icons.local_police_outlined,
+              title: 'Law Enforcement Requests',
+              url: 'https://eiquoab.xyz/law-enforcement-requests/',
+            ),
+
             const _SectionHeader('Notifications'),
             SwitchListTile(
               title: const Text('Likes'),
@@ -326,6 +359,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+}
+
+/// A settings row that opens a published legal/policy page in an external
+/// browser tab, via the shared openExternalLink helper (consistent
+/// no-crash-if-nothing-can-open-it behavior used elsewhere in the app).
+class _LegalLinkTile extends StatelessWidget {
+  const _LegalLinkTile({required this.icon, required this.title, required this.url});
+  final IconData icon;
+  final String title;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+        leading: Icon(icon),
+        title: Text(title),
+        trailing: const Icon(Icons.open_in_new, size: 18),
+        onTap: () => openExternalLink(context, url),
+      );
 }
 
 class _SectionHeader extends StatelessWidget {
