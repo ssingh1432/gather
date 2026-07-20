@@ -122,9 +122,13 @@ class _ReportScreenState extends State<ReportScreen> {
                   TextButton.icon(
                     icon: const Icon(Icons.gavel_outlined, size: 18),
                     label: const Text('This is illegal content or a privacy violation'),
-                    onPressed: () => context.push(
-                      '/file-complaint?${widget.postId != null ? 'postId=${widget.postId}' : ''}${widget.userId != null ? 'userId=${widget.userId}' : ''}',
-                    ),
+                    onPressed: () {
+                      final params = <String, String>{
+                        if (widget.postId != null) 'postId': widget.postId!,
+                        if (widget.userId != null) 'userId': widget.userId!,
+                      };
+                      context.push(Uri(path: '/file-complaint', queryParameters: params.isEmpty ? null : params).toString());
+                    },
                   ),
                 ],
               ),
