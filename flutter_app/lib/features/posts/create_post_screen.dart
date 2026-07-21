@@ -209,7 +209,14 @@ class _P extends State<CreatePostScreen> {
       );
 
       if (mounted) {
-        setState(() => err = 'Upload failed. Please check your connection and retry. $e');
+        final message = 'Upload failed. Please check your connection and retry. $e';
+        setState(() => err = message);
+        // Inline text below can be scrolled past unnoticed on a long form —
+        // a SnackBar guarantees the failure is actually seen instead of
+        // looking like the tap silently did nothing.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.red, duration: const Duration(seconds: 6)),
+        );
       }
     } finally {
       if (mounted) {

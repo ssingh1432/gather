@@ -170,7 +170,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       ref.invalidate(currentUserProfileProvider);
       context.pop();
     } catch (e) {
-      setState(() => _error = 'Could not save profile. $e');
+      final message = 'Could not save profile. $e';
+      setState(() => _error = message);
+      // Same reasoning as create_post_screen: a form-embedded error Text can
+      // be scrolled past on mobile and read as the save silently doing
+      // nothing. A SnackBar makes the failure unmissable.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.red, duration: const Duration(seconds: 6)),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
