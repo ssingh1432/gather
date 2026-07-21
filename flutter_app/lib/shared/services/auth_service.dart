@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/legal_constants.dart';
 import '../../core/supabase_client.dart';
 import 'analytics_service.dart';
 import 'beta_access_service.dart';
@@ -67,8 +68,28 @@ class AuthService {
   }
 
   /// Re-sends the signup confirmation email (rate-limited server-side).
+  /// With the "Confirm signup" template set to show `{{ .Token }}`, this
+  /// resends a fresh 6-digit code rather than a link.
   Future<void> resendSignupEmail(String email) =>
       _client.auth.resend(type: OtpType.signup, email: email.trim().toLowerCase());
+
+  /// Confirms the signup email code and establishes a session, entirely
+  /// in-app — no link to click, no leaving the app. Pairs with
+  /// `VerifyEmailScreen`. Requires the Supabase "Confirm signup" email
+  /// template to use `{{ .Token }}` (see project docs).
+  Future<AuthResponse> verifySignupEmailOtp(String email, String code) {
+    return _client.auth.verifyOTP(
+      type: OtpType.signup,
+      email: email.trim().toLowerCase(),
+      token: code.trim(),
+    );
+  }
+
+  /// Claims closed-beta access for whoever is currently signed in. Called
+  /// right after signUp() when a session exists immediately, and again
+  /// after `verifySignupEmailOtp` succeeds (that's the first moment a
+  /// session exists when email confirmation was required).
+  Future<bool> claimBetaAccessForCurrentUser() => _betaAccess.claimForCurrentUser();
 
   Future<AuthResponse> signIn(String email, String password) async {
     final normalizedEmail = email.trim().toLowerCase();
@@ -137,10 +158,14 @@ class AuthService {
       return await _client.auth.signUp(
         email: email,
         password: password,
-        data: {'username': username, if (phone != null) 'phone_number': phone},
-        emailRedirectTo: phone != null
-            ? 'https://eiquoab.xyz/verify-phone?phone=$phone'
-            : 'https://eiquoab.xyz/',
+        data: {
+          'username': username,
+          if (phone != null) 'phone_number': phone,
+          // Read by the handle_new_user DB trigger to stamp consent at
+          // account-creation time — works even when there's no session
+          // yet (confirmation-required path). See legal_constants.dart.
+          'privacy_policy_version': kPrivacyPolicyVersion,
+        },
       );
     } on AuthApiException catch (e) {
       if (e.code == 'over_email_send_rate_limit' || e.statusCode == '429') {

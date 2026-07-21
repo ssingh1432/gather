@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/legal_constants.dart';
 import '../../core/supabase_client.dart';
 import '../data/repositories.dart';
 
@@ -14,11 +15,6 @@ class DataPrivacyScreen extends StatefulWidget {
   @override
   State<DataPrivacyScreen> createState() => _DataPrivacyScreenState();
 }
-
-// Bump this whenever the privacy policy text changes; consent is recorded
-// against this version so we always know exactly what a user agreed to.
-const _kPrivacyPolicyVersion = '2026-07-19';
-const _kPrivacyPolicyUrl = 'https://eiquoab.xyz/privacy-policy/';
 
 class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
   final _repo = PrivacyRepository();
@@ -56,14 +52,14 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
   bool get _hasCurrentConsent =>
       _latestPolicyConsent != null &&
       _latestPolicyConsent!['granted'] == true &&
-      _latestPolicyConsent!['policy_version'] == _kPrivacyPolicyVersion;
+      _latestPolicyConsent!['policy_version'] == kPrivacyPolicyVersion;
 
   Future<void> _acceptPolicy() async {
     setState(() => _busy = true);
     try {
       await _repo.recordConsent(
         consentType: 'privacy_policy',
-        policyVersion: _kPrivacyPolicyVersion,
+        policyVersion: kPrivacyPolicyVersion,
         granted: true,
       );
       await _load();
@@ -179,7 +175,7 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
             children: [
               Text(
                 _hasCurrentConsent
-                    ? "You've accepted the current privacy policy (version $_kPrivacyPolicyVersion)."
+                    ? "You've accepted the current privacy policy (version $kPrivacyPolicyVersion)."
                     : 'You have not yet accepted the current privacy policy.',
               ),
               const SizedBox(height: 8),
@@ -187,12 +183,12 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   TextButton(
-                    onPressed: () => launchUrl(Uri.parse(_kPrivacyPolicyUrl), mode: LaunchMode.externalApplication),
+                    onPressed: () => launchUrl(Uri.parse(kPrivacyPolicyUrl), mode: LaunchMode.externalApplication),
                     child: const Text('Read privacy policy'),
                   ),
                   TextButton(
                     onPressed: () =>
-                        launchUrl(Uri.parse('https://eiquoab.xyz/terms/'), mode: LaunchMode.externalApplication),
+                        launchUrl(Uri.parse(kTermsOfServiceUrl), mode: LaunchMode.externalApplication),
                     child: const Text('Terms of Service'),
                   ),
                   if (!_hasCurrentConsent)

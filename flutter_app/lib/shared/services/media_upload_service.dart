@@ -54,6 +54,50 @@ class MediaUploadService {
 
   SupabaseClient get _client => SupabaseConfig.client;
 
+  /// Opening the image/video picker backgrounds the app; on resume, the
+  /// Supabase session's access token can be at or past expiry (or mid
+  /// auto-refresh) at the exact moment Publish fires the storage request.
+  /// Storage RLS on these buckets only has policies for the `authenticated`
+  /// role — a request that goes out unauthenticated gets a generic
+  /// "new row violates row-level security policy" 403, which is what shows
+  /// up as "Upload failed" even though the post row itself (via Postgrest,
+  /// which re-derives auth per request) went through fine.
+  ///
+  /// This proactively refreshes when the token is close to expiring, and
+  /// [_withAuthRetry] below does one forced-refresh-and-retry if a storage
+  /// call still comes back with a 403, so a single stale-token race never
+  /// surfaces as a user-facing failure.
+  Future<void> _ensureFreshSession() async {
+    final session = _client.auth.currentSession;
+    if (session == null) return;
+    final expiresAt = session.expiresAt;
+    if (expiresAt == null) return;
+    final secondsLeft = expiresAt - (DateTime.now().millisecondsSinceEpoch ~/ 1000);
+    if (secondsLeft < 60) {
+      try {
+        await _client.auth.refreshSession();
+      } catch (_) {
+        // Best-effort — if this fails, the upload call itself will surface
+        // whatever the real auth problem is.
+      }
+    }
+  }
+
+  /// Runs [action] (a storage upload), retrying exactly once after a forced
+  /// session refresh if it fails with a 403 (RLS violation / stale token).
+  Future<T> _withAuthRetry<T>(Future<T> Function() action) async {
+    await _ensureFreshSession();
+    try {
+      return await action();
+    } on StorageException catch (e) {
+      if (e.statusCode == '403') {
+        await _client.auth.refreshSession();
+        return await action();
+      }
+      rethrow;
+    }
+  }
+
   /// Prepares [image] for upload. On mobile this compresses to temp files;
   /// on Web it reads the raw bytes. See `media/post_image_preparer.dart`.
   Future<PreparedImageSet> preparePostImage(XFile image) async {
@@ -76,38 +120,42 @@ class MediaUploadService {
     required String postId,
     required PreparedPostVideo video,
   }) async {
-    final options = FileOptions(contentType: video.contentType, cacheControl: '31536000', upsert: true);
-    final storage = _client.storage.from(bucket);
-    final path = 'posts/$postId/video';
-    await video.uploadTo(storage, path, options);
-    return storage.getPublicUrl(path);
+    return _withAuthRetry(() async {
+      final options = FileOptions(contentType: video.contentType, cacheControl: '31536000', upsert: true);
+      final storage = _client.storage.from(bucket);
+      final path = 'posts/$postId/video';
+      await video.uploadTo(storage, path, options);
+      return storage.getPublicUrl(path);
+    });
   }
 
   Future<UploadedPostImage> uploadPostImage({
     required String postId,
     required PreparedImageSet image,
   }) async {
-    final options = FileOptions(
-      contentType: image.contentType,
-      cacheControl: '31536000',
-      upsert: true,
-    );
-    final storage = _client.storage.from(bucket);
-    final originalPath = 'posts/$postId/original';
-    final thumbPath = 'posts/$postId/thumb';
+    return _withAuthRetry(() async {
+      final options = FileOptions(
+        contentType: image.contentType,
+        cacheControl: '31536000',
+        upsert: true,
+      );
+      final storage = _client.storage.from(bucket);
+      final originalPath = 'posts/$postId/original';
+      final thumbPath = 'posts/$postId/thumb';
 
-    // Deterministic paths plus upsert make a failed publish retry-safe: the
-    // next attempt overwrites the same objects instead of orphaning
-    // duplicate files. Each PreparedPostImage decides for itself whether to
-    // call `.upload()` (mobile, File) or `.uploadBinary()` (Web, bytes) —
-    // this call site stays identical across platforms.
-    await image.original.uploadTo(storage, originalPath, options);
-    await image.thumbnail.uploadTo(storage, thumbPath, options);
+      // Deterministic paths plus upsert make a failed publish retry-safe:
+      // the next attempt overwrites the same objects instead of orphaning
+      // duplicate files. Each PreparedPostImage decides for itself whether
+      // to call `.upload()` (mobile, File) or `.uploadBinary()` (Web,
+      // bytes) — this call site stays identical across platforms.
+      await image.original.uploadTo(storage, originalPath, options);
+      await image.thumbnail.uploadTo(storage, thumbPath, options);
 
-    return UploadedPostImage(
-      originalUrl: storage.getPublicUrl(originalPath),
-      thumbnailUrl: storage.getPublicUrl(thumbPath),
-    );
+      return UploadedPostImage(
+        originalUrl: storage.getPublicUrl(originalPath),
+        thumbnailUrl: storage.getPublicUrl(thumbPath),
+      );
+    });
   }
 
   /// Uploads a profile avatar or cover photo to the `avatars` bucket, scoped
@@ -120,18 +168,20 @@ class MediaUploadService {
   }) async {
     await _assertWithinLimit(image, maxAvatarBytes, 'Profile image');
     final prepared = await preparer.preparePostImage(image);
-    final options = FileOptions(
-      contentType: prepared.contentType,
-      cacheControl: '31536000',
-      upsert: true,
-    );
-    final storage = _client.storage.from(avatarsBucket);
-    final path = '$userId/${kind.name}';
+    return _withAuthRetry(() async {
+      final options = FileOptions(
+        contentType: prepared.contentType,
+        cacheControl: '31536000',
+        upsert: true,
+      );
+      final storage = _client.storage.from(avatarsBucket);
+      final path = '$userId/${kind.name}';
 
-    // Only the original is needed for profile images; skip the thumbnail
-    // upload to save a storage call.
-    await prepared.original.uploadTo(storage, path, options);
-    return storage.getPublicUrl(path);
+      // Only the original is needed for profile images; skip the
+      // thumbnail upload to save a storage call.
+      await prepared.original.uploadTo(storage, path, options);
+      return storage.getPublicUrl(path);
+    });
   }
 
   /// Uploads a story's media to `{userId}/{storyId}` in the `story-media`
@@ -142,16 +192,18 @@ class MediaUploadService {
   /// for post images) to `{userId}/{storyId}_thumb`, so the story bar can
   /// show the actual photo instead of just the poster's avatar.
   Future<UploadedStoryImage> uploadStoryImage({required String userId, required String storyId, required PreparedImageSet image}) async {
-    final options = FileOptions(contentType: image.contentType, cacheControl: '86400', upsert: true);
-    final storage = _client.storage.from(storyBucket);
-    final path = '$userId/$storyId';
-    final thumbPath = '$userId/${storyId}_thumb';
-    await image.original.uploadTo(storage, path, options);
-    await image.thumbnail.uploadTo(storage, thumbPath, options);
-    return UploadedStoryImage(
-      originalUrl: storage.getPublicUrl(path),
-      thumbnailUrl: storage.getPublicUrl(thumbPath),
-    );
+    return _withAuthRetry(() async {
+      final options = FileOptions(contentType: image.contentType, cacheControl: '86400', upsert: true);
+      final storage = _client.storage.from(storyBucket);
+      final path = '$userId/$storyId';
+      final thumbPath = '$userId/${storyId}_thumb';
+      await image.original.uploadTo(storage, path, options);
+      await image.thumbnail.uploadTo(storage, thumbPath, options);
+      return UploadedStoryImage(
+        originalUrl: storage.getPublicUrl(path),
+        thumbnailUrl: storage.getPublicUrl(thumbPath),
+      );
+    });
   }
 
   /// Uploads a story video. There is no client-side video-frame extraction
@@ -159,11 +211,13 @@ class MediaUploadService {
   /// pipeline), so video stories fall back to the author's avatar in the
   /// story bar rather than a real frame from the clip.
   Future<String> uploadStoryVideo({required String userId, required String storyId, required PreparedPostVideo video}) async {
-    final options = FileOptions(contentType: video.contentType, cacheControl: '86400', upsert: true);
-    final storage = _client.storage.from(storyBucket);
-    final path = '$userId/$storyId';
-    await video.uploadTo(storage, path, options);
-    return storage.getPublicUrl(path);
+    return _withAuthRetry(() async {
+      final options = FileOptions(contentType: video.contentType, cacheControl: '86400', upsert: true);
+      final storage = _client.storage.from(storyBucket);
+      final path = '$userId/$storyId';
+      await video.uploadTo(storage, path, options);
+      return storage.getPublicUrl(path);
+    });
   }
 }
 

@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/legal_constants.dart';
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
 import '../../shared/providers/app_providers.dart';
 import '../../shared/utils/external_link.dart';
 import '../../shared/utils/password_validator.dart';
-import '../data/repositories.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key, this.redirect});
@@ -28,12 +28,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   bool _loading = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
-  bool _resending = false;
   bool _agreedToPolicy = false;
-  // Non-null once signup succeeds but the account still needs email
-  // confirmation (i.e. there's no session yet). Drives the "check your
-  // email" state below instead of a snackbar that's easy to miss.
-  String? _awaitingConfirmationFor;
 
   @override
   void dispose() {
@@ -102,21 +97,18 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
     setState(() => _loading = true);
     try {
-      await ref.read(authServiceProvider).signUp(mail, pass, username: name, phoneNumber: normalizedPhone);
+      final auth = ref.read(authServiceProvider);
+      await auth.signUp(mail, pass, username: name, phoneNumber: normalizedPhone);
       if (!mounted) return;
+
+      // Consent (privacy policy + terms) is now recorded server-side by
+      // the handle_new_user DB trigger at account-creation time — it no
+      // longer depends on a client session existing, so it can't be
+      // silently skipped by the confirmation-required path below.
 
       if (SupabaseConfig.currentUserId != null) {
         // Email confirmation is off (or this address was pre-confirmed) —
-        // there's already a session, so the person is logged in. Record
-        // consent now while we have an authenticated session; if
-        // confirmation is required instead, DataPrivacyScreen prompts for
-        // it after they first log in.
-        await PrivacyRepository().recordConsent(
-          consentType: 'privacy_policy',
-          policyVersion: '2026-07-19',
-          granted: true,
-        );
-        if (!mounted) return;
+        // there's already a session, so the person is logged in.
         if (normalizedPhone != null) {
           context.go('/verify-phone?phone=$normalizedPhone');
         } else {
@@ -126,9 +118,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           context.go('/');
         }
       } else {
-        // Show a clear, persistent "check your email" state instead of a
-        // snackbar the person might miss.
-        setState(() => _awaitingConfirmationFor = mail);
+        // Confirmation required — finish it in-app with a 6-digit email
+        // code instead of a link to click.
+        final phoneParam = normalizedPhone == null ? '' : '&phone=$normalizedPhone';
+        context.go('/verify-email?email=${Uri.encodeComponent(mail)}$phoneParam');
       }
     } catch (e) {
       if (mounted) {
@@ -139,74 +132,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
   }
 
-  Future<void> _resend() async {
-    final mail = _awaitingConfirmationFor;
-    if (mail == null) return;
-    setState(() => _resending = true);
-    try {
-      await ref.read(authServiceProvider).resendSignupEmail(mail);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Confirmation email resent.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not resend: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _resending = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final loginLocation = _loginLocation(widget.redirect);
-
-    if (_awaitingConfirmationFor != null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Check your email')),
-        body: ResponsiveCenter(
-          maxWidth: 420,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.mark_email_unread_outlined, size: 48),
-                const SizedBox(height: 16),
-                Text(
-                  'Confirm your email',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'We sent a confirmation link to ${_awaitingConfirmationFor!}. '
-                  'Open it on this device to activate your account — you\'ll be signed in automatically, '
-                  'no need to come back and log in.',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                OutlinedButton(
-                  onPressed: _resending ? null : _resend,
-                  child: _resending
-                      ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('Resend email'),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => context.go(loginLocation),
-                  child: const Text('Back to login'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create account')),
@@ -302,14 +230,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         text: 'Privacy Policy',
                         style: const TextStyle(color: Colors.teal, decoration: TextDecoration.underline),
                         recognizer: TapGestureRecognizer()
-                          ..onTap = () => openExternalLink(context, 'https://eiquoab.xyz/privacy-policy/'),
+                          ..onTap = () => openExternalLink(context, kPrivacyPolicyUrl),
                       ),
                       const TextSpan(text: ' and '),
                       TextSpan(
                         text: 'Terms of Service',
                         style: const TextStyle(color: Colors.teal, decoration: TextDecoration.underline),
                         recognizer: TapGestureRecognizer()
-                          ..onTap = () => openExternalLink(context, 'https://eiquoab.xyz/terms/'),
+                          ..onTap = () => openExternalLink(context, kTermsOfServiceUrl),
                       ),
                     ],
                   ),
