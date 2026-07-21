@@ -461,16 +461,156 @@ class PostRepository {
 class ModerationRepository {
   SupabaseClient get _c => SupabaseConfig.client;
   Future<void> report(Map<String, dynamic> payload) => _c.from('reports').insert(payload);
-  Future<List<Map<String, dynamic>>> openReports() async => ((await _c.from('reports').select().eq('status', 'open')) as List).cast<Map<String, dynamic>>();
+  Future<List<Map<String, dynamic>>> openReports() async => ((await _c.from('reports').select().eq('status', 'open').order('created_at')) as List).cast<Map<String, dynamic>>();
   Future<void> removePost(String postId, {String? reportId}) => _c.rpc('soft_remove_post', params: {
         'post_id': postId,
         'report_id': reportId,
       });
-  Future<void> suspendUser(String userId, {String? reportId}) => _c.rpc('suspend_user', params: {
+  Future<void> suspendUser(String userId, {String? reportId, int? durationDays, String? note}) => _c.rpc('suspend_user', params: {
         'target_user_id': userId,
         'report_id': reportId,
+        'note': note,
+        'duration_days': durationDays,
       });
   Future<void> resolveReport(String reportId) => _c.rpc('resolve_report', params: {'report_id': reportId});
+
+  // ---- Phase 6: Community Moderation ----
+
+  /// The 14 required report categories, in display order.
+  static const List<String> reportCategories = [
+    'spam',
+    'fake_account',
+    'harassment',
+    'hate_speech',
+    'violence',
+    'terrorism',
+    'child_abuse',
+    'adult_content',
+    'copyright',
+    'scam',
+    'impersonation',
+    'self_harm',
+    'drugs',
+    'other',
+  ];
+
+  static const Map<String, String> reportCategoryLabels = {
+    'spam': 'Spam',
+    'fake_account': 'Fake account',
+    'harassment': 'Harassment',
+    'hate_speech': 'Hate speech',
+    'violence': 'Violence',
+    'terrorism': 'Terrorism',
+    'child_abuse': 'Child abuse',
+    'adult_content': 'Adult content',
+    'copyright': 'Copyright',
+    'scam': 'Scam',
+    'impersonation': 'Impersonation',
+    'self_harm': 'Self harm',
+    'drugs': 'Drugs',
+    'other': 'Other',
+  };
+
+  Future<void> issueWarning(String userId, {String? reportId, String? note}) => _c.rpc('issue_warning', params: {
+        'target_user_id': userId,
+        'report_id': reportId,
+        'note': note,
+      });
+
+  Future<void> addStrike(String userId, {String? reportId, String? note, int severity = 1}) => _c.rpc('add_strike', params: {
+        'target_user_id': userId,
+        'report_id': reportId,
+        'note': note,
+        'severity': severity,
+      });
+
+  Future<void> banUser(String userId, {String? reportId, String? note}) => _c.rpc('ban_user', params: {
+        'target_user_id': userId,
+        'report_id': reportId,
+        'note': note,
+      });
+
+  Future<void> reinstateUser(String userId, {String? note}) => _c.rpc('reinstate_user', params: {
+        'target_user_id': userId,
+        'note': note,
+      });
+
+  Future<String> submitAppeal(String actionId, String message) async =>
+      (await _c.rpc('submit_appeal', params: {'action_id': actionId, 'message': message})).toString();
+
+  Future<void> reviewAppeal(String appealId, String decision, {String? resolutionNote}) => _c.rpc('review_appeal', params: {
+        'appeal_id': appealId,
+        'decision': decision,
+        'resolution_note': resolutionNote,
+      });
+
+  Future<List<Map<String, dynamic>>> pendingAppeals() async =>
+      ((await _c.from('moderation_appeals').select('*, users!moderation_appeals_user_id_fkey(username, email), moderation_actions!moderation_appeals_action_id_fkey(action, note, created_at)').eq('status', 'pending').order('created_at')) as List).cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> myAppeals() async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return const [];
+    return ((await _c.from('moderation_appeals').select().eq('user_id', uid).order('created_at', ascending: false)) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Actions taken against the current user (so they know what they can appeal).
+  Future<List<Map<String, dynamic>>> myModerationActions() async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return const [];
+    return ((await _c.from('moderation_actions').select().eq('target_user_id', uid).order('created_at', ascending: false)) as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<String> addModeratorNote({required String targetType, required String targetId, required String note}) async =>
+      (await _c.rpc('add_moderator_note', params: {'target_type': targetType, 'target_id': targetId, 'note': note})).toString();
+
+  Future<List<Map<String, dynamic>>> moderatorNotesFor({String? targetUserId, String? targetPostId}) async {
+    var q = _c.from('moderator_notes').select();
+    if (targetUserId != null) q = q.eq('target_user_id', targetUserId);
+    if (targetPostId != null) q = q.eq('target_post_id', targetPostId);
+    return ((await q.order('created_at', ascending: false)) as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<String> addEvidence({required String reportId, required String fileUrl, String? fileType, String? description}) async =>
+      (await _c.rpc('add_evidence', params: {
+        'report_id': reportId,
+        'file_url': fileUrl,
+        'file_type': fileType,
+        'description': description,
+      })).toString();
+
+  Future<List<Map<String, dynamic>>> evidenceFor(String reportId) async =>
+      ((await _c.from('moderation_evidence').select().eq('report_id', reportId).order('created_at')) as List).cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> keywordFilters() async =>
+      ((await _c.from('keyword_filters').select().eq('is_active', true).order('created_at', ascending: false)) as List).cast<Map<String, dynamic>>();
+
+  Future<void> addKeywordFilter({required String keyword, String category = 'other', String severity = 'flag'}) => _c.rpc('add_keyword_filter', params: {
+        'keyword': keyword,
+        'category': category,
+        'severity': severity,
+      });
+
+  Future<void> removeKeywordFilter(String filterId) => _c.rpc('remove_keyword_filter', params: {'filter_id': filterId});
+
+  Future<List<Map<String, dynamic>>> flaggedMedia() async =>
+      ((await _c.from('media_moderation_flags').select().eq('status', 'flagged').order('created_at')) as List).cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> pendingMediaQueue() async =>
+      ((await _c.from('media_moderation_flags').select().eq('status', 'pending').order('created_at')) as List).cast<Map<String, dynamic>>();
+
+  Future<void> recordMediaModerationResult(String flagId, String status, {String? provider}) => _c.rpc('record_media_moderation_result', params: {
+        'flag_id': flagId,
+        'new_status': status,
+        'provider': provider,
+      });
+
+  Future<Map<String, dynamic>> dashboardSummary() async {
+    final rows = await _c.rpc('moderation_dashboard_summary');
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty
+        ? {'open_reports': 0, 'pending_appeals': 0, 'flagged_media': 0, 'suspended_users': 0, 'banned_users': 0}
+        : list.first;
+  }
 }
 
 class BetaOpsRepository {

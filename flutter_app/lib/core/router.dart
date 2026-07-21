@@ -21,6 +21,7 @@ import '../features/legal/admin_legal_dashboard_screen.dart';
 import '../features/legal/file_complaint_screen.dart';
 import '../features/legal/my_legal_screen.dart';
 import '../features/media/media_viewer_screen.dart';
+import '../features/moderation/my_moderation_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/posts/create_post_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
@@ -157,6 +158,7 @@ final appRouter = GoRouter(
       ),
     ),
     GoRoute(path: '/admin', builder: (_, __) => const AdminModerationScreen()),
+    GoRoute(path: '/my-moderation', builder: (_, __) => const MyModerationScreen()),
     GoRoute(path: '/data-privacy', builder: (_, __) => const DataPrivacyScreen()),
     GoRoute(path: '/muted-accounts', builder: (_, __) => const MuteListScreen()),
     GoRoute(
@@ -265,6 +267,7 @@ const _protectedRoutes = {
   '/notifications',
   '/report',
   '/admin',
+  '/my-moderation',
   '/data-privacy',
   '/muted-accounts',
   '/file-complaint',

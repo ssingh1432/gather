@@ -6,6 +6,7 @@ import '../../core/responsive.dart';
 import '../../shared/utils/external_link.dart';
 import '../data/repositories.dart';
 import '../legal/my_legal_screen.dart';
+import '../moderation/my_moderation_screen.dart';
 import '../privacy/data_privacy_screen.dart';
 import '../privacy/mute_list_screen.dart';
 import 'blocked_accounts_screen.dart';
@@ -268,6 +269,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: const Text('File or track a complaint, illegal content report, or appeal'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyLegalScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.shield_outlined),
+              title: const Text('Moderation history'),
+              subtitle: const Text('Warnings, strikes, suspensions or bans on your account — and appeals'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyModerationScreen())),
             ),
 
             const _SectionHeader('Legal & Policies'),

@@ -21,6 +21,7 @@ class ReportScreen extends StatefulWidget {
 
 class _ReportScreenState extends State<ReportScreen> {
   final _reason = TextEditingController();
+  String? _category;
   bool _loading = false;
   bool _submitted = false;
 
@@ -31,13 +32,16 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Future<void> _submit() async {
-    final reason = _reason.text.trim();
-    if (reason.isEmpty) {
+    if (_category == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please describe the issue.')),
+        const SnackBar(content: Text('Please choose a reason.')),
       );
       return;
     }
+
+    final reason = _reason.text.trim().isEmpty
+        ? ModerationRepository.reportCategoryLabels[_category!]!
+        : _reason.text.trim();
 
     final reporterId = SupabaseConfig.currentUserId;
     if (reporterId == null) {
@@ -67,6 +71,7 @@ class _ReportScreenState extends State<ReportScreen> {
         'target_post_id': isPostReport ? widget.postId : null,
         'target_user_id': isPostReport ? null : widget.userId,
         'reason': reason,
+        'category': _category,
         'status': 'open',
       });
       if (mounted) setState(() => _submitted = true);
@@ -100,11 +105,24 @@ class _ReportScreenState extends State<ReportScreen> {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Tell us what\'s wrong. Our moderation team will review this.'),
+                  const Text('What\'s wrong? Our moderation team will review this.'),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: ModerationRepository.reportCategories.map((c) {
+                      final selected = _category == c;
+                      return ChoiceChip(
+                        label: Text(ModerationRepository.reportCategoryLabels[c]!),
+                        selected: selected,
+                        onSelected: (_) => setState(() => _category = c),
+                      );
+                    }).toList(),
+                  ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _reason,
-                    decoration: const InputDecoration(labelText: 'Reason'),
+                    decoration: const InputDecoration(labelText: 'Additional detail (optional)'),
                     maxLines: 4,
                   ),
                   const SizedBox(height: 20),
