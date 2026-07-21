@@ -144,7 +144,7 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
               TextField(controller: keywordCtrl, decoration: const InputDecoration(labelText: 'Keyword')),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: category,
+                initialValue: category,
                 decoration: const InputDecoration(labelText: 'Category'),
                 items: ModerationRepository.reportCategories
                     .map((c) => DropdownMenuItem(value: c, child: Text(ModerationRepository.reportCategoryLabels[c]!)))
@@ -153,7 +153,7 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: severity,
+                initialValue: severity,
                 decoration: const InputDecoration(labelText: 'Severity'),
                 items: const [
                   DropdownMenuItem(value: 'flag', child: Text('Flag (auto-report for review)')),
