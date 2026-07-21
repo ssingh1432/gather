@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
 import '../models/models.dart';
+import '../services/media/web_safe_pick.dart';
 import '../services/media_upload_service.dart';
 import '../../features/data/repositories.dart';
 import 'reusables.dart';
@@ -56,6 +57,8 @@ class _StoryBarState extends State<StoryBar> {
         ? await picker.pickVideo(source: source, maxDuration: const Duration(seconds: 60))
         : await picker.pickImage(source: source, imageQuality: 85);
     if (picked == null || !mounted) return;
+    final safePicked = await materializeIfWeb(picked);
+    if (!mounted) return;
 
     // Music is optional for either photo or video stories.
     final track = await showModalBottomSheet<StoryAudioTrack?>(
@@ -88,10 +91,10 @@ class _StoryBarState extends State<StoryBar> {
       final String url;
       String? thumbnailUrl;
       if (mediaType == 'video') {
-        final prepared = await upload.preparePostVideo(picked);
+        final prepared = await upload.preparePostVideo(safePicked);
         url = await upload.uploadStoryVideo(userId: uid, storyId: storyId, video: prepared);
       } else {
-        final prepared = await upload.preparePostImage(picked);
+        final prepared = await upload.preparePostImage(safePicked);
         final uploaded = await upload.uploadStoryImage(userId: uid, storyId: storyId, image: prepared);
         url = uploaded.originalUrl;
         thumbnailUrl = uploaded.thumbnailUrl;

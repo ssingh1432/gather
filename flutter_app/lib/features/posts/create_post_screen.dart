@@ -9,6 +9,7 @@ import '../../shared/models/models.dart';
 import '../../shared/services/analytics_service.dart';
 import '../../shared/services/beta_error_logging_service.dart';
 import '../../shared/services/link_preview_service.dart';
+import '../../shared/services/media/web_safe_pick.dart';
 import '../../shared/utils/feelings.dart';
 import '../../shared/widgets/reusables.dart';
 import '../data/repositories.dart';
@@ -436,8 +437,9 @@ class _P extends State<CreatePostScreen> {
                   onPressed: () async {
                     final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
                     if (picked == null) return;
+                    final safe = await materializeIfWeb(picked);
                     setState(() {
-                      image = picked;
+                      image = safe;
                       video = null; // a post carries at most one media item
                     });
                   },
@@ -448,8 +450,9 @@ class _P extends State<CreatePostScreen> {
                   onPressed: () async {
                     final picked = await ImagePicker().pickVideo(source: ImageSource.gallery, maxDuration: const Duration(minutes: 5));
                     if (picked == null) return;
+                    final safe = await materializeIfWeb(picked);
                     setState(() {
-                      video = picked;
+                      video = safe;
                       image = null; // a post carries at most one media item
                     });
                   },

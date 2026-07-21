@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
 import '../../shared/providers/app_providers.dart';
+import '../../shared/services/media/web_safe_pick.dart';
 import '../../shared/services/media_upload_service.dart';
 import '../../shared/widgets/profile_view.dart';
 import '../data/repositories.dart';
@@ -103,11 +104,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   Future<void> _pickImage(ProfileImageKind kind) async {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null) return;
+    final safe = await materializeIfWeb(picked);
     setState(() {
       if (kind == ProfileImageKind.avatar) {
-        _avatarPick = picked;
+        _avatarPick = safe;
       } else {
-        _coverPick = picked;
+        _coverPick = safe;
       }
     });
   }
