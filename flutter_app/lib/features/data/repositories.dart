@@ -460,7 +460,13 @@ class PostRepository {
 
 class ModerationRepository {
   SupabaseClient get _c => SupabaseConfig.client;
-  Future<void> report(Map<String, dynamic> payload) => _c.from('reports').insert(payload);
+  /// Returns the new report's id so a caller (e.g. the report form) can
+  /// immediately attach evidence via [uploadAndAddEvidence], which FKs to
+  /// this row.
+  Future<String> report(Map<String, dynamic> payload) async {
+    final row = await _c.from('reports').insert(payload).select('id').single();
+    return row['id'].toString();
+  }
   Future<List<Map<String, dynamic>>> openReports() async => ((await _c.from('reports').select().eq('status', 'open').order('created_at')) as List).cast<Map<String, dynamic>>();
   Future<void> removePost(String postId, {String? reportId}) => _c.rpc('soft_remove_post', params: {
         'post_id': postId,
@@ -581,6 +587,22 @@ class ModerationRepository {
   Future<List<Map<String, dynamic>>> evidenceFor(String reportId) async =>
       ((await _c.from('moderation_evidence').select().eq('report_id', reportId).order('created_at')) as List).cast<Map<String, dynamic>>();
 
+  /// Uploads an evidence screenshot to the private `moderation-evidence`
+  /// bucket and records it via [addEvidence]. `file_url` on the row stores
+  /// the storage **path** (bucket is private, unlike post-media/avatars),
+  /// so viewing it later goes through [evidenceSignedUrl].
+  Future<void> uploadAndAddEvidence({
+    required String reportId,
+    required String uploaderId,
+    required XFile image,
+    String? description,
+  }) async {
+    final path = await MediaUploadService().uploadEvidenceImage(reportId: reportId, uploaderId: uploaderId, image: image);
+    await addEvidence(reportId: reportId, fileUrl: path, fileType: 'image', description: description);
+  }
+
+  Future<String> evidenceSignedUrl(String path) => MediaUploadService().createEvidenceSignedUrl(path);
+
   Future<List<Map<String, dynamic>>> keywordFilters() async =>
       ((await _c.from('keyword_filters').select().eq('is_active', true).order('created_at', ascending: false)) as List).cast<Map<String, dynamic>>();
 
@@ -603,6 +625,30 @@ class ModerationRepository {
         'new_status': status,
         'provider': provider,
       });
+
+  /// Mod-facing user search — unlike [FeedRepository.searchUsersByUsername]
+  /// (used for the tag-friends picker), this pulls the fields a moderator
+  /// actually needs to act on a user directly: strike count, current
+  /// status, and suspension expiry. Powers the "Look up user" tab, which
+  /// closes the gap where mods could previously only warn/strike/suspend/
+  /// ban from inside an open report.
+  Future<List<Map<String, dynamic>>> lookupUsers(String query, {int limit = 20}) async {
+    if (query.trim().isEmpty) return const [];
+    final rows = await _c
+        .from('users')
+        .select('id, username, email, profile_photo_url, role, status, strike_count, suspended_until')
+        .ilike('username', '%${query.trim()}%')
+        .limit(limit);
+    return List<Map<String, dynamic>>.from(rows as List);
+  }
+
+  /// Single-user status lookup by id (vs. [lookupUsers], which searches by
+  /// username) — used for the strike-count badge next to a reported user.
+  Future<Map<String, dynamic>?> userStatus(String userId) async {
+    final rows = await _c.from('users').select('id, strike_count, status').eq('id', userId).limit(1);
+    final list = List<Map<String, dynamic>>.from(rows as List);
+    return list.isEmpty ? null : list.first;
+  }
 
   Future<Map<String, dynamic>> dashboardSummary() async {
     final rows = await _c.rpc('moderation_dashboard_summary');

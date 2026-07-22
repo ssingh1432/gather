@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
 import '../data/repositories.dart';
@@ -24,11 +25,42 @@ class _ReportScreenState extends State<ReportScreen> {
   String? _category;
   bool _loading = false;
   bool _submitted = false;
+  XFile? _evidenceImage;
+  String? _lastReportId;
+  bool _evidenceUploading = false;
+  bool _evidenceUploadFailed = false;
 
   @override
   void dispose() {
     _reason.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickEvidence() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (picked != null && mounted) setState(() => _evidenceImage = picked);
+  }
+
+  /// Uploads the picked screenshot after the report row itself exists
+  /// (evidence rows FK to `reports.id`, so this must run second). A failure
+  /// here doesn't roll back the report — the report was the point, the
+  /// screenshot is a bonus a mod can ask the reporter to resend if needed.
+  Future<void> _uploadEvidenceIfAny(String reportId) async {
+    if (_evidenceImage == null) return;
+    final uploaderId = SupabaseConfig.currentUserId;
+    if (uploaderId == null) return;
+    setState(() => _evidenceUploading = true);
+    try {
+      await ModerationRepository().uploadAndAddEvidence(
+        reportId: reportId,
+        uploaderId: uploaderId,
+        image: _evidenceImage!,
+      );
+    } catch (_) {
+      if (mounted) setState(() => _evidenceUploadFailed = true);
+    } finally {
+      if (mounted) setState(() => _evidenceUploading = false);
+    }
   }
 
   Future<void> _submit() async {
@@ -65,7 +97,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
     setState(() => _loading = true);
     try {
-      await ModerationRepository().report({
+      final reportId = await ModerationRepository().report({
         'reporter_id': reporterId,
         'target_type': isPostReport ? 'post' : 'user',
         'target_post_id': isPostReport ? widget.postId : null,
@@ -74,7 +106,9 @@ class _ReportScreenState extends State<ReportScreen> {
         'category': _category,
         'status': 'open',
       });
+      _lastReportId = reportId;
       if (mounted) setState(() => _submitted = true);
+      await _uploadEvidenceIfAny(reportId);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not submit report: $e')));
@@ -95,6 +129,27 @@ class _ReportScreenState extends State<ReportScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('Thanks — your report has been submitted for review.'),
+                  if (_evidenceImage != null) ...[
+                    const SizedBox(height: 12),
+                    if (_evidenceUploading)
+                      const Row(children: [
+                        SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                        SizedBox(width: 8),
+                        Text('Uploading attached screenshot…'),
+                      ])
+                    else if (_evidenceUploadFailed)
+                      Row(
+                        children: [
+                          const Expanded(child: Text('Screenshot didn\'t upload — you can still add it later.', style: TextStyle(color: Colors.orange))),
+                          TextButton(
+                            onPressed: _lastReportId == null ? null : () => _uploadEvidenceIfAny(_lastReportId!),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      )
+                    else
+                      const Text('Screenshot attached.', style: TextStyle(color: Colors.green)),
+                  ],
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () => context.pop(),
@@ -124,6 +179,12 @@ class _ReportScreenState extends State<ReportScreen> {
                     controller: _reason,
                     decoration: const InputDecoration(labelText: 'Additional detail (optional)'),
                     maxLines: 4,
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: _loading ? null : _pickEvidence,
+                    icon: const Icon(Icons.attach_file, size: 18),
+                    label: Text(_evidenceImage == null ? 'Attach a screenshot (optional)' : 'Screenshot selected — tap to change'),
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton(

@@ -34,6 +34,7 @@ class MediaUploadService {
   static const String bucket = 'post-media';
   static const String avatarsBucket = 'avatars';
   static const String storyBucket = 'story-media';
+  static const String evidenceBucket = 'moderation-evidence';
 
   // Mirrors the file_size_limit set on each Supabase Storage bucket, so we
   // can reject an oversized pick instantly instead of letting the user
@@ -43,6 +44,7 @@ class MediaUploadService {
   // client can always be bypassed.
   static const int maxPostMediaBytes = 100 * 1024 * 1024; // 100MB — post-media, story-media
   static const int maxAvatarBytes = 5 * 1024 * 1024; // 5MB — avatars
+  static const int maxEvidenceBytes = 20 * 1024 * 1024; // 20MB — moderation-evidence
 
   static Future<void> _assertWithinLimit(XFile file, int maxBytes, String label) async {
     final size = await file.length();
@@ -204,6 +206,37 @@ class MediaUploadService {
         thumbnailUrl: storage.getPublicUrl(thumbPath),
       );
     });
+  }
+
+  /// Uploads a report-evidence screenshot to `{reportId}/{uploaderId}_{ts}.{ext}`
+  /// in the private `moderation-evidence` bucket. Unlike the other upload
+  /// methods, this bucket is NOT public (evidence can contain sensitive
+  /// content), so this returns the storage **path**, not a public URL — the
+  /// caller must go through [createEvidenceSignedUrl] to actually view it,
+  /// which storage RLS restricts to the reporter and admins/mods (matching
+  /// the moderation_evidence table's own RLS from migration 022).
+  Future<String> uploadEvidenceImage({
+    required String reportId,
+    required String uploaderId,
+    required XFile image,
+  }) async {
+    await _assertWithinLimit(image, maxEvidenceBytes, 'Evidence image');
+    final prepared = await preparer.preparePostImage(image);
+    return _withAuthRetry(() async {
+      final options = FileOptions(contentType: prepared.contentType, cacheControl: '3600', upsert: false);
+      final storage = _client.storage.from(evidenceBucket);
+      final ext = prepared.contentType.contains('png') ? 'png' : 'jpg';
+      final path = '$reportId/${uploaderId}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      await prepared.original.uploadTo(storage, path, options);
+      return path;
+    });
+  }
+
+  /// Short-lived signed URL for viewing a private evidence object. RLS on
+  /// storage.objects (migration 023) is what actually enforces who is
+  /// allowed to succeed here — this just requests the URL.
+  Future<String> createEvidenceSignedUrl(String path) async {
+    return _withAuthRetry(() => _client.storage.from(evidenceBucket).createSignedUrl(path, 600));
   }
 
   /// Uploads a story video. There is no client-side video-frame extraction
