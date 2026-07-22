@@ -43,6 +43,7 @@ class _P extends State<CreatePostScreen> {
   String? _pendingPostId;
   bool _published = false;
   FeelingOption? _feeling;
+  bool _isSensitive = false;
 
   PostModel? _quotedPost;
   bool _loadingQuote = false;
@@ -186,6 +187,7 @@ class _P extends State<CreatePostScreen> {
         'link_preview_description': _linkPreview?.description,
         'link_preview_image_url': _linkPreview?.imageUrl,
         'link_preview_site_name': _linkPreview?.siteName,
+        'is_sensitive': _isSensitive,
       }))['id'].toString();
 
       if (video != null) {
@@ -468,6 +470,17 @@ class _P extends State<CreatePostScreen> {
                   onPressed: _pickFriends,
                   icon: const Icon(Icons.person_add_alt_1_outlined),
                   label: Text(_taggedFriends.isEmpty ? 'Tag friends' : 'Tagged ${_taggedFriends.length}'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => setState(() => _isSensitive = !_isSensitive),
+                  style: _isSensitive
+                      ? OutlinedButton.styleFrom(
+                          foregroundColor: Theme.of(context).colorScheme.error,
+                          side: BorderSide(color: Theme.of(context).colorScheme.error),
+                        )
+                      : null,
+                  icon: Icon(_isSensitive ? Icons.warning_amber_rounded : Icons.warning_amber),
+                  label: const Text('Sensitive content'),
                 ),
               ],
             ),

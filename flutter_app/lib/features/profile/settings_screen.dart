@@ -40,6 +40,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _showReadReceipts = true;
   String _searchVisibility = 'everyone';
   bool _showLastSeen = true;
+  bool _safeSearchEnabled = true;
+  bool _childSafetyMode = false;
   Map<String, dynamic> _notifications = const {};
 
   String? get _uid => SupabaseConfig.currentUserId;
@@ -66,6 +68,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _showReadReceipts = (profile['show_read_receipts'] as bool?) ?? true;
           _searchVisibility = (profile['search_visibility'] as String?) ?? 'everyone';
           _showLastSeen = (profile['show_last_seen'] as bool?) ?? true;
+          _safeSearchEnabled = (profile['safe_search_enabled'] as bool?) ?? true;
+          _childSafetyMode = (profile['child_safety_mode'] as bool?) ?? false;
           _notifications = Map<String, dynamic>.from((profile['notification_settings'] as Map?) ?? {});
         });
       }
@@ -260,6 +264,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: const Text('Restricted accounts'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RestrictedAccountsScreen())),
+            ),
+            SwitchListTile(
+              secondary: const Icon(Icons.visibility_off_outlined),
+              title: const Text('Safe search'),
+              subtitle: const Text('Hide posts marked as sensitive content from your feed'),
+              value: _safeSearchEnabled,
+              onChanged: _childSafetyMode
+                  ? null
+                  : (v) {
+                      setState(() => _safeSearchEnabled = v);
+                      _patch({'safe_search_enabled': v});
+                    },
+            ),
+            SwitchListTile(
+              secondary: const Icon(Icons.family_restroom),
+              title: const Text('Child safety mode'),
+              subtitle: const Text('Locks safe search on and limits messages to friends only'),
+              value: _childSafetyMode,
+              onChanged: (v) async {
+                await _patch({'child_safety_mode': v});
+                // The server trigger may also flip safe_search_enabled and
+                // message_privacy when turning this on — resync from truth
+                // rather than guessing what it did client-side.
+                await _load();
+              },
             ),
 
             const _SectionHeader('Data & Privacy'),

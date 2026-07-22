@@ -72,6 +72,7 @@ class PostModel {
   final String? linkPreviewImageUrl;
   final String? linkPreviewSiteName;
   final String visibility;
+  final bool isSensitive;
 
   PostModel({
     required this.id,
@@ -108,6 +109,7 @@ class PostModel {
     this.linkPreviewImageUrl,
     this.linkPreviewSiteName,
     this.visibility = 'public',
+    this.isSensitive = false,
   });
 
   factory PostModel.fromMap(Map<String, dynamic> map) {
@@ -151,6 +153,7 @@ class PostModel {
       linkPreviewImageUrl: map['link_preview_image_url'] as String?,
       linkPreviewSiteName: map['link_preview_site_name'] as String?,
       visibility: map['visibility'] as String? ?? 'public',
+      isSensitive: map['is_sensitive'] == true,
     );
   }
 
@@ -194,6 +197,7 @@ class PostModel {
         linkPreviewImageUrl: linkPreviewImageUrl,
         linkPreviewSiteName: linkPreviewSiteName,
         visibility: visibility,
+        isSensitive: isSensitive,
       );
 
   String? get displayImageUrl => thumbnailUrl ?? _derivedThumbnailUrl ?? imageUrl;

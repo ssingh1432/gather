@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -347,7 +348,9 @@ class PostCard extends StatelessWidget {
           if (post.displayImageUrl != null || post.isVideo)
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: _PostMedia(post: post, liked: liked, onLike: onLike),
+              child: post.isSensitive
+                  ? _SensitiveContentGate(child: _PostMedia(post: post, liked: liked, onLike: onLike))
+                  : _PostMedia(post: post, liked: liked, onLike: onLike),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
@@ -380,6 +383,51 @@ class PostCard extends StatelessWidget {
 /// controller per visible video in a scrolling list is a real memory/perf
 /// risk, so the feed shows a lightweight static placeholder and only pays
 /// for video playback once the person actually opens the full viewer.
+/// Blurs whatever [child] is (media, in practice) behind a "Sensitive
+/// content" notice until tapped — the same tap-to-reveal contract as
+/// Twitter/X's content warnings. Safe search filters these posts out of
+/// the feed entirely server-side; this gate is what everyone else sees.
+class _SensitiveContentGate extends StatefulWidget {
+  const _SensitiveContentGate({required this.child});
+  final Widget child;
+
+  @override
+  State<_SensitiveContentGate> createState() => _SensitiveContentGateState();
+}
+
+class _SensitiveContentGateState extends State<_SensitiveContentGate> {
+  bool _revealed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_revealed) return widget.child;
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: () => setState(() => _revealed = true),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: IgnorePointer(child: widget.child),
+          ),
+          Container(color: Colors.black.withValues(alpha: 0.25)),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.white, size: 28),
+              const SizedBox(height: 6),
+              const Text('Sensitive content', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text('Tap to view', style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PostMedia extends StatefulWidget {
   const _PostMedia({required this.post, required this.liked, required this.onLike});
   final PostModel post;
