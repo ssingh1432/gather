@@ -9,6 +9,7 @@ import '../legal/my_legal_screen.dart';
 import '../moderation/my_moderation_screen.dart';
 import '../privacy/data_privacy_screen.dart';
 import '../privacy/mute_list_screen.dart';
+import '../privacy/restricted_accounts_screen.dart';
 import 'blocked_accounts_screen.dart';
 
 /// Full settings screen: privacy/audience controls, notification
@@ -253,6 +254,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: const Text('Muted accounts'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MuteListScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.shield_outlined),
+              title: const Text('Restricted accounts'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RestrictedAccountsScreen())),
             ),
 
             const _SectionHeader('Data & Privacy'),

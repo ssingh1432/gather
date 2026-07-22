@@ -85,6 +85,20 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   List<CommentModel> _repliesTo(String commentId) => _comments.where((c) => c.parentCommentId == commentId).toList();
 
+  /// Only the post owner sees the control that calls this — enforced again
+  /// server-side by set_comment_hidden regardless.
+  Future<void> _toggleCommentHidden(CommentModel comment) async {
+    try {
+      await repo.setCommentHidden(comment.id, !comment.isHidden);
+      final comments = await repo.comments(widget.postId);
+      if (mounted) setState(() => _comments = comments);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not update this comment. Please try again.')));
+      }
+    }
+  }
+
   void _startReply(CommentModel comment) {
     setState(() => _replyingTo = comment);
     _focusNode.requestFocus();
@@ -192,6 +206,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                       comment: comment,
                                       replies: _repliesTo(comment.id),
                                       onReply: _startReply,
+                                      isPostOwner: _post?.authorId == SupabaseConfig.currentUserId,
+                                      onToggleHidden: _toggleCommentHidden,
                                     ),
                               ],
                             ),
@@ -247,10 +263,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 }
 
 class _CommentThread extends StatefulWidget {
-  const _CommentThread({required this.comment, required this.replies, required this.onReply});
+  const _CommentThread({
+    required this.comment,
+    required this.replies,
+    required this.onReply,
+    required this.isPostOwner,
+    required this.onToggleHidden,
+  });
   final CommentModel comment;
   final List<CommentModel> replies;
   final void Function(CommentModel comment) onReply;
+  final bool isPostOwner;
+  final void Function(CommentModel comment) onToggleHidden;
 
   @override
   State<_CommentThread> createState() => _CommentThreadState();
@@ -267,7 +291,12 @@ class _CommentThreadState extends State<_CommentThread> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _CommentTile(comment: widget.comment, onReply: () => widget.onReply(widget.comment)),
+          _CommentTile(
+            comment: widget.comment,
+            onReply: () => widget.onReply(widget.comment),
+            isPostOwner: widget.isPostOwner,
+            onToggleHidden: widget.onToggleHidden,
+          ),
           if (replyCount > 0)
             Padding(
               padding: const EdgeInsets.only(left: 40),
@@ -282,7 +311,13 @@ class _CommentThreadState extends State<_CommentThread> {
               padding: const EdgeInsets.only(left: 32),
               child: Column(
                 children: [
-                  for (final reply in widget.replies) _CommentTile(comment: reply, onReply: () => widget.onReply(reply)),
+                  for (final reply in widget.replies)
+                    _CommentTile(
+                      comment: reply,
+                      onReply: () => widget.onReply(reply),
+                      isPostOwner: widget.isPostOwner,
+                      onToggleHidden: widget.onToggleHidden,
+                    ),
                 ],
               ),
             ),
@@ -293,9 +328,16 @@ class _CommentThreadState extends State<_CommentThread> {
 }
 
 class _CommentTile extends StatelessWidget {
-  const _CommentTile({required this.comment, required this.onReply});
+  const _CommentTile({
+    required this.comment,
+    required this.onReply,
+    this.isPostOwner = false,
+    this.onToggleHidden,
+  });
   final CommentModel comment;
   final VoidCallback onReply;
+  final bool isPostOwner;
+  final void Function(CommentModel comment)? onToggleHidden;
 
   @override
   Widget build(BuildContext context) {
@@ -338,11 +380,27 @@ class _CommentTile extends StatelessWidget {
                       onTap: onReply,
                       child: Text('Reply', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.primary)),
                     ),
+                    if (comment.isHidden) ...[
+                      const SizedBox(width: 12),
+                      Icon(Icons.visibility_off_outlined, size: 13, color: theme.colorScheme.error),
+                      const SizedBox(width: 3),
+                      Text(
+                        'Hidden — only you and they can see this',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                      ),
+                    ],
                   ]),
                 ),
               ],
             ),
           ),
+          if (isPostOwner)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: Icon(comment.isHidden ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18),
+              tooltip: comment.isHidden ? 'Unhide comment' : 'Hide comment',
+              onPressed: onToggleHidden == null ? null : () => onToggleHidden!(comment),
+            ),
         ],
       ),
     );

@@ -107,6 +107,13 @@ class FeedRepository {
     return (data as List).map((e) => CommentModel.fromMap(e as Map<String, dynamic>)).toList();
   }
 
+  /// Hides or unhides a comment on one of the caller's own posts. Hidden
+  /// comments stay visible to the post owner and to their own author, but
+  /// disappear for everyone else — enforced server-side regardless of what
+  /// gets sent here.
+  Future<void> setCommentHidden(String commentId, bool hidden) =>
+      _c.rpc('set_comment_hidden', params: {'p_comment_id': commentId, 'p_hidden': hidden});
+
   Future<void> addComment(String postId, String userId, String content, {String? parentCommentId}) async {
     await _c.from('post_comments').insert({
       'post_id': postId,
@@ -816,6 +823,38 @@ class PrivacyRepository {
         .from('user_mutes')
         .select('muted_id, created_at, users!user_mutes_muted_id_fkey(username, profile_photo_url)')
         .eq('muter_id', SupabaseConfig.currentUserId!)
+        .order('created_at', ascending: false);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  // Restrict list — one-directional and never disclosed to the restricted
+  // user. Unlike mute/block, following stays untouched; only their
+  // comments on the restrictor's posts become quietly hidden from others.
+  Future<void> restrictUser(String userId) => _c.from('user_restricts').insert({
+        'restrictor_id': SupabaseConfig.currentUserId,
+        'restricted_id': userId,
+      });
+
+  Future<void> unrestrictUser(String userId) => _c
+      .from('user_restricts')
+      .delete()
+      .eq('restrictor_id', SupabaseConfig.currentUserId!)
+      .eq('restricted_id', userId);
+
+  Future<bool> isRestricted(String userId) async {
+    final row = await _c
+        .from('user_restricts')
+        .select('restrictor_id')
+        .match({'restrictor_id': SupabaseConfig.currentUserId!, 'restricted_id': userId})
+        .maybeSingle();
+    return row != null;
+  }
+
+  Future<List<Map<String, dynamic>>> restrictedUsers() async {
+    final data = await _c
+        .from('user_restricts')
+        .select('restricted_id, created_at, users!user_restricts_restricted_id_fkey(username, profile_photo_url)')
+        .eq('restrictor_id', SupabaseConfig.currentUserId!)
         .order('created_at', ascending: false);
     return (data as List).cast<Map<String, dynamic>>();
   }

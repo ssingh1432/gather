@@ -246,6 +246,7 @@ class CommentModel {
   final DateTime createdAt;
   final String? parentCommentId;
   final int replyCount;
+  final bool isHidden;
 
   CommentModel({
     required this.id,
@@ -257,6 +258,7 @@ class CommentModel {
     this.avatarUrl,
     this.parentCommentId,
     this.replyCount = 0,
+    this.isHidden = false,
   });
 
   factory CommentModel.fromMap(Map<String, dynamic> map) {
@@ -271,6 +273,7 @@ class CommentModel {
       avatarUrl: author is Map<String, dynamic> ? author['profile_photo_url'] as String? : null,
       parentCommentId: map['parent_comment_id']?.toString(),
       replyCount: PostModel._intFromMap(map, 'reply_count'),
+      isHidden: map['is_hidden'] as bool? ?? false,
     );
   }
 }

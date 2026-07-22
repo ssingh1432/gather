@@ -42,6 +42,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       FeedRepository().postsByUser(widget.userId),
       me == null ? Future.value(false) : profileRepo.isFollowing(widget.userId, me),
       me == null ? Future.value(false) : profileRepo.isBlocked(widget.userId, me),
+      me == null ? Future.value(false) : PrivacyRepository().isRestricted(widget.userId),
     ]);
     final profile = results[0] as Map<String, dynamic>?;
     if (profile == null) throw StateError('Profile not found');
@@ -53,6 +54,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       posts: results[4] as List<PostModel>,
       isFollowing: results[5] as bool,
       isBlocked: results[6] as bool,
+      isRestricted: results[7] as bool,
     );
   }
 
@@ -125,6 +127,45 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
   }
 
+  Future<void> _toggleRestrict(_OtherProfileBundle bundle) async {
+    final me = SupabaseConfig.currentUserId;
+    if (me == null) return;
+
+    if (!bundle.isRestricted) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('Restrict @${bundle.profile['username'] ?? 'this user'}?'),
+          content: const Text(
+            "They won't be notified. Their comments on your posts will only be visible to you and them, "
+            "and they'll stay in your followers/following as usual.",
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Restrict')),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    try {
+      if (bundle.isRestricted) {
+        await PrivacyRepository().unrestrictUser(widget.userId);
+      } else {
+        await PrivacyRepository().restrictUser(widget.userId);
+      }
+      await _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(bundle.isRestricted ? 'Unrestricted.' : 'Restricted.')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not update restrict status. Please try again.')));
+      }
+    }
+  }
+
   void _openMoreMenu(_OtherProfileBundle bundle) {
     showModalBottomSheet(
       context: context,
@@ -147,6 +188,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               onTap: () {
                 Navigator.pop(sheetContext);
                 _toggleBlock(bundle);
+              },
+            ),
+            ListTile(
+              leading: Icon(bundle.isRestricted ? Icons.shield : Icons.shield_outlined),
+              title: Text(bundle.isRestricted ? 'Unrestrict' : 'Restrict'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _toggleRestrict(bundle);
               },
             ),
             ListTile(
@@ -322,6 +371,7 @@ class _OtherProfileBundle {
     required this.posts,
     required this.isFollowing,
     required this.isBlocked,
+    required this.isRestricted,
   });
 
   final Map<String, dynamic> profile;
@@ -331,4 +381,5 @@ class _OtherProfileBundle {
   final List<PostModel> posts;
   final bool isFollowing;
   final bool isBlocked;
+  final bool isRestricted;
 }
