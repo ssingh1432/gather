@@ -1058,7 +1058,7 @@ class AdminRepository {
   }
 
   Future<void> setUserRole(String userId, String role) async {
-    await _c.from('users').update({'role': role}).eq('id', userId);
+    await _c.rpc('set_user_role', params: {'target_user_id': userId, 'new_role': role});
     await logAction('set_user_role', targetType: 'user', targetId: userId, metadata: {'role': role});
   }
 

@@ -33,10 +33,16 @@ $$;
 grant execute on function public.admin_recent_login_failures(integer) to authenticated;
 
 -- ---------------------------------------------------------------------
--- Storage: per-bucket object count + total size. Reads storage.objects/
--- storage.buckets directly (SECURITY DEFINER bypasses their RLS), so no
--- new storage policy is needed for admins.
+-- Storage: per-bucket object count + total size. Supersedes
+-- admin_storage_usage() from 026_phase8_admin_backend_baseline.sql (same
+-- purpose, same authorization, but this version also surfaces
+-- public/private and the per-file size limit, which the Storage tab
+-- needs). Nothing in the app calls admin_storage_usage() yet, so it's
+-- safe to drop outright rather than leave two near-duplicate functions
+-- around.
 -- ---------------------------------------------------------------------
+drop function if exists public.admin_storage_usage();
+
 create or replace function public.admin_storage_stats()
 returns table (bucket_id text, is_public boolean, file_size_limit bigint, object_count bigint, total_bytes numeric)
 language plpgsql
