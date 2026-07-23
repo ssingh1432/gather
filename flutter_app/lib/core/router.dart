@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/admin/admin_dashboard_screen.dart';
 import '../features/admin/admin_moderation_screen.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_screen.dart';
@@ -157,7 +158,8 @@ final appRouter = GoRouter(
         userId: s.uri.queryParameters['userId'],
       ),
     ),
-    GoRoute(path: '/admin', builder: (_, __) => const AdminModerationScreen()),
+    GoRoute(path: '/admin', builder: (_, __) => const AdminDashboardScreen()),
+    GoRoute(path: '/admin/moderation', builder: (_, __) => const AdminModerationScreen()),
     GoRoute(path: '/my-moderation', builder: (_, __) => const MyModerationScreen()),
     GoRoute(path: '/data-privacy', builder: (_, __) => const DataPrivacyScreen()),
     GoRoute(path: '/muted-accounts', builder: (_, __) => const MuteListScreen()),
@@ -267,6 +269,7 @@ const _protectedRoutes = {
   '/notifications',
   '/report',
   '/admin',
+  '/admin/moderation',
   '/my-moderation',
   '/data-privacy',
   '/muted-accounts',

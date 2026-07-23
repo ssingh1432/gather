@@ -1032,3 +1032,101 @@ class LegalRepository {
         'reviewed_at': DateTime.now().toIso8601String(),
       }).eq('id', requestId);
 }
+
+/// Phase 8: Admin Panel. General cross-cutting admin operations (users,
+/// posts, communities, overview stats, audit log) that don't belong to any
+/// single existing repository. Report/appeal/queue actions stay in
+/// [ModerationRepository]; legal-specific actions stay in [LegalRepository].
+class AdminRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
+
+  /// Single-round-trip counts for the dashboard Overview tab.
+  Future<Map<String, dynamic>> overviewStats() async {
+    final data = await _c.rpc('admin_overview_stats');
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  // ---- Users ----
+
+  Future<List<Map<String, dynamic>>> searchUsers({String? query, int limit = 50}) async {
+    var q = _c.from('users').select('id, username, email, role, status, suspended_until, created_at, profile_photo_url');
+    if (query != null && query.trim().isNotEmpty) {
+      q = q.or('username.ilike.%$query%,email.ilike.%$query%');
+    }
+    final data = await q.order('created_at', ascending: false).limit(limit);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> setUserRole(String userId, String role) async {
+    await _c.from('users').update({'role': role}).eq('id', userId);
+    await logAction('set_user_role', targetType: 'user', targetId: userId, metadata: {'role': role});
+  }
+
+  Future<void> suspendUser(String userId, {int? durationDays, String? note}) async {
+    await _c.rpc('suspend_user', params: {
+      'target_user_id': userId,
+      'note': note,
+      'duration_days': durationDays,
+    });
+    await logAction('suspend_user', targetType: 'user', targetId: userId, metadata: {'duration_days': durationDays, 'note': note});
+  }
+
+  Future<void> reinstateUser(String userId) async {
+    await _c.from('users').update({'status': 'active', 'suspended_until': null}).eq('id', userId);
+    await logAction('reinstate_user', targetType: 'user', targetId: userId);
+  }
+
+  // ---- Posts ----
+
+  Future<List<Map<String, dynamic>>> searchPosts({String? query, bool? removedOnly, int limit = 50}) async {
+    var q = _c.from('posts').select('id, author_id, text_content, is_removed, created_at, users!posts_author_id_fkey(username)');
+    if (query != null && query.trim().isNotEmpty) {
+      q = q.ilike('text_content', '%$query%');
+    }
+    if (removedOnly == true) {
+      q = q.eq('is_removed', true);
+    }
+    final data = await q.order('created_at', ascending: false).limit(limit);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> removePost(String postId, {String? note}) async {
+    await _c.rpc('soft_remove_post', params: {'post_id': postId});
+    await logAction('remove_post', targetType: 'post', targetId: postId, metadata: {'note': note});
+  }
+
+  Future<void> restorePost(String postId) async {
+    await _c.from('posts').update({'is_removed': false}).eq('id', postId);
+    await logAction('restore_post', targetType: 'post', targetId: postId);
+  }
+
+  // ---- Communities ----
+
+  Future<List<Map<String, dynamic>>> listCommunities({String? query, int limit = 50}) async {
+    var q = _c.from('communities').select('id, name, description, created_at, member_count:community_memberships(count)');
+    if (query != null && query.trim().isNotEmpty) {
+      q = q.ilike('name', '%$query%');
+    }
+    final data = await q.order('created_at', ascending: false).limit(limit);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  // ---- Audit log ----
+
+  Future<List<Map<String, dynamic>>> auditLog({int limit = 100}) async {
+    final data = await _c
+        .from('admin_audit_log')
+        .select('*, users!admin_audit_log_admin_id_fkey(username)')
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> logAction(String action, {String? targetType, String? targetId, Map<String, dynamic>? metadata}) =>
+      _c.rpc('log_admin_action', params: {
+        'p_action': action,
+        'p_target_type': targetType,
+        'p_target_id': targetId,
+        'p_metadata': metadata ?? {},
+      });
+}
