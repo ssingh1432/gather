@@ -1029,7 +1029,7 @@ class _ModeratorManagementTabState extends State<_ModeratorManagementTab> {
             subtitle: Text(
               '${m['role']} · ${m['moderation_action_count']} moderation actions · ${m['admin_action_count']} admin-panel actions',
             ),
-            trailing: Text(lastActive != null ? '${lastActive}'.split('T').first : 'never active', style: Theme.of(context).textTheme.bodySmall),
+            trailing: Text(lastActive != null ? '$lastActive'.split('T').first : 'never active', style: Theme.of(context).textTheme.bodySmall),
           );
         },
       ),
