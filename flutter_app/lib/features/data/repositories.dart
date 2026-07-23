@@ -1179,4 +1179,36 @@ class AdminRepository {
     final data = await _c.from('backup_log').select().order('run_at', ascending: false).limit(limit);
     return (data as List).cast<Map<String, dynamic>>();
   }
+
+  // ---- Moderator Management / Role Management (Batch 8.3) ----
+
+  static const permissionCatalog = [
+    'manage_users',
+    'manage_posts',
+    'manage_communities',
+    'manage_reports',
+    'manage_media',
+    'manage_legal',
+    'manage_announcements',
+    'view_analytics',
+    'view_security',
+  ];
+
+  Future<List<Map<String, dynamic>>> moderatorActivity() async {
+    final data = await _c.rpc('admin_moderator_activity');
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  // ---- Permissions (Batch 8.3) ----
+
+  Future<Set<String>> permissionsFor(String userId) async {
+    final data = await _c.from('moderator_permissions').select('permission_key').eq('user_id', userId);
+    return (data as List).map((r) => r['permission_key'].toString()).toSet();
+  }
+
+  Future<void> grantPermission(String userId, String key) =>
+      _c.rpc('grant_moderator_permission', params: {'target_user_id': userId, 'p_key': key});
+
+  Future<void> revokePermission(String userId, String key) =>
+      _c.rpc('revoke_moderator_permission', params: {'target_user_id': userId, 'p_key': key});
 }

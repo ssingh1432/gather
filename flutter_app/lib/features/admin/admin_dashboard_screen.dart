@@ -180,6 +180,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return _SystemHealthTab(repo: _repo);
       case _Section.backupStatus:
         return _BackupStatusTab(repo: _repo);
+      case _Section.moderatorManagement:
+        return _ModeratorManagementTab(repo: _repo);
+      case _Section.roleManagement:
+        return _RoleManagementTab(repo: _repo, role: _role);
+      case _Section.permissions:
+        return _PermissionsTab(repo: _repo, role: _role);
       default:
         return _ComingSoonTab(section: _section);
     }
@@ -968,6 +974,281 @@ class _BackupStatusTabState extends State<_BackupStatusTab> {
               ),
               title: Text('${entry['run_at']}'.split('.').first),
               subtitle: Text(entry['status'] == 'ok' ? '${entry['row_counts']}' : 'Error: ${entry['error']}'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeratorManagementTab extends StatefulWidget {
+  const _ModeratorManagementTab({required this.repo});
+  final AdminRepository repo;
+
+  @override
+  State<_ModeratorManagementTab> createState() => _ModeratorManagementTabState();
+}
+
+class _ModeratorManagementTabState extends State<_ModeratorManagementTab> {
+  List<Map<String, dynamic>> _mods = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _mods = await widget.repo.moderatorActivity();
+    } catch (e) {
+      _error = '$e';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Error: $_error')));
+    if (_mods.isEmpty) return const Center(child: Text('No moderators or admins yet.'));
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        itemCount: _mods.length,
+        itemBuilder: (context, i) {
+          final m = _mods[i];
+          final lastActive = m['last_active'];
+          return ListTile(
+            leading: CircleAvatar(child: Icon(m['role'] == 'admin' ? Icons.admin_panel_settings : Icons.shield_outlined)),
+            title: Text('@${m['username']}'),
+            subtitle: Text(
+              '${m['role']} · ${m['moderation_action_count']} moderation actions · ${m['admin_action_count']} admin-panel actions',
+            ),
+            trailing: Text(lastActive != null ? '${lastActive}'.split('T').first : 'never active', style: Theme.of(context).textTheme.bodySmall),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RoleManagementTab extends StatefulWidget {
+  const _RoleManagementTab({required this.repo, required this.role});
+  final AdminRepository repo;
+  final String? role;
+
+  @override
+  State<_RoleManagementTab> createState() => _RoleManagementTabState();
+}
+
+class _RoleManagementTabState extends State<_RoleManagementTab> {
+  List<Map<String, dynamic>> _users = const [];
+  bool _loading = true;
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _users = await widget.repo.searchUsers(query: _searchCtrl.text, limit: 100);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _changeRole(Map<String, dynamic> user, String role) async {
+    try {
+      await widget.repo.setUserRole(user['id'].toString(), role);
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('@${user['username']} is now $role')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isAdmin = widget.role == 'admin';
+    final staff = _users.where((u) => u['role'] != 'user').toList();
+    final regular = _users.where((u) => u['role'] == 'user').toList();
+    if (!isAdmin) {
+      return const Center(
+        child: Padding(padding: EdgeInsets.all(24), child: Text('Only admins can change roles. You can view Moderator Management instead.')),
+      );
+    }
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: TextField(
+            controller: _searchCtrl,
+            decoration: InputDecoration(
+              hintText: 'Search by username or email',
+              prefixIcon: const Icon(Icons.search),
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(icon: const Icon(Icons.clear), onPressed: () {
+                _searchCtrl.clear();
+                _load();
+              }),
+            ),
+            onSubmitted: (_) => _load(),
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              children: [
+                if (staff.isNotEmpty) const Padding(padding: EdgeInsets.fromLTRB(16, 8, 16, 4), child: Text('Admins & moderators', style: TextStyle(fontWeight: FontWeight.bold))),
+                for (final u in staff) _roleTile(u),
+                if (regular.isNotEmpty) const Padding(padding: EdgeInsets.fromLTRB(16, 12, 16, 4), child: Text('Users', style: TextStyle(fontWeight: FontWeight.bold))),
+                for (final u in regular) _roleTile(u),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _roleTile(Map<String, dynamic> u) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundImage: u['profile_photo_url'] != null ? NetworkImage(u['profile_photo_url'].toString()) : null,
+        child: u['profile_photo_url'] == null ? const Icon(Icons.person) : null,
+      ),
+      title: Text('@${u['username']}'),
+      subtitle: Text('current role: ${u['role']}'),
+      trailing: DropdownButton<String>(
+        value: u['role']?.toString(),
+        items: const [
+          DropdownMenuItem(value: 'user', child: Text('User')),
+          DropdownMenuItem(value: 'moderator', child: Text('Moderator')),
+          DropdownMenuItem(value: 'admin', child: Text('Admin')),
+        ],
+        onChanged: (v) {
+          if (v != null && v != u['role']) _changeRole(u, v);
+        },
+      ),
+    );
+  }
+}
+
+class _PermissionsTab extends StatefulWidget {
+  const _PermissionsTab({required this.repo, required this.role});
+  final AdminRepository repo;
+  final String? role;
+
+  @override
+  State<_PermissionsTab> createState() => _PermissionsTabState();
+}
+
+class _PermissionsTabState extends State<_PermissionsTab> {
+  List<Map<String, dynamic>> _moderators = const [];
+  Map<String, Set<String>> _permsByUser = {};
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final activity = await widget.repo.moderatorActivity();
+      _moderators = activity.where((m) => m['role'] == 'moderator').toList();
+      final perms = <String, Set<String>>{};
+      for (final m in _moderators) {
+        perms[m['user_id'].toString()] = await widget.repo.permissionsFor(m['user_id'].toString());
+      }
+      _permsByUser = perms;
+    } catch (e) {
+      _error = '$e';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _toggle(String userId, String key, bool grant) async {
+    final isAdmin = widget.role == 'admin';
+    if (!isAdmin) return;
+    try {
+      if (grant) {
+        await widget.repo.grantPermission(userId, key);
+      } else {
+        await widget.repo.revokePermission(userId, key);
+      }
+      setState(() {
+        final set = _permsByUser[userId] ?? <String>{};
+        if (grant) {
+          set.add(key);
+        } else {
+          set.remove(key);
+        }
+        _permsByUser[userId] = set;
+      });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Error: $_error')));
+    final isAdmin = widget.role == 'admin';
+    if (_moderators.isEmpty) {
+      return const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No moderators yet — promote someone in Role Management first.')));
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (!isAdmin)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Text('Only admins can change permissions. Showing read-only.'),
+            ),
+          for (final m in _moderators)
+            Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('@${m['username']}', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        for (final key in AdminRepository.permissionCatalog)
+                          FilterChip(
+                            label: Text(key),
+                            selected: (_permsByUser[m['user_id'].toString()] ?? {}).contains(key),
+                            onSelected: isAdmin ? (v) => _toggle(m['user_id'].toString(), key, v) : null,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
         ],
       ),
