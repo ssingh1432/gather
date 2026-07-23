@@ -1211,4 +1211,54 @@ class AdminRepository {
 
   Future<void> revokePermission(String userId, String key) =>
       _c.rpc('revoke_moderator_permission', params: {'target_user_id': userId, 'p_key': key});
+
+  // ---- Announcements (Batch 8.4) ----
+
+  Future<List<Map<String, dynamic>>> announcements() async {
+    final data = await _c.from('announcements').select().order('created_at', ascending: false);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> createAnnouncement({required String title, required String body, String severity = 'info', DateTime? expiresAt}) async {
+    await _c.from('announcements').insert({
+      'title': title,
+      'body': body,
+      'severity': severity,
+      'created_by': SupabaseConfig.currentUserId,
+      'expires_at': expiresAt?.toIso8601String(),
+    });
+    await logAction('create_announcement', targetType: 'announcement', metadata: {'title': title});
+  }
+
+  Future<void> setAnnouncementActive(String id, bool active) async {
+    await _c.from('announcements').update({'is_active': active}).eq('id', id);
+    await logAction(active ? 'activate_announcement' : 'deactivate_announcement', targetType: 'announcement', targetId: id);
+  }
+
+  Future<void> deleteAnnouncement(String id) async {
+    await _c.from('announcements').delete().eq('id', id);
+    await logAction('delete_announcement', targetType: 'announcement', targetId: id);
+  }
+
+  // ---- Notifications (Batch 8.4) ----
+
+  /// Aggregate-only stats (never individual notification rows — see
+  /// migration 030 for why: recipient/actor data is private activity
+  /// data and stays self-read-only).
+  Future<Map<String, dynamic>> notificationStats() async {
+    final data = await _c.rpc('admin_notification_stats');
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  // ---- Settings (Batch 8.4) ----
+
+  Future<List<Map<String, dynamic>>> appConfig() async {
+    final data = await _c.from('app_config').select().order('key');
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> setConfigValue(String key, dynamic value) async {
+    await _c.from('app_config').upsert({'key': key, 'value': value, 'updated_at': DateTime.now().toIso8601String()});
+    await logAction('set_config', targetType: 'app_config', targetId: key, metadata: {'value': value});
+  }
 }

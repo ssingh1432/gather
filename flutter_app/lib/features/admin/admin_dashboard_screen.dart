@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -59,6 +61,7 @@ const Map<_Section, String> _externalRoutes = {
   _Section.contentReview: '/admin/moderation',
   _Section.complaints: '/admin/legal',
   _Section.legalRequests: '/admin/legal',
+  _Section.dataRequests: '/admin/legal',
 };
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
@@ -186,6 +189,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return _RoleManagementTab(repo: _repo, role: _role);
       case _Section.permissions:
         return _PermissionsTab(repo: _repo, role: _role);
+      case _Section.announcements:
+        return _AnnouncementsTab(repo: _repo, role: _role);
+      case _Section.notifications:
+        return _NotificationsTab(repo: _repo);
+      case _Section.settings:
+        return _SettingsTab(repo: _repo, role: _role);
       default:
         return _ComingSoonTab(section: _section);
     }
@@ -1250,6 +1259,272 @@ class _PermissionsTabState extends State<_PermissionsTab> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnnouncementsTab extends StatefulWidget {
+  const _AnnouncementsTab({required this.repo, required this.role});
+  final AdminRepository repo;
+  final String? role;
+
+  @override
+  State<_AnnouncementsTab> createState() => _AnnouncementsTabState();
+}
+
+class _AnnouncementsTabState extends State<_AnnouncementsTab> {
+  List<Map<String, dynamic>> _items = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _items = await widget.repo.announcements();
+    } catch (e) {
+      _error = '$e';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _create() async {
+    final titleCtrl = TextEditingController();
+    final bodyCtrl = TextEditingController();
+    String severity = 'info';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('New announcement'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Title')),
+                TextField(controller: bodyCtrl, decoration: const InputDecoration(labelText: 'Body'), maxLines: 4),
+                const SizedBox(height: 8),
+                DropdownButton<String>(
+                  value: severity,
+                  items: const [
+                    DropdownMenuItem(value: 'info', child: Text('Info')),
+                    DropdownMenuItem(value: 'warning', child: Text('Warning')),
+                    DropdownMenuItem(value: 'critical', child: Text('Critical')),
+                  ],
+                  onChanged: (v) => setSt(() => severity = v ?? 'info'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Publish')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || titleCtrl.text.trim().isEmpty || bodyCtrl.text.trim().isEmpty) return;
+    try {
+      await widget.repo.createAnnouncement(title: titleCtrl.text.trim(), body: bodyCtrl.text.trim(), severity: severity);
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
+  }
+
+  Color _severityColor(String? s) {
+    switch (s) {
+      case 'critical':
+        return Colors.red;
+      case 'warning':
+        return Colors.orange;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Error: $_error')));
+    return Scaffold(
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: _items.isEmpty
+            ? const Center(child: Text('No announcements yet.'))
+            : ListView.builder(
+                itemCount: _items.length,
+                itemBuilder: (context, i) {
+                  final a = _items[i];
+                  final active = a['is_active'] == true;
+                  return ListTile(
+                    leading: Icon(Icons.campaign, color: _severityColor(a['severity']?.toString())),
+                    title: Text(a['title']?.toString() ?? '', style: TextStyle(decoration: active ? null : TextDecoration.lineThrough)),
+                    subtitle: Text(a['body']?.toString() ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
+                    trailing: Wrap(
+                      spacing: 4,
+                      children: [
+                        Switch(
+                          value: active,
+                          onChanged: (v) => widget.repo.setAnnouncementActive(a['id'].toString(), v).then((_) => _load()),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => widget.repo.deleteAnnouncement(a['id'].toString()).then((_) => _load()),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(onPressed: _create, icon: const Icon(Icons.add), label: const Text('New')),
+    );
+  }
+}
+
+class _NotificationsTab extends StatefulWidget {
+  const _NotificationsTab({required this.repo});
+  final AdminRepository repo;
+
+  @override
+  State<_NotificationsTab> createState() => _NotificationsTabState();
+}
+
+class _NotificationsTabState extends State<_NotificationsTab> {
+  Map<String, dynamic>? _stats;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _stats = await widget.repo.notificationStats();
+    } catch (e) {
+      _error = '$e';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Error: $_error')));
+    final s = _stats ?? const {};
+    final byType = (s['by_type'] as Map?) ?? const {};
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'Aggregate counts only — individual notifications stay private to each recipient by design.',
+              style: TextStyle(fontStyle: FontStyle.italic),
+            ),
+          ),
+          ListTile(leading: const Icon(Icons.notifications_outlined), title: const Text('Total'), trailing: Text('${s['total'] ?? 0}')),
+          ListTile(leading: const Icon(Icons.mark_email_unread_outlined), title: const Text('Unread'), trailing: Text('${s['unread'] ?? 0}')),
+          ListTile(leading: const Icon(Icons.today_outlined), title: const Text('Last 24h'), trailing: Text('${s['last_24h'] ?? 0}')),
+          const Padding(padding: EdgeInsets.fromLTRB(16, 12, 16, 4), child: Text('By type', style: TextStyle(fontWeight: FontWeight.bold))),
+          for (final entry in byType.entries)
+            ListTile(leading: const Icon(Icons.label_outline), title: Text(entry.key.toString()), trailing: Text('${entry.value}')),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsTab extends StatefulWidget {
+  const _SettingsTab({required this.repo, required this.role});
+  final AdminRepository repo;
+  final String? role;
+
+  @override
+  State<_SettingsTab> createState() => _SettingsTabState();
+}
+
+class _SettingsTabState extends State<_SettingsTab> {
+  List<Map<String, dynamic>> _config = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _config = await widget.repo.appConfig();
+    } catch (e) {
+      _error = '$e';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _edit(Map<String, dynamic> row) async {
+    final isAdmin = widget.role == 'admin';
+    if (!isAdmin) return;
+    final ctrl = TextEditingController(text: jsonEncode(row['value']));
+    final newValue = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(row['key']?.toString() ?? ''),
+        content: TextField(controller: ctrl, decoration: const InputDecoration(helperText: 'Raw JSON value, e.g. true, 8, or "text"')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (newValue == null) return;
+    try {
+      final parsed = jsonDecode(newValue);
+      await widget.repo.setConfigValue(row['key'].toString(), parsed);
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invalid JSON or save failed: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Error: $_error')));
+    final isAdmin = widget.role == 'admin';
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        children: [
+          if (!isAdmin) const Padding(padding: EdgeInsets.all(16), child: Text('Only admins can change settings. Showing read-only.')),
+          for (final row in _config)
+            ListTile(
+              leading: const Icon(Icons.tune),
+              title: Text(row['key']?.toString() ?? ''),
+              subtitle: Text(jsonEncode(row['value'])),
+              trailing: isAdmin ? IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => _edit(row)) : null,
+              onTap: isAdmin ? () => _edit(row) : null,
+            ),
+          if (_config.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('No config keys yet.')),
         ],
       ),
     );
