@@ -1129,4 +1129,54 @@ class AdminRepository {
         'p_target_id': targetId,
         'p_metadata': metadata ?? {},
       });
+
+  // ---- Security (Batch 8.2) ----
+
+  Future<List<Map<String, dynamic>>> recentSecurityEvents({int limit = 50}) async {
+    final data = await _c.from('security_events').select().order('created_at', ascending: false).limit(limit);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> recentLoginFailures({int hours = 24}) async {
+    final data = await _c.rpc('admin_recent_login_failures', params: {'p_hours': hours});
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  // ---- Storage (Batch 8.2) ----
+
+  Future<List<Map<String, dynamic>>> storageStats() async {
+    final data = await _c.rpc('admin_storage_stats');
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  // ---- Realtime Status (Batch 8.2) ----
+
+  Future<List<Map<String, dynamic>>> realtimeTables() async {
+    final data = await _c.rpc('admin_realtime_tables');
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Client-measured round trip against a trivial RPC, used as a live
+  /// "is Realtime/DB actually reachable right now" check rather than a
+  /// static reading.
+  Future<Duration> measureRoundTrip() async {
+    final sw = Stopwatch()..start();
+    await _c.rpc('admin_system_health');
+    sw.stop();
+    return sw.elapsed;
+  }
+
+  // ---- System Health (Batch 8.2) ----
+
+  Future<Map<String, dynamic>> systemHealth() async {
+    final data = await _c.rpc('admin_system_health');
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  // ---- Backup Status (Batch 8.2) ----
+
+  Future<List<Map<String, dynamic>>> backupLog({int limit = 30}) async {
+    final data = await _c.from('backup_log').select().order('run_at', ascending: false).limit(limit);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
 }

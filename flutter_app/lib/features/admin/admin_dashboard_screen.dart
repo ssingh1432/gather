@@ -170,6 +170,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return _AuditLogTab(repo: _repo);
       case _Section.analytics:
         return _OverviewTab(repo: _repo, analyticsMode: true);
+      case _Section.security:
+        return _SecurityTab(repo: _repo);
+      case _Section.storage:
+        return _StorageTab(repo: _repo);
+      case _Section.realtimeStatus:
+        return _RealtimeStatusTab(repo: _repo);
+      case _Section.systemHealth:
+        return _SystemHealthTab(repo: _repo);
+      case _Section.backupStatus:
+        return _BackupStatusTab(repo: _repo);
       default:
         return _ComingSoonTab(section: _section);
     }
@@ -619,6 +629,347 @@ class _AuditLogTabState extends State<_AuditLogTab> {
             trailing: Text('${e['created_at']}'.split('T').first),
           );
         },
+      ),
+    );
+  }
+}
+
+class _SecurityTab extends StatefulWidget {
+  const _SecurityTab({required this.repo});
+  final AdminRepository repo;
+
+  @override
+  State<_SecurityTab> createState() => _SecurityTabState();
+}
+
+class _SecurityTabState extends State<_SecurityTab> {
+  List<Map<String, dynamic>> _events = const [];
+  List<Map<String, dynamic>> _failures = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _events = await widget.repo.recentSecurityEvents();
+      _failures = await widget.repo.recentLoginFailures();
+    } catch (e) {
+      _error = '$e';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Error: $_error')));
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Text('Failed logins (last 24h)', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          if (_failures.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No failed login attempts.')),
+          for (final f in _failures)
+            ListTile(
+              leading: const Icon(Icons.warning_amber_outlined, color: Colors.orange),
+              title: Text(f['email']?.toString() ?? ''),
+              subtitle: Text('${f['failure_count']} failures · last ${f['last_failure']}'),
+            ),
+          const Divider(),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text('Recent security events', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          if (_events.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No security events logged.')),
+          for (final e in _events)
+            ListTile(
+              leading: const Icon(Icons.shield_outlined),
+              title: Text(e['event_type']?.toString() ?? ''),
+              subtitle: Text('${e['created_at']}'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StorageTab extends StatefulWidget {
+  const _StorageTab({required this.repo});
+  final AdminRepository repo;
+
+  @override
+  State<_StorageTab> createState() => _StorageTabState();
+}
+
+class _StorageTabState extends State<_StorageTab> {
+  List<Map<String, dynamic>> _buckets = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _buckets = await widget.repo.storageStats();
+    } catch (e) {
+      _error = '$e';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _formatBytes(dynamic raw) {
+    final bytes = double.tryParse(raw?.toString() ?? '0') ?? 0;
+    if (bytes < 1024) return '${bytes.toStringAsFixed(0)} B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Error: $_error')));
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        itemCount: _buckets.length,
+        itemBuilder: (context, i) {
+          final b = _buckets[i];
+          final limit = b['file_size_limit'];
+          return ListTile(
+            leading: Icon(b['is_public'] == true ? Icons.public : Icons.lock_outline),
+            title: Text(b['bucket_id']?.toString() ?? ''),
+            subtitle: Text(
+              '${b['object_count']} objects · ${_formatBytes(b['total_bytes'])}'
+              '${limit != null ? ' · limit ${_formatBytes(limit)}/file' : ''}',
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RealtimeStatusTab extends StatefulWidget {
+  const _RealtimeStatusTab({required this.repo});
+  final AdminRepository repo;
+
+  @override
+  State<_RealtimeStatusTab> createState() => _RealtimeStatusTabState();
+}
+
+class _RealtimeStatusTabState extends State<_RealtimeStatusTab> {
+  List<Map<String, dynamic>> _tables = const [];
+  bool _loading = true;
+  String? _error;
+  Duration? _latency;
+  bool _checking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _tables = await widget.repo.realtimeTables();
+    } catch (e) {
+      _error = '$e';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _checkLatency() async {
+    setState(() => _checking = true);
+    try {
+      _latency = await widget.repo.measureRoundTrip();
+    } catch (_) {
+      _latency = null;
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Error: $_error')));
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: _checking ? null : _checkLatency,
+                  icon: _checking
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.network_check),
+                  label: const Text('Test connection'),
+                ),
+                const SizedBox(width: 12),
+                if (_latency != null) Text('${_latency!.inMilliseconds} ms round trip'),
+              ],
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Text('Tables enabled for Realtime', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          if (_tables.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No tables are on the supabase_realtime publication.')),
+          for (final t in _tables)
+            ListTile(
+              leading: const Icon(Icons.podcasts_outlined),
+              title: Text(t['table_name']?.toString() ?? ''),
+              subtitle: Text(t['schema_name']?.toString() ?? ''),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SystemHealthTab extends StatefulWidget {
+  const _SystemHealthTab({required this.repo});
+  final AdminRepository repo;
+
+  @override
+  State<_SystemHealthTab> createState() => _SystemHealthTabState();
+}
+
+class _SystemHealthTabState extends State<_SystemHealthTab> {
+  Map<String, dynamic>? _health;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _health = await widget.repo.systemHealth();
+    } catch (e) {
+      _error = '$e';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Error: $_error')));
+    final h = _health ?? const {};
+    final rows = <(String, dynamic, bool)>[
+      ('Server time', h['server_time'], false),
+      ('Pending appeals', h['pending_appeals'] ?? 0, (h['pending_appeals'] ?? 0) > 0),
+      ('Pending media review', h['pending_media_review'] ?? 0, (h['pending_media_review'] ?? 0) > 0),
+      ('Flagged media', h['flagged_media'] ?? 0, (h['flagged_media'] ?? 0) > 0),
+      ('Pending verifications', h['pending_verifications'] ?? 0, false),
+      ('Deletions awaiting purge', h['account_deletions_awaiting_purge'] ?? 0, (h['account_deletions_awaiting_purge'] ?? 0) > 0),
+      ('Deletions in grace period', h['account_deletions_in_grace_period'] ?? 0, false),
+    ];
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        itemCount: rows.length,
+        itemBuilder: (context, i) {
+          final (label, value, warn) = rows[i];
+          return ListTile(
+            leading: Icon(warn ? Icons.warning_amber_outlined : Icons.check_circle_outline, color: warn ? Colors.orange : Colors.green),
+            title: Text(label),
+            trailing: Text('$value'),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BackupStatusTab extends StatefulWidget {
+  const _BackupStatusTab({required this.repo});
+  final AdminRepository repo;
+
+  @override
+  State<_BackupStatusTab> createState() => _BackupStatusTabState();
+}
+
+class _BackupStatusTabState extends State<_BackupStatusTab> {
+  List<Map<String, dynamic>> _log = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _log = await widget.repo.backupLog();
+    } catch (e) {
+      _error = '$e';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Error: $_error')));
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        children: [
+          const Card(
+            margin: EdgeInsets.all(16),
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Full database backups (daily + point-in-time recovery) are managed automatically by Supabase at the platform level — see Project Settings → Database → Backups in the Supabase dashboard to restore.\n\n'
+                'The log below is a lightweight daily integrity heartbeat run from this app\'s own database: a snapshot of core table row counts, so a sudden unexplained drop shows up here between platform backups.',
+              ),
+            ),
+          ),
+          if (_log.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No heartbeat runs recorded yet.')),
+          for (final entry in _log)
+            ListTile(
+              leading: Icon(
+                entry['status'] == 'ok' ? Icons.check_circle_outline : Icons.error_outline,
+                color: entry['status'] == 'ok' ? Colors.green : Colors.red,
+              ),
+              title: Text('${entry['run_at']}'.split('.').first),
+              subtitle: Text(entry['status'] == 'ok' ? '${entry['row_counts']}' : 'Error: ${entry['error']}'),
+            ),
+        ],
       ),
     );
   }
