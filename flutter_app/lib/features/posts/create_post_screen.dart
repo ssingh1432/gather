@@ -11,6 +11,7 @@ import '../../shared/services/beta_error_logging_service.dart';
 import '../../shared/services/link_preview_service.dart';
 import '../../shared/services/media/web_safe_pick.dart';
 import '../../shared/utils/feelings.dart';
+import '../../shared/widgets/format_toolbar.dart';
 import '../../shared/widgets/reusables.dart';
 import '../data/repositories.dart';
 import 'location_picker_screen.dart';
@@ -66,6 +67,12 @@ class _P extends State<CreatePostScreen> {
   String? _lastCheckedUrl;
   Timer? _linkDebounce;
 
+  static const _maxLength = 5000;
+  Timer? _draftDebounce;
+  bool _draftSaving = false;
+  DateTime? _draftSavedAt;
+  bool _draftLoaded = false;
+
   @override
   void initState() {
     super.initState();
@@ -83,8 +90,67 @@ class _P extends State<CreatePostScreen> {
     if (widget.sharedText != null && widget.sharedText!.isNotEmpty) {
       text.text = widget.sharedText!;
       _onTextChanged(widget.sharedText!);
+    } else {
+      _loadDraft();
     }
     _loadDefaultVisibility();
+  }
+
+  Future<void> _loadDraft() async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null || widget.quotePostId != null) return;
+    try {
+      final draft = await PostRepository().loadDraft(userId: uid, communityId: widget.communityId);
+      if (draft == null || !mounted) return;
+      final savedText = draft['text_content'] as String? ?? '';
+      if (savedText.isEmpty) return;
+      setState(() {
+        text.text = savedText;
+        _draftLoaded = true;
+      });
+    } catch (_) {
+      // No draft, or the fetch failed — composer just opens empty, same as before.
+    }
+  }
+
+  void _scheduleDraftSave(String value) {
+    _draftDebounce?.cancel();
+    if (widget.quotePostId != null) return; // quote/reply composer isn't drafted
+    _draftDebounce = Timer(const Duration(seconds: 2), () async {
+      final uid = SupabaseConfig.currentUserId;
+      if (uid == null) return;
+      if (value.trim().isEmpty) return;
+      setState(() => _draftSaving = true);
+      try {
+        await PostRepository().saveDraft(
+          userId: uid,
+          communityId: widget.communityId,
+          textContent: value,
+          tags: _parsedTags,
+          visibility: _visibility,
+        );
+        if (mounted) setState(() => _draftSavedAt = DateTime.now());
+      } catch (_) {
+        // Draft save is best-effort; don't interrupt composing over it.
+      } finally {
+        if (mounted) setState(() => _draftSaving = false);
+      }
+    });
+  }
+
+  Future<void> _discardDraft() async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return;
+    try {
+      await PostRepository().deleteDraft(userId: uid, communityId: widget.communityId);
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        text.clear();
+        _draftLoaded = false;
+        _draftSavedAt = null;
+      });
+    }
   }
 
   Future<void> _loadDefaultVisibility() async {
@@ -126,6 +192,7 @@ class _P extends State<CreatePostScreen> {
       );
     }
     _linkDebounce?.cancel();
+    _draftDebounce?.cancel();
     text.dispose();
     location.dispose();
     tagsCtrl.dispose();
@@ -199,6 +266,7 @@ class _P extends State<CreatePostScreen> {
       }
 
       _published = true;
+      unawaited(PostRepository().deleteDraft(userId: uid, communityId: widget.communityId).catchError((_) {}));
       if (mounted) {
         text.clear();
         image = null;
@@ -229,6 +297,7 @@ class _P extends State<CreatePostScreen> {
   }
 
   void _onTextChanged(String value) {
+    _scheduleDraftSave(value);
     _linkDebounce?.cancel();
     _linkDebounce = Timer(const Duration(milliseconds: 600), () async {
       final url = firstUrlIn(value);
@@ -401,12 +470,34 @@ class _P extends State<CreatePostScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_draftLoaded)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.history, size: 16, color: Colors.grey),
+                    const SizedBox(width: 6),
+                    const Expanded(child: Text('Restored from your draft', style: TextStyle(color: Colors.grey, fontSize: 12))),
+                    TextButton(onPressed: _discardDraft, child: const Text('Discard')),
+                  ],
+                ),
+              ),
+            FormatToolbar(controller: text, onChanged: _onTextChanged),
             TextField(
               controller: text,
               minLines: 3,
               maxLines: 8,
+              maxLength: _maxLength,
               onChanged: _onTextChanged,
-              decoration: const InputDecoration(labelText: 'Text content', hintText: "What's on your mind?"),
+              decoration: InputDecoration(
+                labelText: 'Text content',
+                hintText: "What's on your mind?",
+                helperText: _draftSaving
+                    ? 'Saving draft…'
+                    : _draftSavedAt != null
+                        ? 'Draft saved'
+                        : null,
+              ),
             ),
             if (_loadingLinkPreview) const Padding(padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()),
             if (_linkPreview != null) ...[
@@ -638,7 +729,7 @@ class _QuotedPostPreviewCard extends StatelessWidget {
               children: [
                 Text(post.authorUsername ?? 'Unknown', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
                 if (post.textContent.isNotEmpty)
-                  Text(post.textContent, maxLines: 3, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+                  MarkdownLiteText(post.textContent, maxLines: 3, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
               ],
             ),
           ),

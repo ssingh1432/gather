@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/models.dart';
+import 'format_toolbar.dart';
 import 'reusables.dart';
 
 /// Cover photo + overlapping avatar + name/handle/role badge — the top of
@@ -313,7 +314,7 @@ class ProfilePostsGrid extends StatelessWidget {
                       : Container(
                           color: Theme.of(context).colorScheme.surfaceContainerHighest,
                           padding: const EdgeInsets.all(6),
-                          child: Text(post.textContent, maxLines: 4, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+                          child: MarkdownLiteText(post.textContent, maxLines: 4, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
                         )),
               if (post.id == pinnedPostId)
                 const Positioned(

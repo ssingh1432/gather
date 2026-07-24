@@ -438,6 +438,51 @@ class PostRepository {
     );
     return created;
   }
+
+  /// Upserts the caller's single in-progress draft for [communityId] (null
+  /// means "main feed composer"). One draft per user+community is enough
+  /// for now — multiple concurrent drafts per surface can come later if
+  /// requested.
+  Future<void> saveDraft({
+    required String userId,
+    String? communityId,
+    required String textContent,
+    List<String> tags = const [],
+    String visibility = 'public',
+  }) async {
+    var existingQuery = _c.from('post_drafts').select('id').eq('user_id', userId);
+    existingQuery = communityId == null
+        ? existingQuery.isFilter('community_id', null)
+        : existingQuery.eq('community_id', communityId);
+    final existing = await existingQuery.maybeSingle();
+
+    final row = {
+      'user_id': userId,
+      'community_id': communityId,
+      'text_content': textContent,
+      'tags': tags,
+      'visibility': visibility,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    if (existing == null) {
+      await _c.from('post_drafts').insert(row);
+    } else {
+      await _c.from('post_drafts').update(row).eq('id', existing['id']);
+    }
+  }
+
+  Future<Map<String, dynamic>?> loadDraft({required String userId, String? communityId}) {
+    var q = _c.from('post_drafts').select().eq('user_id', userId);
+    q = communityId == null ? q.isFilter('community_id', null) : q.eq('community_id', communityId);
+    return q.maybeSingle();
+  }
+
+  Future<void> deleteDraft({required String userId, String? communityId}) async {
+    var q = _c.from('post_drafts').delete().eq('user_id', userId);
+    q = communityId == null ? q.isFilter('community_id', null) : q.eq('community_id', communityId);
+    await q;
+  }
   Future<void> addComment(Map<String, dynamic> payload) async {
     await _c.from('post_comments').insert(payload);
     final postId = payload['post_id']?.toString();

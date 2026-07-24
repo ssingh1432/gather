@@ -13,6 +13,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../core/supabase_client.dart';
 import '../../features/data/repositories.dart';
+import 'format_toolbar.dart';
 import '../models/models.dart';
 import '../services/feed_video_manager.dart';
 import '../services/media_download_service.dart';
@@ -325,7 +326,7 @@ class PostCard extends StatelessWidget {
           if (post.textContent.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Text(post.textContent),
+              child: MarkdownLiteText(post.textContent),
             ),
           if (post.tags.isNotEmpty)
             Padding(
@@ -1088,7 +1089,7 @@ class _QuotedPostCard extends StatelessWidget {
                   if (quoted.textContent.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
-                      child: Text(quoted.textContent, maxLines: 3, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+                      child: MarkdownLiteText(quoted.textContent, maxLines: 3, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
                     ),
                 ],
               ),
