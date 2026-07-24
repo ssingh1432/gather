@@ -270,7 +270,6 @@ class _P extends State<CreatePostScreen> {
           options: pollDraft!.options,
           allowMultiple: pollDraft!.allowMultiple,
           isAnonymous: pollDraft!.isAnonymous,
-          expiresAt: pollDraft!.expiresAt,
         );
       } else if (eventDraft != null) {
         await postRepository.createEvent(
@@ -1075,12 +1074,11 @@ Future<_EventDraft?> _showEventSheet(BuildContext context, _EventDraft? existing
 }
 
 class _PollDraft {
-  _PollDraft({required this.question, required this.options, this.allowMultiple = false, this.isAnonymous = true, this.expiresAt});
+  _PollDraft({required this.question, required this.options, this.allowMultiple = false, this.isAnonymous = true});
   final String question;
   final List<String> options;
   final bool allowMultiple;
   final bool isAnonymous;
-  final DateTime? expiresAt;
 }
 
 class _EventDraft {
