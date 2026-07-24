@@ -73,6 +73,10 @@ class PostModel {
   final String? linkPreviewSiteName;
   final String visibility;
   final bool isSensitive;
+  final bool isPinned;
+  final DateTime? archivedAt;
+  final DateTime? editedAt;
+  final int editCount;
 
   PostModel({
     required this.id,
@@ -110,6 +114,10 @@ class PostModel {
     this.linkPreviewSiteName,
     this.visibility = 'public',
     this.isSensitive = false,
+    this.isPinned = false,
+    this.archivedAt,
+    this.editedAt,
+    this.editCount = 0,
   });
 
   factory PostModel.fromMap(Map<String, dynamic> map) {
@@ -154,6 +162,10 @@ class PostModel {
       linkPreviewSiteName: map['link_preview_site_name'] as String?,
       visibility: map['visibility'] as String? ?? 'public',
       isSensitive: map['is_sensitive'] == true,
+      isPinned: map['is_pinned'] == true,
+      archivedAt: map['archived_at'] is String ? DateTime.tryParse(map['archived_at']) : null,
+      editedAt: map['edited_at'] is String ? DateTime.tryParse(map['edited_at']) : null,
+      editCount: _intFromMap(map, 'edit_count'),
     );
   }
 
@@ -200,6 +212,10 @@ class PostModel {
         linkPreviewSiteName: linkPreviewSiteName,
         visibility: visibility,
         isSensitive: isSensitive,
+        isPinned: isPinned,
+        archivedAt: archivedAt,
+        editedAt: editedAt,
+        editCount: editCount,
       );
 
   String? get displayImageUrl => thumbnailUrl ?? _derivedThumbnailUrl ?? imageUrl;

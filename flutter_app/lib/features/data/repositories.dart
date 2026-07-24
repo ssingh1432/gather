@@ -18,6 +18,8 @@ class FeedRepository {
         .from('posts')
         .select('*, users!posts_author_id_fkey(username), post_media(media_url, media_type)')
         .eq('is_removed', false)
+        .isFilter('archived_at', null)
+        .order('is_pinned', ascending: false)
         .order('created_at', ascending: false)
         .range(page * pageSize, page * pageSize + pageSize - 1);
     return (data as List).map((e) => PostModel.fromMap(e)).toList();
@@ -44,6 +46,8 @@ class FeedRepository {
         .select('*, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url, media_type)')
         .eq('author_id', userId)
         .eq('is_removed', false)
+        .isFilter('archived_at', null)
+        .order('is_pinned', ascending: false)
         .order('created_at', ascending: false)
         .limit(limit);
     return (data as List).map((e) => PostModel.fromMap(e)).toList();
@@ -439,6 +443,69 @@ class PostRepository {
     );
     return created;
   }
+
+  /// Edits an author's own post text/tags/visibility. Snapshots the
+  /// pre-edit state to post_edit_history first (admin-visible via RLS —
+  /// see migration 031), then applies the update and bumps edited_at /
+  /// edit_count so the UI can show an "Edited" indicator.
+  Future<void> editPost(
+    String postId, {
+    required String textContent,
+    List<String>? tags,
+    String? visibility,
+  }) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) throw StateError('Must be signed in to edit a post.');
+
+    final current = await _c.from('posts').select('text_content, edit_count').eq('id', postId).single();
+
+    await _c.from('post_edit_history').insert({
+      'post_id': postId,
+      'editor_id': uid,
+      'previous_text_content': current['text_content'],
+    });
+
+    await _c.from('posts').update({
+      'text_content': textContent,
+      if (tags != null) 'tags': tags,
+      if (visibility != null) 'visibility': visibility,
+      'edited_at': DateTime.now().toIso8601String(),
+      'edit_count': ((current['edit_count'] as int?) ?? 0) + 1,
+    }).eq('id', postId);
+  }
+
+  Future<List<Map<String, dynamic>>> editHistory(String postId) async {
+    final rows = await _c
+        .from('post_edit_history')
+        .select()
+        .eq('post_id', postId)
+        .order('edited_at', ascending: false);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> deletePost(String postId) => _c.from('posts').delete().eq('id', postId);
+
+  Future<void> archivePost(String postId) =>
+      _c.from('posts').update({'archived_at': DateTime.now().toIso8601String()}).eq('id', postId);
+
+  Future<void> unarchivePost(String postId) => _c.from('posts').update({'archived_at': null}).eq('id', postId);
+
+  Future<List<PostModel>> archivedPosts(String userId) async {
+    final data = await _c
+        .from('posts')
+        .select('*, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url, media_type)')
+        .eq('author_id', userId)
+        .eq('is_removed', false)
+        .not('archived_at', 'is', null)
+        .order('archived_at', ascending: false);
+    return (data as List).map((e) => PostModel.fromMap(e)).toList();
+  }
+
+  Future<void> pinPost(String postId) =>
+      _c.from('posts').update({'is_pinned': true, 'pinned_at': DateTime.now().toIso8601String()}).eq('id', postId);
+
+  Future<void> unpinPost(String postId) =>
+      _c.from('posts').update({'is_pinned': false, 'pinned_at': null}).eq('id', postId);
 
   /// Upserts the caller's single in-progress draft for [communityId] (null
   /// means "main feed composer"). One draft per user+community is enough

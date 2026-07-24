@@ -25,6 +25,7 @@ import '../features/media/media_viewer_screen.dart';
 import '../features/moderation/my_moderation_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/posts/create_post_screen.dart';
+import '../features/posts/edit_post_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/user_profile_screen.dart';
@@ -113,6 +114,7 @@ final appRouter = GoRouter(
           ),
         ),
         GoRoute(path: '/search', builder: (_, s) => SearchScreen(initialQuery: s.uri.queryParameters['q'])),
+        GoRoute(path: '/edit-post', builder: (_, s) => EditPostScreen(postId: s.uri.queryParameters['postId']!)),
         GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
       ],
     ),

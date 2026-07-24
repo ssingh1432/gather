@@ -226,6 +226,7 @@ class PostCard extends StatelessWidget {
   }
 
   void _openOverflowMenu(BuildContext context) {
+    final isOwner = post.authorId.isNotEmpty && post.authorId == SupabaseConfig.currentUserId;
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -244,6 +245,79 @@ class PostCard extends StatelessWidget {
                 }
               },
             ),
+            if (isOwner) ...[
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit post'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  context.push('/edit-post?postId=${post.id}');
+                },
+              ),
+              ListTile(
+                leading: Icon(post.isPinned ? Icons.push_pin : Icons.push_pin_outlined),
+                title: Text(post.isPinned ? 'Unpin from profile' : 'Pin to profile'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  try {
+                    if (post.isPinned) {
+                      await PostRepository().unpinPost(post.id);
+                    } else {
+                      await PostRepository().pinPost(post.id);
+                    }
+                  } catch (_) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not update pin status.')));
+                    }
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.archive_outlined),
+                title: const Text('Archive post'),
+                subtitle: const Text('Hides it from your profile and feed — not deleted'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  try {
+                    await PostRepository().archivePost(post.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post archived.')));
+                    }
+                  } catch (_) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not archive post.')));
+                    }
+                  }
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
+                title: Text('Delete post', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('Delete this post?'),
+                      content: const Text('This cannot be undone.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+                        TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    try {
+                      await PostRepository().deletePost(post.id);
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not delete post.')));
+                      }
+                    }
+                  }
+                },
+              ),
+            ],
             ListTile(
               leading: Icon(Icons.flag_outlined, color: Theme.of(context).colorScheme.error),
               title: Text('Report post', style: TextStyle(color: Theme.of(context).colorScheme.error)),
@@ -1044,8 +1118,14 @@ class _PostHeader extends StatelessWidget {
               ),
               Row(children: [
                 Text(timeAgo(post.createdAt), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline)),
+                if (post.editedAt != null)
+                  Text(' · Edited', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline)),
                 if (post.communityId != null) ...[
                   Text(' · community', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline)),
+                ],
+                if (post.isPinned) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.push_pin, size: 12, color: Theme.of(context).colorScheme.primary),
                 ],
               ]),
             ],
