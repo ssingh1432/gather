@@ -8,7 +8,8 @@ import '../data/repositories.dart';
 /// Searches communities (by name) and posts (by text content). Uses only
 /// existing repository/table access — no new RPCs or tables required.
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  const SearchScreen({super.key, this.initialQuery});
+  final String? initialQuery;
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -20,6 +21,30 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _loading = false;
   List<Map<String, dynamic>> _communities = [];
   List<PostModel> _posts = [];
+  List<Map<String, dynamic>> _trending = [];
+  bool _loadingTrending = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTrending();
+    final initial = widget.initialQuery;
+    if (initial != null && initial.isNotEmpty) {
+      _query.text = initial;
+      _search(initial);
+    }
+  }
+
+  Future<void> _loadTrending() async {
+    try {
+      final rows = await SupabaseConfig.client.rpc('trending_hashtags', params: {'days_back': 7, 'result_limit': 15});
+      if (mounted) setState(() => _trending = (rows as List).cast<Map<String, dynamic>>());
+    } catch (_) {
+      // Trending is a nice-to-have on the empty state; search itself still works without it.
+    } finally {
+      if (mounted) setState(() => _loadingTrending = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -40,11 +65,12 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _loading = true);
     try {
       final communities = await _communityRepository.listCommunities(q);
+      final tagQuery = q.startsWith('#') ? q.substring(1) : q;
       final postRows = await SupabaseConfig.client
           .from('posts')
           .select('*, users!posts_author_id_fkey(username), post_media(media_url)')
           .eq('is_removed', false)
-          .ilike('text_content', '%$q%')
+          .or('text_content.ilike.%$q%,tags.cs.{$tagQuery}')
           .order('created_at', ascending: false)
           .limit(20);
       final posts = (postRows as List).map((e) => PostModel.fromMap(e)).toList();
@@ -115,6 +141,29 @@ class _SearchScreenState extends State<SearchScreen> {
                     padding: EdgeInsets.all(24),
                     child: Center(child: Text('No results found.')),
                   ),
+                if (_query.text.isEmpty && !_loadingTrending && _trending.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Text('Trending hashtags', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final t in _trending)
+                          ActionChip(
+                            label: Text('#${t['tag']} · ${t['post_count']}'),
+                            onPressed: () {
+                              _query.text = t['tag'].toString();
+                              _search(t['tag'].toString());
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
     );

@@ -112,7 +112,7 @@ final appRouter = GoRouter(
             sharedText: s.uri.queryParameters['sharedText'],
           ),
         ),
-        GoRoute(path: '/search', builder: (_, __) => const SearchScreen()),
+        GoRoute(path: '/search', builder: (_, s) => SearchScreen(initialQuery: s.uri.queryParameters['q'])),
         GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
       ],
     ),
