@@ -1,12 +1,15 @@
--- Phase 10 Steps 14/15: exclude archived posts from the home feed, and
--- surface pinned posts at the top.
+-- Phase 10 Steps 14/15: exclude archived posts from the home feed, surface
+-- pinned posts at the top, and return content_type/is_pinned/edited_at/
+-- edit_count so the client can render polls/events and edit/pin badges
+-- from the home feed RPC (not just the direct-query public/profile feeds).
 --
--- Changes from the previous get_home_feed definition:
---   1. added `and p.archived_at is null` to the WHERE clause
---   2. order by p.is_pinned desc, p.created_at desc, p.id desc
+-- Return signature changed (new output columns), so this drops and
+-- recreates the function rather than CREATE OR REPLACE.
 
-CREATE OR REPLACE FUNCTION public.get_home_feed(user_id uuid, page_size integer DEFAULT 20, page_offset integer DEFAULT 0)
- RETURNS TABLE(id uuid, author_id uuid, community_id uuid, text_content text, created_at timestamp with time zone, author_username text, author_avatar_url text, image_url text, location text, feeling text, tags text[], like_count bigint, comment_count bigint, share_count integer, is_liked boolean, is_bookmarked boolean, reply_to_post_id uuid, reply_to_author_username text, reply_to_author_avatar_url text, reply_to_text_content text, reply_to_image_url text, reply_to_created_at timestamp with time zone, reply_to_removed boolean, is_sensitive boolean)
+DROP FUNCTION IF EXISTS public.get_home_feed(uuid, integer, integer);
+
+CREATE FUNCTION public.get_home_feed(user_id uuid, page_size integer DEFAULT 20, page_offset integer DEFAULT 0)
+ RETURNS TABLE(id uuid, author_id uuid, community_id uuid, text_content text, created_at timestamp with time zone, author_username text, author_avatar_url text, image_url text, location text, feeling text, tags text[], like_count bigint, comment_count bigint, share_count integer, is_liked boolean, is_bookmarked boolean, reply_to_post_id uuid, reply_to_author_username text, reply_to_author_avatar_url text, reply_to_text_content text, reply_to_image_url text, reply_to_created_at timestamp with time zone, reply_to_removed boolean, is_sensitive boolean, content_type text, is_pinned boolean, edited_at timestamp with time zone, edit_count integer)
  LANGUAGE sql
  STABLE
  SET search_path TO 'public'
@@ -35,7 +38,11 @@ AS $function$
     rpm.media_url as reply_to_image_url,
     rp.created_at as reply_to_created_at,
     (p.reply_to_post_id is not null and rp.id is null) as reply_to_removed,
-    p.is_sensitive
+    p.is_sensitive,
+    p.content_type,
+    p.is_pinned,
+    p.edited_at,
+    p.edit_count
   from public.posts p
   join public.users u on u.id = p.author_id
   left join lateral (
@@ -99,3 +106,5 @@ AS $function$
   limit least(greatest(coalesce($2, 20), 1), 100)
   offset greatest(coalesce($3, 0), 0);
 $function$;
+
+grant execute on function public.get_home_feed(uuid, integer, integer) to authenticated;

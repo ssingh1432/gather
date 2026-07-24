@@ -77,6 +77,7 @@ class PostModel {
   final DateTime? archivedAt;
   final DateTime? editedAt;
   final int editCount;
+  final String contentType;
 
   PostModel({
     required this.id,
@@ -118,6 +119,7 @@ class PostModel {
     this.archivedAt,
     this.editedAt,
     this.editCount = 0,
+    this.contentType = 'text',
   });
 
   factory PostModel.fromMap(Map<String, dynamic> map) {
@@ -166,12 +168,15 @@ class PostModel {
       archivedAt: map['archived_at'] is String ? DateTime.tryParse(map['archived_at']) : null,
       editedAt: map['edited_at'] is String ? DateTime.tryParse(map['edited_at']) : null,
       editCount: _intFromMap(map, 'edit_count'),
+      contentType: map['content_type'] as String? ?? 'text',
     );
   }
 
   bool get isVideo => mediaType == 'video';
   bool get isAudio => mediaType == 'audio';
   bool get isDocument => mediaType == 'document';
+  bool get isPoll => contentType == 'poll';
+  bool get isEvent => contentType == 'event';
 
   /// Returns a copy with the given fields replaced — used to patch live
   /// like/comment/share counts in place from realtime events without
@@ -216,6 +221,7 @@ class PostModel {
         archivedAt: archivedAt,
         editedAt: editedAt,
         editCount: editCount,
+        contentType: contentType,
       );
 
   String? get displayImageUrl => thumbnailUrl ?? _derivedThumbnailUrl ?? imageUrl;

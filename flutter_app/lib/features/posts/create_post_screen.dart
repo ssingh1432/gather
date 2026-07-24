@@ -42,6 +42,8 @@ class _P extends State<CreatePostScreen> {
   XFile? video;
   PlatformFile? audio;
   PlatformFile? document;
+  _PollDraft? pollDraft;
+  _EventDraft? eventDraft;
   bool loading = false;
   String? err;
   String? _pendingPostId;
@@ -224,8 +226,8 @@ class _P extends State<CreatePostScreen> {
       return;
     }
 
-    if (text.text.trim().isEmpty && image == null && video == null && audio == null && document == null) {
-      if (mounted) setState(() => err = 'Add text, a photo, a video, audio, or a document');
+    if (text.text.trim().isEmpty && image == null && video == null && audio == null && document == null && pollDraft == null && eventDraft == null) {
+      if (mounted) setState(() => err = 'Add text, media, a poll, or an event');
       return;
     }
 
@@ -258,9 +260,27 @@ class _P extends State<CreatePostScreen> {
         'link_preview_image_url': _linkPreview?.imageUrl,
         'link_preview_site_name': _linkPreview?.siteName,
         'is_sensitive': _isSensitive,
+        'content_type': pollDraft != null ? 'poll' : (eventDraft != null ? 'event' : 'text'),
       }))['id'].toString();
 
-      if (video != null) {
+      if (pollDraft != null) {
+        await postRepository.createPoll(
+          _pendingPostId!,
+          question: pollDraft!.question,
+          options: pollDraft!.options,
+          allowMultiple: pollDraft!.allowMultiple,
+          isAnonymous: pollDraft!.isAnonymous,
+          expiresAt: pollDraft!.expiresAt,
+        );
+      } else if (eventDraft != null) {
+        await postRepository.createEvent(
+          _pendingPostId!,
+          title: eventDraft!.title,
+          startsAt: eventDraft!.startsAt,
+          locationText: eventDraft!.locationText,
+          onlineUrl: eventDraft!.onlineUrl,
+        );
+      } else if (video != null) {
         final videoUrl = await postRepository.uploadPostVideo(_pendingPostId!, video!);
         await postRepository.addPostMedia(_pendingPostId!, videoUrl, mediaType: 'video');
       } else if (image != null) {
@@ -282,6 +302,8 @@ class _P extends State<CreatePostScreen> {
         video = null;
         audio = null;
         document = null;
+        pollDraft = null;
+        eventDraft = null;
         context.go('/');
       }
     } catch (e, stackTrace) {
@@ -547,6 +569,8 @@ class _P extends State<CreatePostScreen> {
                       video = null;
                       audio = null;
                       document = null; // a post carries at most one media item
+                      pollDraft = null;
+                      eventDraft = null;
                     });
                   },
                   icon: const Icon(Icons.image_outlined),
@@ -562,6 +586,8 @@ class _P extends State<CreatePostScreen> {
                       image = null;
                       audio = null;
                       document = null; // a post carries at most one media item
+                      pollDraft = null;
+                      eventDraft = null;
                     });
                   },
                   icon: const Icon(Icons.videocam_outlined),
@@ -582,6 +608,8 @@ class _P extends State<CreatePostScreen> {
                         image = null;
                         video = null;
                         document = null;
+                        pollDraft = null;
+                        eventDraft = null;
                       });
                     }
                   },
@@ -603,11 +631,45 @@ class _P extends State<CreatePostScreen> {
                         image = null;
                         video = null;
                         audio = null;
+                        pollDraft = null;
+                        eventDraft = null;
                       });
                     }
                   },
                   icon: const Icon(Icons.description_outlined),
                   label: Text(document == null ? 'Add document' : document!.name),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final draft = await _showPollSheet(context, pollDraft);
+                    if (draft == null) return;
+                    setState(() {
+                      pollDraft = draft;
+                      eventDraft = null;
+                      image = null;
+                      video = null;
+                      audio = null;
+                      document = null;
+                    });
+                  },
+                  icon: const Icon(Icons.poll_outlined),
+                  label: Text(pollDraft == null ? 'Add poll' : 'Poll: ${pollDraft!.question}'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final draft = await _showEventSheet(context, eventDraft);
+                    if (draft == null) return;
+                    setState(() {
+                      eventDraft = draft;
+                      pollDraft = null;
+                      image = null;
+                      video = null;
+                      audio = null;
+                      document = null;
+                    });
+                  },
+                  icon: const Icon(Icons.event_outlined),
+                  label: Text(eventDraft == null ? 'Add event' : 'Event: ${eventDraft!.title}'),
                 ),
                 OutlinedButton.icon(
                   onPressed: _pickFeeling,
@@ -849,4 +911,182 @@ class _LinkPreviewCard extends StatelessWidget {
       ),
     );
   }
+}
+
+
+Future<_PollDraft?> _showPollSheet(BuildContext context, _PollDraft? existing) {
+  final question = TextEditingController(text: existing?.question ?? '');
+  final options = List<TextEditingController>.generate(
+    (existing?.options.length ?? 2).clamp(2, 6),
+    (i) => TextEditingController(text: existing != null && i < existing.options.length ? existing.options[i] : ''),
+  );
+  bool allowMultiple = existing?.allowMultiple ?? false;
+  bool isAnonymous = existing?.isAnonymous ?? true;
+
+  return showModalBottomSheet<_PollDraft>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (sheetContext, setSheetState) => Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 8,
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 16,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Create poll', style: Theme.of(sheetContext).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              TextField(controller: question, decoration: const InputDecoration(labelText: 'Question')),
+              const SizedBox(height: 12),
+              for (var i = 0; i < options.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: TextField(
+                    controller: options[i],
+                    decoration: InputDecoration(
+                      labelText: 'Option ${i + 1}',
+                      suffixIcon: options.length > 2
+                          ? IconButton(icon: const Icon(Icons.close), onPressed: () => setSheetState(() => options.removeAt(i).dispose()))
+                          : null,
+                    ),
+                  ),
+                ),
+              if (options.length < 6)
+                TextButton.icon(
+                  onPressed: () => setSheetState(() => options.add(TextEditingController())),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add option'),
+                ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Allow multiple choices'),
+                value: allowMultiple,
+                onChanged: (v) => setSheetState(() => allowMultiple = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Anonymous voting'),
+                value: isAnonymous,
+                onChanged: (v) => setSheetState(() => isAnonymous = v),
+              ),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: () {
+                  final q = question.text.trim();
+                  final opts = options.map((c) => c.text.trim()).where((t) => t.isNotEmpty).toList();
+                  if (q.isEmpty || opts.length < 2) {
+                    ScaffoldMessenger.of(sheetContext).showSnackBar(
+                      const SnackBar(content: Text('Add a question and at least 2 options.')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(sheetContext, _PollDraft(question: q, options: opts, allowMultiple: allowMultiple, isAnonymous: isAnonymous));
+                },
+                child: const Text('Save poll'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+Future<_EventDraft?> _showEventSheet(BuildContext context, _EventDraft? existing) {
+  final title = TextEditingController(text: existing?.title ?? '');
+  final locationText = TextEditingController(text: existing?.locationText ?? '');
+  final onlineUrl = TextEditingController(text: existing?.onlineUrl ?? '');
+  DateTime startsAt = existing?.startsAt ?? DateTime.now().add(const Duration(days: 1));
+
+  return showModalBottomSheet<_EventDraft>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (sheetContext, setSheetState) => Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 8,
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 16,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Create event', style: Theme.of(sheetContext).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              TextField(controller: title, decoration: const InputDecoration(labelText: 'Event title')),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.schedule),
+                title: Text('${startsAt.year}-${startsAt.month.toString().padLeft(2, '0')}-${startsAt.day.toString().padLeft(2, '0')}  ${startsAt.hour.toString().padLeft(2, '0')}:${startsAt.minute.toString().padLeft(2, '0')}'),
+                trailing: const Icon(Icons.edit_outlined),
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: sheetContext,
+                    initialDate: startsAt,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 730)),
+                  );
+                  if (date == null || !sheetContext.mounted) return;
+                  final time = await showTimePicker(context: sheetContext, initialTime: TimeOfDay.fromDateTime(startsAt));
+                  if (time == null) return;
+                  setSheetState(() => startsAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));
+                },
+              ),
+              const SizedBox(height: 8),
+              TextField(controller: locationText, decoration: const InputDecoration(labelText: 'Location (optional)')),
+              const SizedBox(height: 12),
+              TextField(controller: onlineUrl, decoration: const InputDecoration(labelText: 'Online meeting link (optional)')),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () {
+                  if (title.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('Add an event title.')));
+                    return;
+                  }
+                  Navigator.pop(
+                    sheetContext,
+                    _EventDraft(
+                      title: title.text.trim(),
+                      startsAt: startsAt,
+                      locationText: locationText.text.trim().isEmpty ? null : locationText.text.trim(),
+                      onlineUrl: onlineUrl.text.trim().isEmpty ? null : onlineUrl.text.trim(),
+                    ),
+                  );
+                },
+                child: const Text('Save event'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _PollDraft {
+  _PollDraft({required this.question, required this.options, this.allowMultiple = false, this.isAnonymous = true, this.expiresAt});
+  final String question;
+  final List<String> options;
+  final bool allowMultiple;
+  final bool isAnonymous;
+  final DateTime? expiresAt;
+}
+
+class _EventDraft {
+  _EventDraft({required this.title, required this.startsAt, this.locationText, this.onlineUrl});
+  final String title;
+  final DateTime startsAt;
+  final String? locationText;
+  final String? onlineUrl;
 }

@@ -507,6 +507,116 @@ class PostRepository {
   Future<void> unpinPost(String postId) =>
       _c.from('posts').update({'is_pinned': false, 'pinned_at': null}).eq('id', postId);
 
+  // ---- Polls (Step 7) ----
+
+  Future<void> createPoll(
+    String postId, {
+    required String question,
+    required List<String> options,
+    bool allowMultiple = false,
+    bool isAnonymous = true,
+    DateTime? expiresAt,
+  }) async {
+    final poll = await _c
+        .from('polls')
+        .insert({
+          'post_id': postId,
+          'question': question,
+          'allow_multiple': allowMultiple,
+          'is_anonymous': isAnonymous,
+          'expires_at': expiresAt?.toIso8601String(),
+        })
+        .select('id')
+        .single();
+    await _c.from('poll_options').insert([
+      for (var i = 0; i < options.length; i++) {'poll_id': poll['id'], 'option_text': options[i], 'position': i},
+    ]);
+  }
+
+  /// Returns the poll, its options (with live vote counts), and whether
+  /// [userId] has voted for each option — everything the poll card needs
+  /// in one round trip.
+  Future<Map<String, dynamic>?> getPollForPost(String postId, {String? userId}) async {
+    final poll = await _c.from('polls').select().eq('post_id', postId).maybeSingle();
+    if (poll == null) return null;
+    final options = await _c.from('poll_options').select().eq('poll_id', poll['id']).order('position');
+    final votes = await _c.from('poll_votes').select('option_id, user_id').eq('poll_id', poll['id']);
+    final voteList = (votes as List).cast<Map<String, dynamic>>();
+    return {
+      ...poll,
+      'options': (options as List).map((o) {
+        final optionVotes = voteList.where((v) => v['option_id'] == o['id']);
+        return {
+          ...o as Map<String, dynamic>,
+          'vote_count': optionVotes.length,
+          'voted_by_me': userId != null && optionVotes.any((v) => v['user_id'] == userId),
+        };
+      }).toList(),
+      'total_votes': voteList.map((v) => v['user_id']).toSet().length,
+    };
+  }
+
+  Future<void> votePoll({required String pollId, required String optionId, required String userId, required bool allowMultiple}) async {
+    if (!allowMultiple) {
+      await _c.from('poll_votes').delete().eq('poll_id', pollId).eq('user_id', userId);
+    }
+    await _c.from('poll_votes').insert({'poll_id': pollId, 'option_id': optionId, 'user_id': userId});
+  }
+
+  Future<void> unvotePollOption({required String pollId, required String optionId, required String userId}) =>
+      _c.from('poll_votes').delete().eq('poll_id', pollId).eq('option_id', optionId).eq('user_id', userId);
+
+  // ---- Events (Step 8) ----
+
+  Future<void> createEvent(
+    String postId, {
+    required String title,
+    String? description,
+    required DateTime startsAt,
+    DateTime? endsAt,
+    String timezone = 'Asia/Kathmandu',
+    String? locationText,
+    double? locationLat,
+    double? locationLng,
+    String? onlineUrl,
+  }) {
+    return _c.from('events').insert({
+      'post_id': postId,
+      'title': title,
+      'description': description,
+      'starts_at': startsAt.toIso8601String(),
+      'ends_at': endsAt?.toIso8601String(),
+      'timezone': timezone,
+      'location_text': locationText,
+      'location_lat': locationLat,
+      'location_lng': locationLng,
+      'online_url': onlineUrl,
+    });
+  }
+
+  Future<Map<String, dynamic>?> getEventForPost(String postId, {String? userId}) async {
+    final event = await _c.from('events').select().eq('post_id', postId).maybeSingle();
+    if (event == null) return null;
+    final rsvps = await _c.from('event_rsvps').select('status, user_id').eq('event_id', event['id']);
+    final rsvpList = (rsvps as List).cast<Map<String, dynamic>>();
+    return {
+      ...event,
+      'going_count': rsvpList.where((r) => r['status'] == 'going').length,
+      'interested_count': rsvpList.where((r) => r['status'] == 'interested').length,
+      'my_status': userId == null ? null : rsvpList.firstWhere((r) => r['user_id'] == userId, orElse: () => const {})['status'],
+    };
+  }
+
+  Future<void> setEventRsvp({required String eventId, required String userId, required String status}) {
+    return _c.from('event_rsvps').upsert(
+      {'event_id': eventId, 'user_id': userId, 'status': status, 'updated_at': DateTime.now().toIso8601String()},
+      onConflict: 'event_id,user_id',
+    );
+  }
+
+  Future<void> clearEventRsvp({required String eventId, required String userId}) =>
+      _c.from('event_rsvps').delete().eq('event_id', eventId).eq('user_id', userId);
+
   /// Upserts the caller's single in-progress draft for [communityId] (null
   /// means "main feed composer"). One draft per user+community is enough
   /// for now — multiple concurrent drafts per surface can come later if

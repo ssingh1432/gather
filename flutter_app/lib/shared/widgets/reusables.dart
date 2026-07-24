@@ -437,6 +437,16 @@ class PostCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
               child: _PostDocumentCard(url: post.imageUrl!),
+            )
+          else if (post.isPoll)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: _PostPollCard(postId: post.id),
+            )
+          else if (post.isEvent)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: _PostEventCard(postId: post.id),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
@@ -626,6 +636,267 @@ class _PostDocumentCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+
+class _PostPollCard extends StatefulWidget {
+  const _PostPollCard({required this.postId});
+  final String postId;
+
+  @override
+  State<_PostPollCard> createState() => _PostPollCardState();
+}
+
+class _PostPollCardState extends State<_PostPollCard> {
+  Map<String, dynamic>? _poll;
+  bool _loading = true;
+  bool _voting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final poll = await PostRepository().getPollForPost(widget.postId, userId: SupabaseConfig.currentUserId);
+      if (mounted) setState(() { _poll = poll; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _vote(String optionId, bool alreadyVoted, bool allowMultiple) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null || _voting) return;
+    setState(() => _voting = true);
+    try {
+      if (alreadyVoted) {
+        await PostRepository().unvotePollOption(pollId: _poll!['id'], optionId: optionId, userId: uid);
+      } else {
+        await PostRepository().votePoll(pollId: _poll!['id'], optionId: optionId, userId: uid, allowMultiple: allowMultiple);
+      }
+      await _load();
+    } catch (_) {
+      // Best-effort — the tap just won't visibly register; user can retry.
+    } finally {
+      if (mounted) setState(() => _voting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const SizedBox(height: 60, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+    final poll = _poll;
+    if (poll == null) return const SizedBox.shrink();
+
+    final options = (poll['options'] as List).cast<Map<String, dynamic>>();
+    final total = poll['total_votes'] as int;
+    final allowMultiple = poll['allow_multiple'] == true;
+    final hasVoted = options.any((o) => o['voted_by_me'] == true);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(poll['question'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          for (final option in options) ...[
+            _PollOptionBar(
+              text: option['option_text'] as String,
+              voteCount: option['vote_count'] as int,
+              total: total,
+              votedByMe: option['voted_by_me'] == true,
+              showResults: hasVoted,
+              onTap: () => _vote(option['id'] as String, option['voted_by_me'] == true, allowMultiple),
+            ),
+            const SizedBox(height: 6),
+          ],
+          Text('$total vote${total == 1 ? '' : 's'}${allowMultiple ? ' · multiple choice' : ''}',
+              style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
+class _PollOptionBar extends StatelessWidget {
+  const _PollOptionBar({
+    required this.text,
+    required this.voteCount,
+    required this.total,
+    required this.votedByMe,
+    required this.showResults,
+    required this.onTap,
+  });
+
+  final String text;
+  final int voteCount;
+  final int total;
+  final bool votedByMe;
+  final bool showResults;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = total == 0 ? 0.0 : voteCount / total;
+    final color = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Stack(
+        children: [
+          if (showResults)
+            Positioned.fill(
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: pct,
+                child: Container(decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8))),
+              ),
+            ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(border: Border.all(color: color.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(8)),
+            child: Row(
+              children: [
+                if (votedByMe) Icon(Icons.check_circle, size: 16, color: color) else const SizedBox(width: 16),
+                const SizedBox(width: 6),
+                Expanded(child: Text(text)),
+                if (showResults) Text('${(pct * 100).round()}%', style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PostEventCard extends StatefulWidget {
+  const _PostEventCard({required this.postId});
+  final String postId;
+
+  @override
+  State<_PostEventCard> createState() => _PostEventCardState();
+}
+
+class _PostEventCardState extends State<_PostEventCard> {
+  Map<String, dynamic>? _event;
+  bool _loading = true;
+  bool _updating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final event = await PostRepository().getEventForPost(widget.postId, userId: SupabaseConfig.currentUserId);
+      if (mounted) setState(() { _event = event; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _setStatus(String status) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null || _updating) return;
+    setState(() => _updating = true);
+    try {
+      final current = _event?['my_status'];
+      if (current == status) {
+        await PostRepository().clearEventRsvp(eventId: _event!['id'], userId: uid);
+      } else {
+        await PostRepository().setEventRsvp(eventId: _event!['id'], userId: uid, status: status);
+      }
+      await _load();
+    } catch (_) {
+      // Best-effort RSVP — silent failure just leaves the button unchanged.
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
+  }
+
+  String _fmtDate(String iso) {
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return '';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year} · ${hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} $ampm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const SizedBox(height: 60, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+    final event = _event;
+    if (event == null) return const SizedBox.shrink();
+    final myStatus = event['my_status'] as String?;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.event, size: 20),
+            const SizedBox(width: 8),
+            Expanded(child: Text(event['title'] as String, style: const TextStyle(fontWeight: FontWeight.w600))),
+          ]),
+          const SizedBox(height: 6),
+          Text(_fmtDate(event['starts_at'] as String), style: Theme.of(context).textTheme.bodySmall),
+          if ((event['location_text'] as String?)?.isNotEmpty == true)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(event['location_text'] as String, style: Theme.of(context).textTheme.bodySmall),
+            ),
+          if ((event['online_url'] as String?)?.isNotEmpty == true)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: InkWell(
+                onTap: () => launchUrl(Uri.parse(event['online_url'] as String), mode: LaunchMode.externalApplication),
+                child: Text('Join online', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+              ),
+            ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _RsvpChip(label: 'Going', selected: myStatus == 'going', onTap: () => _setStatus('going')),
+              const SizedBox(width: 8),
+              _RsvpChip(label: 'Interested', selected: myStatus == 'interested', onTap: () => _setStatus('interested')),
+              const Spacer(),
+              Text('${event['going_count']} going', style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RsvpChip extends StatelessWidget {
+  const _RsvpChip({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(label: Text(label), selected: selected, onSelected: (_) => onTap());
   }
 }
 
