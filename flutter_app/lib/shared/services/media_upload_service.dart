@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -45,10 +48,24 @@ class MediaUploadService {
   static const int maxPostMediaBytes = 100 * 1024 * 1024; // 100MB — post-media, story-media
   static const int maxAvatarBytes = 5 * 1024 * 1024; // 5MB — avatars
   static const int maxEvidenceBytes = 20 * 1024 * 1024; // 20MB — moderation-evidence
+  static const int maxAudioBytes = 20 * 1024 * 1024; // 20MB — matches story-audio bucket limit
+  static const int maxDocumentBytes = 25 * 1024 * 1024; // 25MB
 
   static Future<void> _assertWithinLimit(XFile file, int maxBytes, String label) async {
     final size = await file.length();
     if (size > maxBytes) {
+      final maxMb = (maxBytes / (1024 * 1024)).toStringAsFixed(0);
+      throw MediaUploadException('$label must be $maxMb MB or smaller.');
+    }
+  }
+
+  /// Same check as [_assertWithinLimit] but for `file_picker`'s
+  /// `PlatformFile`, whose size is already known synchronously.
+  static void assertFileWithinLimit(PlatformFile file, int maxBytes, String label) {
+    if (file.bytes == null) {
+      throw const MediaUploadException('Could not read the selected file.');
+    }
+    if (file.size > maxBytes) {
       final maxMb = (maxBytes / (1024 * 1024)).toStringAsFixed(0);
       throw MediaUploadException('$label must be $maxMb MB or smaller.');
     }
@@ -160,7 +177,27 @@ class MediaUploadService {
     });
   }
 
-  /// Uploads a profile avatar or cover photo to the `avatars` bucket, scoped
+  /// Uploads a post audio or document file to `posts/{postId}/{kind}.{ext}`.
+  /// Unlike image/video, these come from `file_picker` with `withData:
+  /// true`, so bytes are already available on every platform — no
+  /// io/web preparer split needed here.
+  Future<String> uploadPostBinary({
+    required String postId,
+    required String kind, // 'audio' or 'document'
+    required List<int> bytes,
+    required String contentType,
+    required String fileExtension,
+  }) async {
+    return _withAuthRetry(() async {
+      final options = FileOptions(contentType: contentType, cacheControl: '31536000', upsert: true);
+      final storage = _client.storage.from(bucket);
+      final path = 'posts/$postId/$kind.$fileExtension';
+      await storage.uploadBinary(path, Uint8List.fromList(bytes), fileOptions: options);
+      return storage.getPublicUrl(path);
+    });
+  }
+
+
   /// to `{userId}/{kind}` so storage RLS (folder == auth.uid()) allows it.
   /// Reuses the same platform-safe prepare pipeline as post images.
   Future<String> uploadProfileImage({

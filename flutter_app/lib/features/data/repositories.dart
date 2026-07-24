@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -499,6 +500,44 @@ class PostRepository {
     final prepared = await mediaService.preparePostVideo(file);
     return mediaService.uploadPostVideo(postId: postId, video: prepared);
   }
+
+  /// [file] is a `file_picker` PlatformFile picked with `withData: true`.
+  Future<String> uploadPostAudio(String postId, PlatformFile file) async {
+    MediaUploadService.assertFileWithinLimit(file, MediaUploadService.maxAudioBytes, 'Audio file');
+    final ext = (file.extension ?? 'mp3').toLowerCase();
+    return MediaUploadService().uploadPostBinary(
+      postId: postId,
+      kind: 'audio',
+      bytes: file.bytes!,
+      contentType: _audioContentType(ext),
+      fileExtension: ext,
+    );
+  }
+
+  Future<String> uploadPostDocument(String postId, PlatformFile file) async {
+    MediaUploadService.assertFileWithinLimit(file, MediaUploadService.maxDocumentBytes, 'Document');
+    final ext = (file.extension ?? 'pdf').toLowerCase();
+    return MediaUploadService().uploadPostBinary(
+      postId: postId,
+      kind: 'document',
+      bytes: file.bytes!,
+      contentType: _documentContentType(ext),
+      fileExtension: ext,
+    );
+  }
+
+  String _audioContentType(String ext) => switch (ext) {
+        'mp3' => 'audio/mpeg',
+        'm4a' || 'aac' => 'audio/aac',
+        'wav' => 'audio/wav',
+        _ => 'audio/mp4',
+      };
+
+  String _documentContentType(String ext) => switch (ext) {
+        'pdf' => 'application/pdf',
+        'doc' => 'application/msword',
+        _ => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      };
 
   /// [mediaType] is `'image'` or `'video'` — matches the `post_media`
   /// table's `media_type` enum. A post carries at most one media item, so

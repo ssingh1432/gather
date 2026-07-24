@@ -158,6 +158,8 @@ class PostModel {
   }
 
   bool get isVideo => mediaType == 'video';
+  bool get isAudio => mediaType == 'audio';
+  bool get isDocument => mediaType == 'document';
 
   /// Returns a copy with the given fields replaced — used to patch live
   /// like/comment/share counts in place from realtime events without

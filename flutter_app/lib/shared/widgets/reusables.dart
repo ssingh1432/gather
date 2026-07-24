@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -346,12 +347,22 @@ class PostCard extends StatelessWidget {
           // Media is deliberately outside any horizontal padding — full
           // device width, flush left and right, no rounded corners.
           // Facebook-style, not a card-inset thumbnail.
-          if (post.displayImageUrl != null || post.isVideo)
+          if (post.displayImageUrl != null && (post.isVideo || (!post.isAudio && !post.isDocument)))
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: post.isSensitive
                   ? _SensitiveContentGate(child: _PostMedia(post: post, liked: liked, onLike: onLike))
                   : _PostMedia(post: post, liked: liked, onLike: onLike),
+            )
+          else if (post.isAudio && post.imageUrl != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: _PostAudioCard(url: post.imageUrl!),
+            )
+          else if (post.isDocument && post.imageUrl != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: _PostDocumentCard(url: post.imageUrl!),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
@@ -428,6 +439,122 @@ class _SensitiveContentGateState extends State<_SensitiveContentGate> {
     );
   }
 }
+
+class _PostAudioCard extends StatefulWidget {
+  const _PostAudioCard({required this.url});
+  final String url;
+
+  @override
+  State<_PostAudioCard> createState() => _PostAudioCardState();
+}
+
+class _PostAudioCardState extends State<_PostAudioCard> {
+  final _player = AudioPlayer();
+  bool _playing = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _player.onPlayerStateChanged.listen((s) {
+      if (mounted) setState(() => _playing = s == PlayerState.playing);
+    });
+    _player.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _position = p);
+    });
+    _player.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _duration = d);
+    });
+    _player.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _position = Duration.zero);
+    });
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (_playing) {
+      await _player.pause();
+    } else {
+      await _player.play(UrlSource(widget.url));
+    }
+  }
+
+  String _fmt(Duration d) => '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: Icon(_playing ? Icons.pause_circle_filled : Icons.play_circle_filled, size: 36),
+            onPressed: _toggle,
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(
+                  value: _duration.inMilliseconds == 0 ? 0 : _position.inMilliseconds / _duration.inMilliseconds,
+                  minHeight: 4,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                const SizedBox(height: 4),
+                Text('${_fmt(_position)} / ${_fmt(_duration)}', style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PostDocumentCard extends StatelessWidget {
+  const _PostDocumentCard({required this.url});
+  final String url;
+
+  String get _fileName {
+    final decoded = Uri.decodeFull(url.split('/').last.split('?').first);
+    return decoded.isEmpty ? 'Document' : decoded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.description_outlined, size: 32),
+            const SizedBox(width: 10),
+            Expanded(child: Text(_fileName, overflow: TextOverflow.ellipsis, maxLines: 1)),
+            const Icon(Icons.open_in_new, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 
 class _PostMedia extends StatefulWidget {
   const _PostMedia({required this.post, required this.liked, required this.onLike});

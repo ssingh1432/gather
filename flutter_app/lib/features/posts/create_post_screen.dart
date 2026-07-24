@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -39,6 +40,8 @@ class _P extends State<CreatePostScreen> {
   final tagsCtrl = TextEditingController();
   XFile? image;
   XFile? video;
+  PlatformFile? audio;
+  PlatformFile? document;
   bool loading = false;
   String? err;
   String? _pendingPostId;
@@ -184,11 +187,11 @@ class _P extends State<CreatePostScreen> {
 
   @override
   void dispose() {
-    if (!_published && (text.text.trim().isNotEmpty || image != null || video != null)) {
+    if (!_published && (text.text.trim().isNotEmpty || image != null || video != null || audio != null || document != null)) {
       AnalyticsService.instance.postCreationAbandoned(
         communityId: widget.communityId,
         hadText: text.text.trim().isNotEmpty,
-        hadImage: image != null || video != null,
+        hadImage: image != null || video != null || audio != null || document != null,
       );
     }
     _linkDebounce?.cancel();
@@ -221,8 +224,8 @@ class _P extends State<CreatePostScreen> {
       return;
     }
 
-    if (text.text.trim().isEmpty && image == null && video == null) {
-      if (mounted) setState(() => err = 'Add text, a photo, or a video');
+    if (text.text.trim().isEmpty && image == null && video == null && audio == null && document == null) {
+      if (mounted) setState(() => err = 'Add text, a photo, a video, audio, or a document');
       return;
     }
 
@@ -263,6 +266,12 @@ class _P extends State<CreatePostScreen> {
       } else if (image != null) {
         final uploaded = await postRepository.uploadPostImage(_pendingPostId!, image!);
         await postRepository.addPostMedia(_pendingPostId!, uploaded.originalUrl);
+      } else if (audio != null) {
+        final audioUrl = await postRepository.uploadPostAudio(_pendingPostId!, audio!);
+        await postRepository.addPostMedia(_pendingPostId!, audioUrl, mediaType: 'audio');
+      } else if (document != null) {
+        final docUrl = await postRepository.uploadPostDocument(_pendingPostId!, document!);
+        await postRepository.addPostMedia(_pendingPostId!, docUrl, mediaType: 'document');
       }
 
       _published = true;
@@ -271,6 +280,8 @@ class _P extends State<CreatePostScreen> {
         text.clear();
         image = null;
         video = null;
+        audio = null;
+        document = null;
         context.go('/');
       }
     } catch (e, stackTrace) {
@@ -533,7 +544,9 @@ class _P extends State<CreatePostScreen> {
                     final safe = await materializeIfWeb(picked);
                     setState(() {
                       image = safe;
-                      video = null; // a post carries at most one media item
+                      video = null;
+                      audio = null;
+                      document = null; // a post carries at most one media item
                     });
                   },
                   icon: const Icon(Icons.image_outlined),
@@ -546,11 +559,55 @@ class _P extends State<CreatePostScreen> {
                     final safe = await materializeIfWeb(picked);
                     setState(() {
                       video = safe;
-                      image = null; // a post carries at most one media item
+                      image = null;
+                      audio = null;
+                      document = null; // a post carries at most one media item
                     });
                   },
                   icon: const Icon(Icons.videocam_outlined),
                   label: Text(video == null ? 'Add video' : 'Video selected'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final result = await FilePicker.platform.pickFiles(
+                      type: FileType.custom,
+                      allowedExtensions: const ['mp3', 'm4a', 'aac', 'wav'],
+                      withData: true,
+                    );
+                    final picked = result?.files.single;
+                    if (picked == null) return;
+                    if (mounted) {
+                      setState(() {
+                        audio = picked;
+                        image = null;
+                        video = null;
+                        document = null;
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.audiotrack_outlined),
+                  label: Text(audio == null ? 'Add audio' : audio!.name),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final result = await FilePicker.platform.pickFiles(
+                      type: FileType.custom,
+                      allowedExtensions: const ['pdf', 'doc', 'docx'],
+                      withData: true,
+                    );
+                    final picked = result?.files.single;
+                    if (picked == null) return;
+                    if (mounted) {
+                      setState(() {
+                        document = picked;
+                        image = null;
+                        video = null;
+                        audio = null;
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.description_outlined),
+                  label: Text(document == null ? 'Add document' : document!.name),
                 ),
                 OutlinedButton.icon(
                   onPressed: _pickFeeling,
