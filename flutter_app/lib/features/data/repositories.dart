@@ -62,6 +62,22 @@ class FeedRepository {
     return (data as List).map((e) => PostModel.fromMap(e as Map<String, dynamic>)).toList();
   }
 
+  /// Keyset ("cursor") pagination — see migration 036 for why this
+  /// replaces OFFSET for the home feed's infinite scroll. Pass null for
+  /// all three cursor fields to get the first page; for subsequent pages,
+  /// pass the (isPinned, createdAt, id) of the last post from the
+  /// previous page (FeedCursor.fromLastPost does this for you).
+  Future<List<PostModel>> homeFeedCursor(String userId, {int pageSize = 20, FeedCursor? cursor}) async {
+    final data = await _c.rpc('get_home_feed_cursor', params: {
+      'user_id': userId,
+      'page_size': pageSize,
+      'cursor_is_pinned': cursor?.isPinned,
+      'cursor_created_at': cursor?.createdAt.toUtc().toIso8601String(),
+      'cursor_id': cursor?.id,
+    });
+    return (data as List).map((e) => PostModel.fromMap(e as Map<String, dynamic>)).toList();
+  }
+
   Future<PostModel> getPost(String postId) async {
     final data = await _c
         .from('posts')

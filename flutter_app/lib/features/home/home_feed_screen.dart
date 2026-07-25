@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import '../../features/data/repositories.dart';
 import '../../shared/models/models.dart';
 import '../../shared/services/analytics_service.dart';
 import '../../shared/services/beta_error_logging_service.dart';
+import '../../shared/services/feed_offline_cache.dart';
 import '../../shared/services/feed_realtime_service.dart';
 import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
@@ -51,13 +53,19 @@ class _S extends ConsumerState<HomeFeedScreen> {
   Set<String> liked = <String>{};
   Set<String> bookmarked = <String>{};
   List<PostModel> _posts = const [];
-  int _nextPage = 0;
+  // Cursor pagination (Step 16) for the authenticated home feed. Only
+  // used when signed in; the logged-out public feed still uses
+  // page-number pagination (repo.publicFeed) since it's a much smaller,
+  // lower-traffic surface and isn't worth a second RPC right now.
+  FeedCursor? _cursor;
+  int _anonPage = 0;
   bool _loadingInitial = true;
   bool _loadingMore = false;
   bool _hasMore = true;
   String? _error;
   Timer? _noInteractionTimer;
   bool _feedInteracted = false;
+  DateTime? _cachedAsOf;
 
   final _realtime = FeedRealtimeService();
   StreamSubscription<FeedRealtimeEvent>? _realtimeSub;
@@ -133,12 +141,26 @@ class _S extends ConsumerState<HomeFeedScreen> {
     }
   }
 
-  Future<List<PostModel>> _fetchPage(int page) async {
+  Future<List<PostModel>> _fetchInitial() async {
     final client = SupabaseConfig.maybeClient;
     if (client == null) return [];
     final uid = client.auth.currentUser?.id;
-    if (uid == null) return repo.publicFeed(page: page, pageSize: _pageSize);
-    return repo.homeFeed(uid, page: page, pageSize: _pageSize);
+    if (uid == null) {
+      _anonPage = 0;
+      return repo.publicFeed(page: 0, pageSize: _pageSize);
+    }
+    return repo.homeFeedCursor(uid, pageSize: _pageSize);
+  }
+
+  Future<List<PostModel>> _fetchNext() async {
+    final client = SupabaseConfig.maybeClient;
+    if (client == null) return [];
+    final uid = client.auth.currentUser?.id;
+    if (uid == null) {
+      _anonPage += 1;
+      return repo.publicFeed(page: _anonPage, pageSize: _pageSize);
+    }
+    return repo.homeFeedCursor(uid, pageSize: _pageSize, cursor: _cursor);
   }
 
   Future<void> _loadInitial() async {
@@ -146,18 +168,35 @@ class _S extends ConsumerState<HomeFeedScreen> {
       _loadingInitial = true;
       _error = null;
       _hasMore = true;
-      _nextPage = 0;
+      _cursor = null;
+      _anonPage = 0;
+      _cachedAsOf = null;
     });
     try {
-      final posts = await _fetchPage(0);
+      final posts = await _fetchInitial();
       _posts = posts;
-      _nextPage = 1;
+      if (posts.isNotEmpty) _cursor = FeedCursor.fromLastPost(posts.last);
       _hasMore = posts.length == _pageSize;
       await _refreshStates(posts.map((e) => e.id).toList());
       _scheduleNoInteractionSignal(posts.length);
+      _prefetchMedia(posts);
+      unawaited(FeedOfflineCache.save(posts));
+      _cachedAsOf = null;
     } catch (e, stackTrace) {
       BetaErrorLoggingService.instance.record(e, stackTrace, context: 'home_feed_initial_load');
-      _error = 'Network failure. Check your connection and try again.';
+      // Offline/network-failure fallback: show whatever was cached from the
+      // last successful load instead of a blank error screen (Step 16 —
+      // offline support). Still surfaces the error banner so it's clear
+      // this is stale data, not a live feed.
+      final cached = await FeedOfflineCache.load();
+      if (cached != null && cached.posts.isNotEmpty) {
+        _posts = cached.posts;
+        _hasMore = false;
+        _cachedAsOf = cached.savedAt;
+        _error = "You're offline — showing posts from your last visit.";
+      } else {
+        _error = 'Network failure. Check your connection and try again.';
+      }
     } finally {
       if (mounted) setState(() => _loadingInitial = false);
     }
@@ -167,16 +206,16 @@ class _S extends ConsumerState<HomeFeedScreen> {
     if (_loadingInitial || _loadingMore || !_hasMore) return;
     setState(() => _loadingMore = true);
     try {
-      final page = _nextPage;
-      final posts = await _fetchPage(page);
+      final posts = await _fetchNext();
       final seen = _posts.map((p) => p.id).toSet();
       final newPosts = posts.where((p) => !seen.contains(p.id)).toList();
       _posts = [..._posts, ...newPosts];
-      _nextPage = page + 1;
+      if (posts.isNotEmpty) _cursor = FeedCursor.fromLastPost(posts.last);
       _hasMore = posts.length == _pageSize;
       await _mergeStates(newPosts.map((e) => e.id).toList());
+      _prefetchMedia(newPosts);
     } catch (error, stackTrace) {
-      BetaErrorLoggingService.instance.record(error, stackTrace, context: 'home_feed_next_page', metadata: {'page': _nextPage});
+      BetaErrorLoggingService.instance.record(error, stackTrace, context: 'home_feed_next_page');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -187,6 +226,23 @@ class _S extends ConsumerState<HomeFeedScreen> {
       }
     } finally {
       if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  /// Media prefetching (Step 16): warms CachedNetworkImage's disk/memory
+  /// cache for the next batch of feed images while the user is still
+  /// reading the current ones, so by the time they scroll there the image
+  /// decodes instantly instead of popping in. Best-effort — failures are
+  /// swallowed since this is purely a perf nicety, never load-bearing.
+  void _prefetchMedia(List<PostModel> posts) {
+    if (!mounted) return;
+    final ctx = context;
+    for (final post in posts.take(_pageSize)) {
+      final url = post.displayImageUrl;
+      if (url == null) continue;
+      unawaited(
+        precacheImage(CachedNetworkImageProvider(url), ctx).catchError((_) {}),
+      );
     }
   }
 
@@ -312,7 +368,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
         children: [
           _loadingInitial
               ? const FeedSkeletonList()
-          : _error != null
+          : _error != null && _posts.isEmpty
               ? ErrorRetryState(title: 'Unable to load posts', message: _error!, onRetry: _loadInitial)
               : _posts.isEmpty
                   ? RefreshIndicator(
@@ -428,6 +484,34 @@ class _S extends ConsumerState<HomeFeedScreen> {
                           Icon(Icons.arrow_upward, size: 16, color: Theme.of(c).colorScheme.onPrimary),
                           const SizedBox(width: 6),
                           Text('New posts', style: TextStyle(color: Theme.of(c).colorScheme.onPrimary, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (_cachedAsOf != null && _posts.isNotEmpty)
+            Positioned(
+              top: 8,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Material(
+                  elevation: 3,
+                  borderRadius: BorderRadius.circular(20),
+                  color: Theme.of(c).colorScheme.errorContainer,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: _loadInitial,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.cloud_off_outlined, size: 16, color: Theme.of(c).colorScheme.onErrorContainer),
+                          const SizedBox(width: 6),
+                          Text('Offline — tap to retry', style: TextStyle(color: Theme.of(c).colorScheme.onErrorContainer, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),

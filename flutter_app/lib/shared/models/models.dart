@@ -437,6 +437,20 @@ class ScheduledPostModel {
       );
 }
 
+/// Opaque keyset-pagination cursor for the home feed (Step 16). Two
+/// PostModels don't carry is_pinned/created_at/id in a form convenient to
+/// pass straight back to the RPC, so this is a tiny value type built from
+/// the last post on the current page.
+class FeedCursor {
+  const FeedCursor({required this.isPinned, required this.createdAt, required this.id});
+  final bool isPinned;
+  final DateTime createdAt;
+  final String id;
+
+  factory FeedCursor.fromLastPost(PostModel post) =>
+      FeedCursor(isPinned: post.isPinned, createdAt: post.createdAt, id: post.id);
+}
+
 class StoryAudioTrack {
   const StoryAudioTrack({required this.id, required this.title, this.artist, required this.audioUrl, this.coverUrl, this.durationSeconds});
   final String id;
