@@ -726,6 +726,112 @@ class PostRepository {
   }
 }
 
+/// Backs Step 10 (Scheduled Posts). Rows live in `scheduled_posts` and are
+/// promoted to real `posts` rows by the `publish_scheduled_posts()` cron
+/// job server-side (migration 035) — this repository only ever
+/// creates/edits/cancels the *scheduled_posts* row, it never touches
+/// `posts` directly.
+class ScheduledPostRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
+
+  /// [scheduledAt] must be a UTC-normalized DateTime (pass `.toUtc()`);
+  /// [clientTimezone] is stored purely for display (e.g. "9:00 AM NPT").
+  Future<ScheduledPostModel> create({
+    required String userId,
+    required String textContent,
+    required DateTime scheduledAt,
+    required String clientTimezone,
+    String? communityId,
+    List<String> tags = const [],
+    String visibility = 'public',
+    String contentType = 'text',
+    String? location,
+    double? locationLat,
+    double? locationLng,
+    String? feeling,
+    List<Map<String, dynamic>> media = const [],
+  }) async {
+    final row = await _c
+        .from('scheduled_posts')
+        .insert({
+          'user_id': userId,
+          'community_id': communityId,
+          'text_content': textContent,
+          'tags': tags,
+          'visibility': visibility,
+          'content_type': contentType,
+          'location': location,
+          'location_lat': locationLat,
+          'location_lng': locationLng,
+          'feeling': feeling,
+          'media': media,
+          'scheduled_at': scheduledAt.toUtc().toIso8601String(),
+          'client_timezone': clientTimezone,
+        })
+        .select()
+        .single();
+    return ScheduledPostModel.fromMap(row);
+  }
+
+  Future<List<ScheduledPostModel>> listUpcoming(String userId) async {
+    final rows = await _c
+        .from('scheduled_posts')
+        .select()
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .order('scheduled_at', ascending: true);
+    return (rows as List).map((r) => ScheduledPostModel.fromMap(r as Map<String, dynamic>)).toList();
+  }
+
+  /// Only allowed while the row is still 'pending' — enforced both here
+  /// (better error message) and server-side by trg_scheduled_posts_editable
+  /// (source of truth, in case of a race).
+  Future<void> reschedule(String id, DateTime newScheduledAt, {required String clientTimezone}) async {
+    await _c.from('scheduled_posts').update({
+      'scheduled_at': newScheduledAt.toUtc().toIso8601String(),
+      'client_timezone': clientTimezone,
+    }).eq('id', id);
+  }
+
+  Future<void> updateContent(
+    String id, {
+    String? textContent,
+    List<String>? tags,
+    String? visibility,
+  }) async {
+    await _c.from('scheduled_posts').update({
+      if (textContent != null) 'text_content': textContent,
+      if (tags != null) 'tags': tags,
+      if (visibility != null) 'visibility': visibility,
+    }).eq('id', id);
+  }
+
+  Future<void> cancel(String id) async {
+    await _c.from('scheduled_posts').update({'status': 'cancelled'}).eq('id', id);
+  }
+
+  /// Uploads media for a not-yet-published scheduled post. Reuses the same
+  /// storage path scheme as real posts (postId-keyed folder) — the
+  /// scheduled_posts row id doubles as that key since there's no post id
+  /// yet, which is safe because storage paths are just namespacing, not an
+  /// FK constraint.
+  Future<UploadedPostImage> uploadImage(String scheduledPostId, XFile file) async {
+    final mediaService = MediaUploadService();
+    final prepared = await mediaService.preparePostImage(file);
+    return mediaService.uploadPostImage(postId: scheduledPostId, image: prepared);
+  }
+
+  Future<String> uploadVideo(String scheduledPostId, XFile file) async {
+    final mediaService = MediaUploadService();
+    final prepared = await mediaService.preparePostVideo(file);
+    return mediaService.uploadPostVideo(postId: scheduledPostId, video: prepared);
+  }
+
+  Future<void> attachMedia(String id, List<Map<String, dynamic>> media) async {
+    await _c.from('scheduled_posts').update({'media': media}).eq('id', id);
+  }
+}
+
 class ModerationRepository {
   SupabaseClient get _c => SupabaseConfig.client;
   /// Returns the new report's id so a caller (e.g. the report form) can

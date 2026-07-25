@@ -178,7 +178,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _OptionTile(
               title: 'Who can see your posts by default',
               value: _defaultPostVisibility,
-              options: const {'public': 'Public', 'friends': 'Friends', 'only_me': 'Only me'},
+              options: const {'public': 'Public', 'followers': 'Followers', 'friends': 'Close friends', 'private': 'Only me'},
               onChanged: (v) {
                 setState(() => _defaultPostVisibility = v);
                 _patch({'default_post_visibility': v});
@@ -246,6 +246,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 setState(() => _showLastSeen = v);
                 _patch({'show_last_seen': v});
               },
+            ),
+            ListTile(
+              leading: const Icon(Icons.schedule_outlined),
+              title: const Text('Scheduled posts'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/scheduled-posts'),
             ),
             ListTile(
               leading: const Icon(Icons.block_outlined),

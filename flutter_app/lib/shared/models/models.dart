@@ -376,6 +376,67 @@ class StoryModel {
       );
 }
 
+/// A post whose publish time is in the future (Step 10 — Scheduled Posts).
+/// Mirrors the `scheduled_posts` table; media is stored as a list of
+/// already-uploaded `{media_url, thumbnail_url, media_type}` maps since
+/// upload happens at schedule-time, not at publish-time.
+class ScheduledPostModel {
+  const ScheduledPostModel({
+    required this.id,
+    required this.userId,
+    required this.textContent,
+    required this.scheduledAt,
+    required this.clientTimezone,
+    required this.status,
+    this.communityId,
+    this.visibility = 'public',
+    this.contentType = 'text',
+    this.tags = const [],
+    this.media = const [],
+    this.location,
+    this.feeling,
+    this.failureReason,
+    this.publishedPostId,
+  });
+
+  final String id;
+  final String userId;
+  final String? communityId;
+  final String textContent;
+  final List<Map<String, dynamic>> media;
+  final List<String> tags;
+  final String visibility;
+  final String contentType;
+  final String? location;
+  final String? feeling;
+  final DateTime scheduledAt;
+  final String clientTimezone;
+  final String status; // pending | published | cancelled | failed
+  final String? failureReason;
+  final String? publishedPostId;
+
+  bool get isPending => status == 'pending';
+  String? get imageUrl => media.isNotEmpty ? media.first['media_url'] as String? : null;
+
+  factory ScheduledPostModel.fromMap(Map<String, dynamic> map) => ScheduledPostModel(
+        id: map['id'].toString(),
+        userId: map['user_id'].toString(),
+        communityId: map['community_id']?.toString(),
+        textContent: map['text_content'] as String? ?? '',
+        media: ((map['media'] as List?) ?? const []).cast<Map<String, dynamic>>(),
+        tags: ((map['tags'] as List?) ?? const []).map((e) => e.toString()).toList(),
+        visibility: map['visibility'] as String? ?? 'public',
+        contentType: map['content_type'] as String? ?? 'text',
+        location: map['location'] as String?,
+        feeling: map['feeling'] as String?,
+        scheduledAt: DateTime.parse(map['scheduled_at']).toLocal(),
+        clientTimezone: map['client_timezone'] as String? ?? 'Asia/Kathmandu',
+        status: map['status'] as String? ?? 'pending',
+        failureReason: map['failure_reason'] as String?,
+        publishedPostId: map['published_post_id']?.toString(),
+      );
+}
+
 class StoryAudioTrack {
   const StoryAudioTrack({required this.id, required this.title, this.artist, required this.audioUrl, this.coverUrl, this.durationSeconds});
   final String id;

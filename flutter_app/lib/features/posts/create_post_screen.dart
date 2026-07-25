@@ -59,9 +59,15 @@ class _P extends State<CreatePostScreen> {
   String _visibility = 'public';
   static const _visibilityOptions = {
     'public': ('Public', Icons.public),
-    'friends': ('Friends', Icons.people_alt_outlined),
-    'only_me': ('Only me', Icons.lock_outline),
+    'followers': ('Followers', Icons.group_outlined),
+    'friends': ('Close friends', Icons.people_alt_outlined),
+    'community': ('Community only', Icons.diversity_3_outlined),
+    'private': ('Only me', Icons.lock_outline),
+    'unlisted': ('Unlisted', Icons.link_outlined),
   };
+
+  // Step 10 — Scheduled Posts. Null means "publish now".
+  DateTime? _scheduledFor;
 
   // username -> id, so chips can show the name while we submit ids.
   final Map<String, String> _taggedFriends = {};
@@ -210,6 +216,11 @@ class _P extends State<CreatePostScreen> {
     return '/create-post?communityId=${Uri.encodeComponent(communityId)}';
   }
 
+  Map<String, (String, IconData)> get _effectiveVisibilityOptions {
+    if (widget.communityId != null && widget.communityId!.isNotEmpty) return _visibilityOptions;
+    return {for (final e in _visibilityOptions.entries) if (e.key != 'community') e.key: e.value};
+  }
+
   List<String> get _parsedTags => tagsCtrl.text
       .split(RegExp(r'[,\s]+'))
       .map((t) => t.trim().replaceFirst(RegExp(r'^#'), ''))
@@ -218,6 +229,8 @@ class _P extends State<CreatePostScreen> {
       .toList();
 
   Future<void> _publish() async {
+    if (_scheduledFor != null) return _schedule();
+
     final uid = SupabaseConfig.client.auth.currentUser?.id;
     if (uid == null) {
       if (mounted) {
@@ -325,6 +338,76 @@ class _P extends State<CreatePostScreen> {
       if (mounted) {
         setState(() => loading = false);
       }
+    }
+  }
+
+  /// Same validation/upload flow as _publish, but writes to
+  /// scheduled_posts instead of posts. Polls/events aren't supported for
+  /// scheduling yet (they need their own follow-up rows created
+  /// atomically with the post, which the cron publisher doesn't do) —
+  /// the UI hides the Schedule option whenever a poll/event is attached.
+  Future<void> _schedule() async {
+    final uid = SupabaseConfig.client.auth.currentUser?.id;
+    if (uid == null) {
+      if (mounted) context.go('/login?redirect=${Uri.encodeComponent(_redirectLocation)}');
+      return;
+    }
+    final scheduledFor = _scheduledFor;
+    if (scheduledFor == null) return;
+    if (scheduledFor.isBefore(DateTime.now().add(const Duration(minutes: 1)))) {
+      if (mounted) setState(() => err = 'Scheduled time must be at least a minute from now.');
+      return;
+    }
+    if (text.text.trim().isEmpty && image == null && video == null) {
+      if (mounted) setState(() => err = 'Add text or media to schedule');
+      return;
+    }
+    if (pollDraft != null || eventDraft != null) {
+      if (mounted) setState(() => err = 'Polls and events can\'t be scheduled yet — publish now instead.');
+      return;
+    }
+
+    if (mounted) setState(() { loading = true; err = null; });
+
+    try {
+      final scheduledRepo = ScheduledPostRepository();
+      final scheduled = await scheduledRepo.create(
+        userId: uid,
+        communityId: widget.communityId,
+        textContent: text.text.trim(),
+        visibility: _visibility,
+        tags: _parsedTags,
+        location: location.text.trim().isEmpty ? null : location.text.trim(),
+        locationLat: _pickedLat,
+        locationLng: _pickedLng,
+        feeling: _feeling?.stored,
+        scheduledAt: scheduledFor,
+        clientTimezone: DateTime.now().timeZoneName,
+      );
+
+      final media = <Map<String, dynamic>>[];
+      if (video != null) {
+        final url = await scheduledRepo.uploadVideo(scheduled.id, video!);
+        media.add({'media_url': url, 'media_type': 'video'});
+      } else if (image != null) {
+        final uploaded = await scheduledRepo.uploadImage(scheduled.id, image!);
+        media.add({'media_url': uploaded.originalUrl, 'thumbnail_url': uploaded.thumbnailUrl, 'media_type': 'image'});
+      }
+      if (media.isNotEmpty) await scheduledRepo.attachMedia(scheduled.id, media);
+
+      _published = true;
+      unawaited(PostRepository().deleteDraft(userId: uid, communityId: widget.communityId).catchError((_) {}));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Post scheduled')),
+        );
+        context.go('/scheduled-posts');
+      }
+    } catch (e, stackTrace) {
+      BetaErrorLoggingService.instance.record(e, stackTrace, context: 'post_scheduling_submit', metadata: {'community_id': widget.communityId});
+      if (mounted) setState(() => err = 'Scheduling failed. Please check your connection and retry. $e');
+    } finally {
+      if (mounted) setState(() => loading = false);
     }
   }
 
@@ -545,8 +628,13 @@ class _P extends State<CreatePostScreen> {
             const SizedBox(height: 12),
             _VisibilityPicker(
               value: _visibility,
-              options: _visibilityOptions,
+              options: _effectiveVisibilityOptions,
               onChanged: (v) => setState(() => _visibility = v),
+            ),
+            const SizedBox(height: 8),
+            _SchedulePicker(
+              value: _scheduledFor,
+              onChanged: (v) => setState(() => _scheduledFor = v),
             ),
             const SizedBox(height: 12),
             if (_loadingQuote) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator()),
@@ -766,13 +854,63 @@ class _P extends State<CreatePostScreen> {
                 onPressed: loading ? null : _publish,
                 child: loading
                     ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Publish'),
+                    : Text(_scheduledFor != null ? 'Schedule' : 'Publish'),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+}
+
+/// Lets the user pick a future date/time to publish at instead of posting
+/// immediately (Step 10). Uses the device's local timezone throughout —
+/// showDatePicker/showTimePicker both work in local time, and the result
+/// is converted to UTC only when sent to the server (see
+/// ScheduledPostRepository.create), so what the user picks ("9:00 AM") is
+/// exactly what they meant in their own timezone.
+class _SchedulePicker extends StatelessWidget {
+  const _SchedulePicker({required this.value, required this.onChanged});
+  final DateTime? value;
+  final ValueChanged<DateTime?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = value;
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.schedule_outlined),
+            label: Text(v == null ? 'Publish now' : 'Scheduled for ${_format(v)}'),
+            onPressed: () async {
+              final now = DateTime.now();
+              final date = await showDatePicker(
+                context: context,
+                initialDate: v ?? now.add(const Duration(minutes: 5)),
+                firstDate: now,
+                lastDate: now.add(const Duration(days: 365)),
+              );
+              if (date == null || !context.mounted) return;
+              final time = await showTimePicker(
+                context: context,
+                initialTime: TimeOfDay.fromDateTime(v ?? now.add(const Duration(minutes: 5))),
+              );
+              if (time == null) return;
+              onChanged(DateTime(date.year, date.month, date.day, time.hour, time.minute));
+            },
+          ),
+        ),
+        if (v != null)
+          IconButton(icon: const Icon(Icons.close), tooltip: 'Publish immediately instead', onPressed: () => onChanged(null)),
+      ],
+    );
+  }
+
+  String _format(DateTime d) {
+    final two = (int n) => n.toString().padLeft(2, '0');
+    return '${two(d.month)}/${two(d.day)}/${d.year} ${two(d.hour)}:${two(d.minute)}';
   }
 }
 

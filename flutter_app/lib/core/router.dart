@@ -26,6 +26,7 @@ import '../features/moderation/my_moderation_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/posts/create_post_screen.dart';
 import '../features/posts/edit_post_screen.dart';
+import '../features/posts/scheduled_posts_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/user_profile_screen.dart';
@@ -143,6 +144,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/edit-profile', builder: (_, __) => const EditProfileScreen()),
     GoRoute(path: '/monetization', builder: (_, __) => const MonetizationSettingsScreen()),
     GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+    GoRoute(path: '/scheduled-posts', builder: (_, __) => const ScheduledPostsScreen()),
     GoRoute(path: '/close-friends', builder: (_, __) => const CloseFriendsScreen()),
     GoRoute(path: '/post', builder: (_, s) => PostDetailScreen(postId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/post/replies', builder: (_, s) => PostRepliesScreen(postId: s.uri.queryParameters['id'] ?? '')),

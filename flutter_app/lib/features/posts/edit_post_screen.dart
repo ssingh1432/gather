@@ -21,8 +21,11 @@ class _EditPostScreenState extends State<EditPostScreen> {
   static const _maxLength = 5000;
   static const _visibilityOptions = {
     'public': ('Public', Icons.public),
-    'friends': ('Friends', Icons.people_alt_outlined),
-    'only_me': ('Only me', Icons.lock_outline),
+    'followers': ('Followers', Icons.group_outlined),
+    'friends': ('Close friends', Icons.people_alt_outlined),
+    'community': ('Community only', Icons.diversity_3_outlined),
+    'private': ('Only me', Icons.lock_outline),
+    'unlisted': ('Unlisted', Icons.link_outlined),
   };
 
   final _text = TextEditingController();
