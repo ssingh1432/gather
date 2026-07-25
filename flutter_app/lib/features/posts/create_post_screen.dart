@@ -909,7 +909,7 @@ class _SchedulePicker extends StatelessWidget {
   }
 
   String _format(DateTime d) {
-    final two = (int n) => n.toString().padLeft(2, '0');
+    String two(int n) => n.toString().padLeft(2, '0');
     return '${two(d.month)}/${two(d.day)}/${d.year} ${two(d.hour)}:${two(d.minute)}';
   }
 }
