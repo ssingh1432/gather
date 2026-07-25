@@ -204,6 +204,7 @@ this doc did):
 038b_phase10_notification_triggers.sql            [Phase 10 Step 19 — triggers + RLS fix]
 039_phase10_security_hardening.sql                [Phase 10 Step 20]
 040_revoke_public_execute_cron_functions.sql      [security fix — see §9]
+041_grant_missing_table_privileges.sql            [bug fix — see §9]
 ```
 
 **Live-vs-file drift (found 2026-07-25):** the following functions exist on
@@ -246,3 +247,17 @@ noted inline above.
   headers (`019`, `028`) are technically incomplete for the same reason —
   the revoke should always name `public` explicitly, not just the two
   client-facing roles.
+- **Fixed 2026-07-25 (041):** this schema has no `ALTER DEFAULT
+  PRIVILEGES` rule on `public`, so raw-SQL migrations (unlike tables made
+  in Studio's table editor, which auto-grant) get zero table-level
+  privileges for `authenticated` unless the migration grants them
+  explicitly. 19 tables across Phases 6/7/8/10 never got that grant —
+  RLS policies were correct, but the request was rejected before RLS ever
+  ran. This is what broke poll/event/scheduled-post/draft creation and
+  every admin/mod dashboard screen that reads a table directly instead of
+  through an RPC. All 19 are now granted, scoped to match each table's
+  existing RLS policy set. **Process note:** every future migration that
+  adds a client-reachable table must include its own explicit `grant ...
+  to authenticated` — there's deliberately no blanket default-privileges
+  rule, since that would silently expose future admin-only tables the
+  moment they're created.
