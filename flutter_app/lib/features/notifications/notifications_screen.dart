@@ -45,6 +45,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return '$actorName tagged you in a post';
       case 'community_post':
         return '$actorName posted in a community you\'re in';
+      case 'post_repost':
+        return '$actorName reposted your post';
+      case 'poll_vote':
+        return '$actorName voted in your poll';
+      case 'event_reminder':
+        return 'Your event is starting soon';
+      case 'scheduled_post_published':
+        return 'Your scheduled post was published';
       default:
         return '$actorName interacted with your post';
     }
@@ -64,6 +72,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.alternate_email;
       case 'community_post':
         return Icons.groups_outlined;
+      case 'post_repost':
+        return Icons.repeat_outlined;
+      case 'poll_vote':
+        return Icons.poll_outlined;
+      case 'event_reminder':
+        return Icons.event_available_outlined;
+      case 'scheduled_post_published':
+        return Icons.schedule_send_outlined;
       default:
         return Icons.notifications_outlined;
     }
