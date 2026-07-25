@@ -249,6 +249,45 @@ class CommunityRepository {
   Future<void> leaveCommunity(String communityId, String userId) => _c.from('community_memberships').delete().match({'community_id': communityId, 'user_id': userId});
 }
 
+/// Backs Step 17 (Search Integration) via the search_posts RPC (migration
+/// 037) — text/hashtag/mention/author/community/media-type/date filters
+/// plus sort, all enforced through normal RLS (the RPC is SECURITY
+/// INVOKER, not DEFINER, so it can never surface a post the caller
+/// couldn't otherwise see).
+class SearchRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
+
+  Future<List<PostModel>> searchPosts({
+    String? query,
+    String? tag,
+    String? mentionedUsername,
+    String? authorUsername,
+    String? communityId,
+    String? mediaType,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    String sort = 'recent',
+    int pageSize = 20,
+    int pageOffset = 0,
+  }) async {
+    final data = await _c.rpc('search_posts', params: {
+      'viewer_id': _c.auth.currentUser?.id,
+      'q': query,
+      'p_tag': tag,
+      'p_mentioned_username': mentionedUsername,
+      'p_author_username': authorUsername,
+      'p_community_id': communityId,
+      'p_media_type': mediaType,
+      'p_date_from': dateFrom?.toUtc().toIso8601String(),
+      'p_date_to': dateTo?.toUtc().toIso8601String(),
+      'p_sort': sort,
+      'page_size': pageSize,
+      'page_offset': pageOffset,
+    });
+    return (data as List).map((e) => PostModel.fromMap(e as Map<String, dynamic>)).toList();
+  }
+}
+
 class ProfileRepository {
   SupabaseClient get _c => SupabaseConfig.client;
   Future<Map<String, dynamic>?> loadProfile(String userId) async => await _c.from('users').select().eq('id', userId).maybeSingle();
