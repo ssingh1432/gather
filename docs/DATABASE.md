@@ -203,7 +203,19 @@ this doc did):
 038a_phase10_notification_types.sql               [Phase 10 Step 19 — enum values, own transaction]
 038b_phase10_notification_triggers.sql            [Phase 10 Step 19 — triggers + RLS fix]
 039_phase10_security_hardening.sql                [Phase 10 Step 20]
+040_revoke_public_execute_cron_functions.sql      [security fix — see §9]
 ```
+
+**Live-vs-file drift (found 2026-07-25):** the following functions exist on
+the live project and are used by the client but have no corresponding file
+in `database/migrations/` — they were applied directly via the Supabase MCP
+tool, same as `018`: `get_story_feed`, `increment_post_view`,
+`log_ad_impression`, `log_post_download`, `mark_phone_verified`,
+`mark_story_viewed`, `set_monetization_opt_in`, `check_monetization_eligibility`.
+They are real and working on the live project; this is a documentation /
+version-control gap, not a functionality gap. Recommended follow-up: a
+"baseline sync" migration that `create or replace`s each one from its live
+definition, purely so the file history is complete.
 
 Gaps in the numbering (001, 018) are real: 001 is the original base
 schema, applied before migration-file tracking started (exists live,
@@ -221,3 +233,16 @@ noted inline above.
   `copyright`), which is functional but not a dedicated legal workflow.
 - No live malware/CSAM scanner — `post_media.scan_status` is the hook
   point, everything defaults `clean`.
+- **Fixed 2026-07-25 (040):** `publish_scheduled_posts`,
+  `send_event_reminders`, `purge_expired_account_deletions`,
+  `run_backup_heartbeat`, and `lift_expired_suspensions` were revoked from
+  `anon`/`authenticated` in their original migrations but never from
+  `PUBLIC` — Postgres grants EXECUTE to PUBLIC by default at creation, and
+  revoking from a named role doesn't remove a separate PUBLIC grant, so any
+  client could call them directly via `.rpc(...)`. All five are now
+  revoked from PUBLIC as well. No client code called them, so this was a
+  pure hardening fix, not a behavior change.
+- Documented "revoke from anon/authenticated" gaps in older migration
+  headers (`019`, `028`) are technically incomplete for the same reason —
+  the revoke should always name `public` explicitly, not just the two
+  client-facing roles.
