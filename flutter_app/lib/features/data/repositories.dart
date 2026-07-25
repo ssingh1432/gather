@@ -490,13 +490,36 @@ class MonetizationRepository {
 
 class PostRepository {
   SupabaseClient get _c => SupabaseConfig.client;
+
   Future<Map<String, dynamic>> createPost(Map<String, dynamic> payload) async {
-    final created = await _c.from('posts').insert(payload).select().single();
-    AnalyticsService.instance.postCreated(
-      postId: created['id'].toString(),
-      communityId: created['community_id']?.toString(),
-    );
-    return created;
+    try {
+      final created = await _c.from('posts').insert(payload).select().single();
+      AnalyticsService.instance.postCreated(
+        postId: created['id'].toString(),
+        communityId: created['community_id']?.toString(),
+      );
+      return created;
+    } on PostgrestException catch (e) {
+      if (e.code == 'P0001' && (e.message).toLowerCase().contains('duplicate post')) {
+        final authorId = payload['author_id'];
+        final textContent = payload['text_content'];
+        if (authorId != null && textContent != null) {
+          final existing = await _c
+              .from('posts')
+              .select()
+              .eq('author_id', authorId)
+              .eq('text_content', textContent)
+              .eq('is_removed', false)
+              .order('created_at', ascending: false)
+              .limit(1)
+              .maybeSingle();
+          if (existing != null) {
+            return existing;
+          }
+        }
+      }
+      rethrow;
+    }
   }
 
   /// Edits an author's own post text/tags/visibility. Snapshots the

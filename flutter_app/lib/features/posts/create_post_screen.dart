@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
 import '../../shared/models/models.dart';
@@ -228,6 +229,25 @@ class _P extends State<CreatePostScreen> {
       .toSet()
       .toList();
 
+  /// Turns known backend errors into plain-language messages. Full
+  /// technical detail (code/message/hint) still goes to
+  /// BetaErrorLoggingService for debugging — it's just no longer shown
+  /// verbatim to the user, who has no use for a Postgres error code.
+  String _friendlyError(Object e) {
+    if (e is PostgrestException) {
+      switch (e.code) {
+        case 'P0001':
+          return 'This post may have already gone through — check your feed before posting again.';
+        case '23505':
+          return 'This looks like it was already posted.';
+      }
+      if (e.message.toLowerCase().contains('duplicate')) {
+        return 'This post may have already gone through — check your feed before posting again.';
+      }
+    }
+    return 'Upload failed. Please check your connection and try again.';
+  }
+
   Future<void> _publish() async {
     if (_scheduledFor != null) return _schedule();
 
@@ -325,7 +345,7 @@ class _P extends State<CreatePostScreen> {
       );
 
       if (mounted) {
-        final message = 'Upload failed. Please check your connection and retry. $e';
+        final message = _friendlyError(e);
         setState(() => err = message);
         // Inline text below can be scrolled past unnoticed on a long form —
         // a SnackBar guarantees the failure is actually seen instead of
@@ -405,7 +425,7 @@ class _P extends State<CreatePostScreen> {
       }
     } catch (e, stackTrace) {
       BetaErrorLoggingService.instance.record(e, stackTrace, context: 'post_scheduling_submit', metadata: {'community_id': widget.communityId});
-      if (mounted) setState(() => err = 'Scheduling failed. Please check your connection and retry. $e');
+      if (mounted) setState(() => err = _friendlyError(e).replaceFirst('Upload failed', 'Scheduling failed'));
     } finally {
       if (mounted) setState(() => loading = false);
     }
