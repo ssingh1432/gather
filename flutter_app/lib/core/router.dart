@@ -40,6 +40,11 @@ import '../features/reports/report_screen.dart';
 import '../features/search/search_screen.dart';
 import 'supabase_client.dart';
 
+/// Lets services outside the widget tree (namely [PushNotificationService]'s
+/// foreground-message handler) surface a SnackBar without needing a
+/// BuildContext of their own. Wired into MaterialApp.router in main.dart.
+final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 final appRouter = GoRouter(
   // GoRouter's default error screen shows the raw exception text (e.g.
   // "GoException: no routes for location: error=access_denied&..."). That

@@ -49,7 +49,9 @@ documentation of what was run, not as something still pending.
 | `post_drafts` | Autosave drafts, never appear in any feed query. |
 | `communities`, `community_memberships` | Communities and membership. |
 | `user_follows`, `close_friends`, `user_blocks` | Social graph + the "friends" (close-friends) visibility tier. |
-| `notifications` | Fan-out table; `type` is the `notification_type` enum (see §4). |
+| `notifications` | Fan-out table; `type` is the `notification_type` enum (see §4). `metadata` (Phase 9) carries context for types with no `post_id` (device label, broadcast text, security event). Realtime-enabled as of Phase 9. |
+| `user_known_devices` | Phase 9. One row per (user, device hash) seen at sign-in; backs `login_alert`. |
+| `admin_broadcasts` | Phase 9. Audit trail of admin broadcast sends; the actual fan-out lands in `notifications`. |
 | `reports`, `keyword_filters`, `strikes` (etc.) | Moderation — see the Phase 6/7 migrations for the full set. |
 | `legal_frameworks`, `data_requests`, account-deletion tables | Nepal legal compliance (Phase 3/4). |
 
@@ -77,6 +79,8 @@ privilege escalations.
 | `purge_expired_account_deletions()` | none | void | **Not client-callable** — pg_cron only, daily. |
 | `soft_remove_post`, `restore_post`, `suspend_user`, `ban_user`, `issue_warning`, `resolve_report`, `add_strike` | various | void | Moderator/admin actions; internally check `is_admin_or_mod()`/`ensure_admin_or_mod()`. |
 | `fake_account_signals(min_score)` | int | scored user rows | Advisory heuristic for the admin review queue, never auto-acts. |
+| `record_login_device(device_hash, device_label)` | text, text | void | Phase 9. Client calls once per successful sign-in; inserts a `login_alert` notification the first time a device hash is seen for that user. |
+| `admin_send_broadcast(title, body, audience)` | text, text, text | int (recipient count) | Phase 9. Admin/mod only. Fans an `admin_broadcast` notification out to `audience` (`all`\|`moderators`\|`admins`). |
 
 For anything not listed here (admin dashboard RPCs, legal-compliance
 RPCs, etc.), search `database/migrations/*.sql` for `create or replace
@@ -92,7 +96,9 @@ function public.` — every one has a comment explaining its purpose.
 - `scheduled_posts.status` — `pending | published | cancelled | failed`.
 - `notification_type` — `new_follower, post_like, post_comment,
   community_post, post_reply, mention, scheduled_post_published,
-  post_repost, poll_vote, event_reminder`. **Enum, not free text** —
+  post_repost, poll_vote, event_reminder, security_alert, login_alert,
+  moderation_alert, appeal_update, report_update, admin_broadcast` (the
+  last six added in Phase 9, `044a`). **Enum, not free text** —
   adding a new notification type requires its own `alter type ... add
   value` migration, applied in its own transaction before anything that
   uses the new value (see `038a`/`038b` for the pattern, and the postmortem
@@ -205,6 +211,14 @@ this doc did):
 039_phase10_security_hardening.sql                [Phase 10 Step 20]
 040_revoke_public_execute_cron_functions.sql      [security fix — see §9]
 041_grant_missing_table_privileges.sql            [bug fix — see §9]
+042_fix_post_media_grants_and_policies.sql        [bug fix — post_media grants/RLS]
+043_drop_redundant_post_media_policies.sql        [cleanup — see 042]
+044a_phase9_notification_types.sql                [Phase 9 — enum values, own transaction]
+044b_phase9_notifications_delivery.sql            [Phase 9 — moderation_actions check-constraint
+                                                    bugfix, notifications.metadata, realtime,
+                                                    login/security/moderation/appeal/report/broadcast
+                                                    triggers, record_login_device(),
+                                                    admin_send_broadcast()]
 ```
 
 **Live-vs-file drift (found 2026-07-25):** the following functions exist on

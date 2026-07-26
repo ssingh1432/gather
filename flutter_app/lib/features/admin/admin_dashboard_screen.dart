@@ -1401,8 +1401,14 @@ class _NotificationsTab extends StatefulWidget {
 
 class _NotificationsTabState extends State<_NotificationsTab> {
   Map<String, dynamic>? _stats;
+  List<Map<String, dynamic>> _broadcasts = const [];
   bool _loading = true;
   String? _error;
+
+  final _titleController = TextEditingController();
+  final _bodyController = TextEditingController();
+  String _audience = 'all';
+  bool _sending = false;
 
   @override
   void initState() {
@@ -1410,14 +1416,56 @@ class _NotificationsTabState extends State<_NotificationsTab> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _bodyController.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      _stats = await widget.repo.notificationStats();
+      final results = await Future.wait([widget.repo.notificationStats(), widget.repo.recentBroadcasts()]);
+      _stats = results[0] as Map<String, dynamic>;
+      _broadcasts = results[1] as List<Map<String, dynamic>>;
     } catch (e) {
       _error = '$e';
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _send() async {
+    final title = _titleController.text.trim();
+    final body = _bodyController.text.trim();
+    if (title.isEmpty || body.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Send broadcast?'),
+        content: Text('This will notify every ${_audience == 'all' ? 'user' : _audience} immediately. This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Send')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _sending = true);
+    try {
+      final count = await widget.repo.sendAdminBroadcast(title: title, body: body, audience: _audience);
+      if (!mounted) return;
+      _titleController.clear();
+      _bodyController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Broadcast sent to $count recipients')));
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not send broadcast: $e')));
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 
@@ -1431,8 +1479,57 @@ class _NotificationsTabState extends State<_NotificationsTab> {
       onRefresh: _load,
       child: ListView(
         children: [
+          const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 4), child: Text('Send broadcast', style: TextStyle(fontWeight: FontWeight.bold))),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(controller: _titleController, decoration: const InputDecoration(labelText: 'Title')),
+                    const SizedBox(height: 12),
+                    TextField(controller: _bodyController, maxLines: 3, decoration: const InputDecoration(labelText: 'Message')),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: _audience,
+                      decoration: const InputDecoration(labelText: 'Audience'),
+                      items: const [
+                        DropdownMenuItem(value: 'all', child: Text('All users')),
+                        DropdownMenuItem(value: 'moderators', child: Text('Moderators only')),
+                        DropdownMenuItem(value: 'admins', child: Text('Admins only')),
+                      ],
+                      onChanged: (v) => setState(() => _audience = v ?? 'all'),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
+                        onPressed: _sending ? null : _send,
+                        icon: _sending
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.campaign_outlined),
+                        label: const Text('Send'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_broadcasts.isNotEmpty) ...[
+            const Padding(padding: EdgeInsets.fromLTRB(16, 8, 16, 4), child: Text('Recent broadcasts', style: TextStyle(fontWeight: FontWeight.bold))),
+            for (final b in _broadcasts)
+              ListTile(
+                leading: const Icon(Icons.campaign_outlined),
+                title: Text(b['title']?.toString() ?? ''),
+                subtitle: Text('${b['audience']} \u00b7 ${b['recipient_count']} recipients'),
+              ),
+          ],
+          const Divider(height: 32),
           const Padding(
-            padding: EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
               'Aggregate counts only — individual notifications stay private to each recipient by design.',
               style: TextStyle(fontStyle: FontStyle.italic),

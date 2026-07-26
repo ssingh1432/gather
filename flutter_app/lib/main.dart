@@ -120,6 +120,7 @@ class _GatherAppState extends State<GatherApp> {
       title: 'Gather',
       routerConfig: appRouter,
       theme: AppTheme.light,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
     );
   }
 }

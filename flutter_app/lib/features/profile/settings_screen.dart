@@ -383,6 +383,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: _notif('community_activity'),
               onChanged: (v) => _setNotif('community_activity', v),
             ),
+            SwitchListTile(
+              title: const Text('Moderation & appeal updates'),
+              subtitle: const Text('Reports you filed, appeals you filed, and actions on your account'),
+              value: _notif('moderation_alerts'),
+              onChanged: (v) => _setNotif('moderation_alerts', v),
+            ),
+            SwitchListTile(
+              title: const Text('Announcements'),
+              subtitle: const Text('Broadcasts sent by Gather admins'),
+              value: _notif('admin_broadcasts'),
+              onChanged: (v) => _setNotif('admin_broadcasts', v),
+            ),
+            const ListTile(
+              leading: Icon(Icons.shield_outlined),
+              title: Text('Security & login alerts'),
+              subtitle: Text('Always on to keep your account safe — can\u2019t be turned off'),
+              enabled: false,
+            ),
 
             const _SectionHeader('Account'),
             ListTile(

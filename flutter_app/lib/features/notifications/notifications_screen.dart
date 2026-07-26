@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
 import '../../shared/widgets/reusables.dart';
@@ -15,6 +16,44 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   late Future<List<dynamic>> _future = _load();
+  RealtimeChannel? _channel;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribeRealtime();
+  }
+
+  @override
+  void dispose() {
+    final channel = _channel;
+    if (channel != null) SupabaseConfig.maybeClient?.removeChannel(channel);
+    super.dispose();
+  }
+
+  /// Phase 9: notifications is now realtime-enabled (migration 044b), so a
+  /// new row lands here the instant it's inserted instead of waiting for a
+  /// manual pull-to-refresh. We just re-run the same load on any insert for
+  /// this recipient rather than hand-patching the list — the table is
+  /// capped to a `limit(100)` fetch, so a full refetch is cheap.
+  void _subscribeRealtime() {
+    final client = SupabaseConfig.maybeClient;
+    final uid = client?.auth.currentUser?.id;
+    if (client == null || uid == null) return;
+
+    _channel = client
+        .channel('public:notifications-$uid')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'notifications',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'recipient_id', value: uid),
+          callback: (payload) {
+            if (mounted) _retry();
+          },
+        )
+        .subscribe();
+  }
 
   Future<List<dynamic>> _load() async {
     final uid = SupabaseConfig.maybeClient?.auth.currentUser?.id;
@@ -53,6 +92,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return 'Your event is starting soon';
       case 'scheduled_post_published':
         return 'Your scheduled post was published';
+      case 'security_alert':
+        final eventType = (n['metadata'] as Map?)?['event_type']?.toString().replaceAll('_', ' ');
+        return 'Security alert${eventType != null ? ': $eventType' : ''} on your account';
+      case 'login_alert':
+        final device = (n['metadata'] as Map?)?['device_label']?.toString() ?? 'a device';
+        return 'New sign-in from $device you haven\'t used before';
+      case 'moderation_alert':
+        final action = (n['metadata'] as Map?)?['action']?.toString().replaceAll('_', ' ');
+        return 'Moderation action on your account${action != null ? ': $action' : ''}';
+      case 'appeal_update':
+        final status = (n['metadata'] as Map?)?['status']?.toString() ?? 'updated';
+        return 'Your appeal status changed to "$status"';
+      case 'report_update':
+        return 'A report you filed has been reviewed';
+      case 'admin_broadcast':
+        return (n['metadata'] as Map?)?['title']?.toString() ?? 'Announcement from Gather';
       default:
         return '$actorName interacted with your post';
     }
@@ -80,6 +135,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.event_available_outlined;
       case 'scheduled_post_published':
         return Icons.schedule_send_outlined;
+      case 'security_alert':
+        return Icons.shield_outlined;
+      case 'login_alert':
+        return Icons.devices_outlined;
+      case 'moderation_alert':
+        return Icons.gavel_outlined;
+      case 'appeal_update':
+        return Icons.rule_outlined;
+      case 'report_update':
+        return Icons.flag_outlined;
+      case 'admin_broadcast':
+        return Icons.campaign_outlined;
       default:
         return Icons.notifications_outlined;
     }
@@ -91,11 +158,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     final postId = n['post']?['id'] ?? n['post_id'];
     final actorId = n['actor']?['id'] ?? n['actor_id'];
+    final type = n['type'] as String?;
     if (postId != null) {
       context.push('/post?id=$postId');
-    } else if (n['type'] == 'new_follower' && actorId != null) {
+    } else if (type == 'new_follower' && actorId != null) {
       context.push('/user?id=$actorId');
+    } else if (type == 'moderation_alert' || type == 'appeal_update') {
+      context.push('/my-moderation');
+    } else if (type == 'report_update') {
+      context.push('/my-legal');
     }
+    // security_alert, login_alert, admin_broadcast: mark-as-read is enough,
+    // there's no dedicated detail screen for these yet.
   }
 
   @override

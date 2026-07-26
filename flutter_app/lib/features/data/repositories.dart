@@ -1719,6 +1719,19 @@ class AdminRepository {
     return Map<String, dynamic>.from(data as Map);
   }
 
+  /// Phase 9. Fans an `admin_broadcast` notification out to everyone
+  /// matching [audience] (`all` | `moderators` | `admins`). Returns the
+  /// number of recipients.
+  Future<int> sendAdminBroadcast({required String title, required String body, String audience = 'all'}) async {
+    final count = await _c.rpc('admin_send_broadcast', params: {'p_title': title, 'p_body': body, 'p_audience': audience});
+    return count as int;
+  }
+
+  Future<List<Map<String, dynamic>>> recentBroadcasts() async {
+    final data = await _c.from('admin_broadcasts').select().order('created_at', ascending: false).limit(20);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
   // ---- Settings (Batch 8.4) ----
 
   Future<List<Map<String, dynamic>>> appConfig() async {
