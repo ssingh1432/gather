@@ -127,7 +127,12 @@ class MediaUploadService {
       } on StorageException catch (e) {
         lastError = e;
         if (e.statusCode != '403') rethrow;
-        await _client.auth.refreshSession().catchError((_) {});
+        try {
+          await _client.auth.refreshSession();
+        } catch (_) {
+          // Best-effort — if the token is truly unrecoverable, the next
+          // action() attempt will surface that on its own.
+        }
         await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
       }
     }
