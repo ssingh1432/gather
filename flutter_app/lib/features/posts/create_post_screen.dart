@@ -14,6 +14,7 @@ import '../../shared/services/link_preview_service.dart';
 import '../../shared/services/media/web_safe_pick.dart';
 import '../../shared/utils/feelings.dart';
 import '../../shared/widgets/format_toolbar.dart';
+import '../../shared/widgets/profile_view.dart' show PickedImagePreview;
 import '../../shared/widgets/reusables.dart';
 import '../data/repositories.dart';
 import 'location_picker_screen.dart';
@@ -37,6 +38,7 @@ class CreatePostScreen extends StatefulWidget {
 
 class _P extends State<CreatePostScreen> {
   final text = TextEditingController();
+  final _textFocus = FocusNode();
   final location = TextEditingController();
   final tagsCtrl = TextEditingController();
   XFile? image;
@@ -206,6 +208,7 @@ class _P extends State<CreatePostScreen> {
     _linkDebounce?.cancel();
     _draftDebounce?.cancel();
     text.dispose();
+    _textFocus.dispose();
     location.dispose();
     tagsCtrl.dispose();
     super.dispose();
@@ -312,18 +315,28 @@ class _P extends State<CreatePostScreen> {
           locationText: eventDraft!.locationText,
           onlineUrl: eventDraft!.onlineUrl,
         );
-      } else if (video != null) {
-        final videoUrl = await postRepository.uploadPostVideo(_pendingPostId!, video!);
-        await postRepository.addPostMedia(_pendingPostId!, videoUrl, mediaType: 'video');
-      } else if (image != null) {
-        final uploaded = await postRepository.uploadPostImage(_pendingPostId!, image!);
-        await postRepository.addPostMedia(_pendingPostId!, uploaded.originalUrl);
-      } else if (audio != null) {
-        final audioUrl = await postRepository.uploadPostAudio(_pendingPostId!, audio!);
-        await postRepository.addPostMedia(_pendingPostId!, audioUrl, mediaType: 'audio');
-      } else if (document != null) {
-        final docUrl = await postRepository.uploadPostDocument(_pendingPostId!, document!);
-        await postRepository.addPostMedia(_pendingPostId!, docUrl, mediaType: 'document');
+      } else {
+        // Independent — a post can carry any combination of photo, video,
+        // audio, and document at once (each lives as its own row in
+        // post_media, keyed by media_type), so these must NOT be an
+        // else-if chain. They previously were, which silently dropped
+        // every attachment but the first one the user had picked.
+        if (video != null) {
+          final videoUrl = await postRepository.uploadPostVideo(_pendingPostId!, video!);
+          await postRepository.addPostMedia(_pendingPostId!, videoUrl, mediaType: 'video');
+        }
+        if (image != null) {
+          final uploaded = await postRepository.uploadPostImage(_pendingPostId!, image!);
+          await postRepository.addPostMedia(_pendingPostId!, uploaded.originalUrl);
+        }
+        if (audio != null) {
+          final audioUrl = await postRepository.uploadPostAudio(_pendingPostId!, audio!);
+          await postRepository.addPostMedia(_pendingPostId!, audioUrl, mediaType: 'audio');
+        }
+        if (document != null) {
+          final docUrl = await postRepository.uploadPostDocument(_pendingPostId!, document!);
+          await postRepository.addPostMedia(_pendingPostId!, docUrl, mediaType: 'document');
+        }
       }
 
       _published = true;
@@ -378,7 +391,7 @@ class _P extends State<CreatePostScreen> {
       if (mounted) setState(() => err = 'Scheduled time must be at least a minute from now.');
       return;
     }
-    if (text.text.trim().isEmpty && image == null && video == null) {
+    if (text.text.trim().isEmpty && image == null && video == null && audio == null && document == null) {
       if (mounted) setState(() => err = 'Add text or media to schedule');
       return;
     }
@@ -409,9 +422,18 @@ class _P extends State<CreatePostScreen> {
       if (video != null) {
         final url = await scheduledRepo.uploadVideo(scheduled.id, video!);
         media.add({'media_url': url, 'media_type': 'video'});
-      } else if (image != null) {
+      }
+      if (image != null) {
         final uploaded = await scheduledRepo.uploadImage(scheduled.id, image!);
         media.add({'media_url': uploaded.originalUrl, 'thumbnail_url': uploaded.thumbnailUrl, 'media_type': 'image'});
+      }
+      if (audio != null) {
+        final url = await scheduledRepo.uploadAudio(scheduled.id, audio!);
+        media.add({'media_url': url, 'media_type': 'audio'});
+      }
+      if (document != null) {
+        final url = await scheduledRepo.uploadDocument(scheduled.id, document!);
+        media.add({'media_url': url, 'media_type': 'document'});
       }
       if (media.isNotEmpty) await scheduledRepo.attachMedia(scheduled.id, media);
 
@@ -596,6 +618,129 @@ class _P extends State<CreatePostScreen> {
     if (selected != null) setState(() => _feeling = selected);
   }
 
+  Future<void> _pickImage(ImageSource source) async {
+    final picked = await ImagePicker().pickImage(source: source);
+    if (picked == null) return;
+    final safe = await materializeIfWeb(picked);
+    if (mounted) setState(() { image = safe; pollDraft = null; eventDraft = null; });
+  }
+
+  Future<void> _pickVideo(ImageSource source) async {
+    final picked = await ImagePicker().pickVideo(source: source, maxDuration: const Duration(minutes: 5));
+    if (picked == null) return;
+    final safe = await materializeIfWeb(picked);
+    if (mounted) setState(() { video = safe; pollDraft = null; eventDraft = null; });
+  }
+
+  Future<void> _pickAudio() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['mp3', 'm4a', 'aac', 'wav'],
+      withData: true,
+    );
+    final picked = result?.files.single;
+    if (picked == null) return;
+    if (mounted) setState(() { audio = picked; pollDraft = null; eventDraft = null; });
+  }
+
+  Future<void> _pickDocument() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'doc', 'docx'],
+      withData: true,
+    );
+    final picked = result?.files.single;
+    if (picked == null) return;
+    if (mounted) setState(() { document = picked; pollDraft = null; eventDraft = null; });
+  }
+
+  /// Photo and video can each come from the camera or the gallery — this
+  /// sheet is the one extra tap that unlocks "take a photo/video right
+  /// now" instead of only ever picking something already saved.
+  Future<void> _showCameraSheet() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(sheetContext, 'photo'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam_outlined),
+              title: const Text('Record a video'),
+              onTap: () => Navigator.pop(sheetContext, 'video'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == 'photo') await _pickImage(ImageSource.camera);
+    if (choice == 'video') await _pickVideo(ImageSource.camera);
+  }
+
+  Widget _attachTile(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap, bool active = false}) {
+    final theme = Theme.of(context);
+    final color = active ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 72,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
+        decoration: BoxDecoration(
+          color: active ? theme.colorScheme.primaryContainer.withValues(alpha: 0.4) : null,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: active ? theme.colorScheme.primary : theme.colorScheme.outlineVariant),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(height: 4),
+            Text(label, style: theme.textTheme.labelSmall?.copyWith(color: color), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _attachmentPreviewChip(BuildContext context, {required Widget leading, required String title, String? subtitle, required VoidCallback onRemove}) {
+    final theme = Theme.of(context);
+    return Container(
+      width: 140,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          leading,
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title, style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (subtitle != null) Text(subtitle, style: theme.textTheme.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          InkWell(
+            onTap: onRemove,
+            child: Icon(Icons.close, size: 16, color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -617,21 +762,34 @@ class _P extends State<CreatePostScreen> {
                   ],
                 ),
               ),
-            FormatToolbar(controller: text, onChanged: _onTextChanged),
-            TextField(
-              controller: text,
-              minLines: 3,
-              maxLines: 8,
-              maxLength: _maxLength,
-              onChanged: _onTextChanged,
-              decoration: InputDecoration(
-                labelText: 'Text content',
-                hintText: "What's on your mind?",
-                helperText: _draftSaving
-                    ? 'Saving draft…'
-                    : _draftSavedAt != null
-                        ? 'Draft saved'
-                        : null,
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  FormatToolbar(controller: text, onChanged: _onTextChanged, focusNode: _textFocus),
+                  Container(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
+                  TextField(
+                    controller: text,
+                    focusNode: _textFocus,
+                    minLines: 3,
+                    maxLines: 8,
+                    maxLength: _maxLength,
+                    onChanged: _onTextChanged,
+                    decoration: InputDecoration(
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.all(12),
+                      hintText: "What's on your mind?",
+                      helperText: _draftSaving
+                          ? 'Saving draft…'
+                          : _draftSavedAt != null
+                              ? 'Draft saved'
+                              : null,
+                    ),
+                  ),
+                ],
               ),
             ),
             if (_loadingLinkPreview) const Padding(padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()),
@@ -662,122 +820,145 @@ class _P extends State<CreatePostScreen> {
               _QuotedPostPreviewCard(post: _quotedPost!),
               const SizedBox(height: 12),
             ],
+            Text('Add to your post', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _attachTile(context, icon: Icons.photo_camera_outlined, label: 'Camera', onTap: _showCameraSheet),
+                  const SizedBox(width: 8),
+                  _attachTile(context, icon: Icons.image_outlined, label: 'Photo', active: image != null, onTap: () => _pickImage(ImageSource.gallery)),
+                  const SizedBox(width: 8),
+                  _attachTile(context, icon: Icons.videocam_outlined, label: 'Video', active: video != null, onTap: () => _pickVideo(ImageSource.gallery)),
+                  const SizedBox(width: 8),
+                  _attachTile(context, icon: Icons.audiotrack_outlined, label: 'Audio', active: audio != null, onTap: _pickAudio),
+                  const SizedBox(width: 8),
+                  _attachTile(context, icon: Icons.description_outlined, label: 'Document', active: document != null, onTap: _pickDocument),
+                  const SizedBox(width: 8),
+                  _attachTile(
+                    context,
+                    icon: Icons.poll_outlined,
+                    label: 'Poll',
+                    active: pollDraft != null,
+                    onTap: () async {
+                      final draft = await _showPollSheet(context, pollDraft);
+                      if (draft == null) return;
+                      setState(() {
+                        pollDraft = draft;
+                        eventDraft = null;
+                        image = null;
+                        video = null;
+                        audio = null;
+                        document = null;
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _attachTile(
+                    context,
+                    icon: Icons.event_outlined,
+                    label: 'Event',
+                    active: eventDraft != null,
+                    onTap: () async {
+                      final draft = await _showEventSheet(context, eventDraft);
+                      if (draft == null) return;
+                      setState(() {
+                        eventDraft = draft;
+                        pollDraft = null;
+                        image = null;
+                        video = null;
+                        audio = null;
+                        document = null;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+            if (image != null || video != null || audio != null || document != null || pollDraft != null || eventDraft != null) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 60,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    if (image != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _attachmentPreviewChip(
+                          context,
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: SizedBox(width: 40, height: 40, child: PickedImagePreview(bytesFuture: image!.readAsBytes())),
+                          ),
+                          title: 'Photo',
+                          onRemove: () => setState(() => image = null),
+                        ),
+                      ),
+                    if (video != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _attachmentPreviewChip(
+                          context,
+                          leading: const Icon(Icons.videocam, size: 28),
+                          title: 'Video',
+                          subtitle: 'up to 5 min',
+                          onRemove: () => setState(() => video = null),
+                        ),
+                      ),
+                    if (audio != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _attachmentPreviewChip(
+                          context,
+                          leading: const Icon(Icons.audiotrack, size: 28),
+                          title: audio!.name,
+                          onRemove: () => setState(() => audio = null),
+                        ),
+                      ),
+                    if (document != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _attachmentPreviewChip(
+                          context,
+                          leading: const Icon(Icons.description, size: 28),
+                          title: document!.name,
+                          onRemove: () => setState(() => document = null),
+                        ),
+                      ),
+                    if (pollDraft != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _attachmentPreviewChip(
+                          context,
+                          leading: const Icon(Icons.poll, size: 28),
+                          title: pollDraft!.question,
+                          subtitle: '${pollDraft!.options.length} options',
+                          onRemove: () => setState(() => pollDraft = null),
+                        ),
+                      ),
+                    if (eventDraft != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _attachmentPreviewChip(
+                          context,
+                          leading: const Icon(Icons.event, size: 28),
+                          title: eventDraft!.title,
+                          onRemove: () => setState(() => eventDraft = null),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            Text('More options', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
-                    if (picked == null) return;
-                    final safe = await materializeIfWeb(picked);
-                    setState(() {
-                      image = safe;
-                      video = null;
-                      audio = null;
-                      document = null; // a post carries at most one media item
-                      pollDraft = null;
-                      eventDraft = null;
-                    });
-                  },
-                  icon: const Icon(Icons.image_outlined),
-                  label: Text(image == null ? 'Add photo' : 'Photo selected'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final picked = await ImagePicker().pickVideo(source: ImageSource.gallery, maxDuration: const Duration(minutes: 5));
-                    if (picked == null) return;
-                    final safe = await materializeIfWeb(picked);
-                    setState(() {
-                      video = safe;
-                      image = null;
-                      audio = null;
-                      document = null; // a post carries at most one media item
-                      pollDraft = null;
-                      eventDraft = null;
-                    });
-                  },
-                  icon: const Icon(Icons.videocam_outlined),
-                  label: Text(video == null ? 'Add video' : 'Video selected'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final result = await FilePicker.platform.pickFiles(
-                      type: FileType.custom,
-                      allowedExtensions: const ['mp3', 'm4a', 'aac', 'wav'],
-                      withData: true,
-                    );
-                    final picked = result?.files.single;
-                    if (picked == null) return;
-                    if (mounted) {
-                      setState(() {
-                        audio = picked;
-                        image = null;
-                        video = null;
-                        document = null;
-                        pollDraft = null;
-                        eventDraft = null;
-                      });
-                    }
-                  },
-                  icon: const Icon(Icons.audiotrack_outlined),
-                  label: Text(audio == null ? 'Add audio' : audio!.name),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final result = await FilePicker.platform.pickFiles(
-                      type: FileType.custom,
-                      allowedExtensions: const ['pdf', 'doc', 'docx'],
-                      withData: true,
-                    );
-                    final picked = result?.files.single;
-                    if (picked == null) return;
-                    if (mounted) {
-                      setState(() {
-                        document = picked;
-                        image = null;
-                        video = null;
-                        audio = null;
-                        pollDraft = null;
-                        eventDraft = null;
-                      });
-                    }
-                  },
-                  icon: const Icon(Icons.description_outlined),
-                  label: Text(document == null ? 'Add document' : document!.name),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final draft = await _showPollSheet(context, pollDraft);
-                    if (draft == null) return;
-                    setState(() {
-                      pollDraft = draft;
-                      eventDraft = null;
-                      image = null;
-                      video = null;
-                      audio = null;
-                      document = null;
-                    });
-                  },
-                  icon: const Icon(Icons.poll_outlined),
-                  label: Text(pollDraft == null ? 'Add poll' : 'Poll: ${pollDraft!.question}'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final draft = await _showEventSheet(context, eventDraft);
-                    if (draft == null) return;
-                    setState(() {
-                      eventDraft = draft;
-                      pollDraft = null;
-                      image = null;
-                      video = null;
-                      audio = null;
-                      document = null;
-                    });
-                  },
-                  icon: const Icon(Icons.event_outlined),
-                  label: Text(eventDraft == null ? 'Add event' : 'Event: ${eventDraft!.title}'),
-                ),
                 OutlinedButton.icon(
                   onPressed: _pickFeeling,
                   icon: Text(_feeling?.emoji ?? '🙂'),
@@ -813,10 +994,6 @@ class _P extends State<CreatePostScreen> {
                         ))
                     .toList(),
               ),
-            ],
-            if (video != null) ...[
-              const SizedBox(height: 8),
-              Text('Videos up to 5 minutes are supported.', style: Theme.of(context).textTheme.bodySmall),
             ],
             const SizedBox(height: 12),
             TextField(

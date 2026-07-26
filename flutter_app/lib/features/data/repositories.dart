@@ -905,6 +905,30 @@ class ScheduledPostRepository {
     return mediaService.uploadPostVideo(postId: scheduledPostId, video: prepared);
   }
 
+  Future<String> uploadAudio(String scheduledPostId, PlatformFile file) async {
+    MediaUploadService.assertFileWithinLimit(file, MediaUploadService.maxAudioBytes, 'Audio file');
+    final ext = (file.extension ?? 'mp3').toLowerCase();
+    return MediaUploadService().uploadPostBinary(
+      postId: scheduledPostId,
+      kind: 'audio',
+      bytes: file.bytes!,
+      contentType: PostRepository()._audioContentType(ext),
+      fileExtension: ext,
+    );
+  }
+
+  Future<String> uploadDocument(String scheduledPostId, PlatformFile file) async {
+    MediaUploadService.assertFileWithinLimit(file, MediaUploadService.maxDocumentBytes, 'Document');
+    final ext = (file.extension ?? 'pdf').toLowerCase();
+    return MediaUploadService().uploadPostBinary(
+      postId: scheduledPostId,
+      kind: 'document',
+      bytes: file.bytes!,
+      contentType: PostRepository()._documentContentType(ext),
+      fileExtension: ext,
+    );
+  }
+
   Future<void> attachMedia(String id, List<Map<String, dynamic>> media) async {
     await _c.from('scheduled_posts').update({'media': media}).eq('id', id);
   }

@@ -8,10 +8,17 @@ import 'package:flutter/material.dart';
 /// unchanged — they just render the markers via [MarkdownLiteText] instead
 /// of plain Text.
 class FormatToolbar extends StatelessWidget {
-  const FormatToolbar({super.key, required this.controller, required this.onChanged});
+  const FormatToolbar({super.key, required this.controller, required this.onChanged, this.focusNode});
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+
+  /// The text field's own FocusNode, if the caller has one. Tapping a
+  /// toolbar button previously left the field unfocused, so the inserted
+  /// `**`/`_`/`++` markers landed in the controller with no visible cursor
+  /// or keyboard — it looked like the buttons did nothing. Refocusing
+  /// after every action makes the effect immediately visible.
+  final FocusNode? focusNode;
 
   void _wrapSelection(String marker, {String? endMarker}) {
     final end = endMarker ?? marker;
@@ -28,6 +35,7 @@ class FormatToolbar extends StatelessWidget {
         selection: TextSelection.collapsed(offset: insertAt + marker.length),
       );
       onChanged(newText);
+      focusNode?.requestFocus();
       return;
     }
 
@@ -39,6 +47,7 @@ class FormatToolbar extends StatelessWidget {
       selection: TextSelection.collapsed(offset: sel.start + wrapped.length),
     );
     onChanged(newText);
+    focusNode?.requestFocus();
   }
 
   void _prefixLines(String prefix) {
@@ -64,44 +73,37 @@ class FormatToolbar extends StatelessWidget {
       selection: TextSelection.collapsed(offset: lineStart + prefixed.length),
     );
     onChanged(newText);
+    focusNode?.requestFocus();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 2,
-      children: [
-        IconButton(
-          tooltip: 'Bold',
-          icon: const Icon(Icons.format_bold, size: 20),
-          onPressed: () => _wrapSelection('**'),
-        ),
-        IconButton(
-          tooltip: 'Italic',
-          icon: const Icon(Icons.format_italic, size: 20),
-          onPressed: () => _wrapSelection('_'),
-        ),
-        IconButton(
-          tooltip: 'Underline',
-          icon: const Icon(Icons.format_underline, size: 20),
-          onPressed: () => _wrapSelection('++'),
-        ),
-        IconButton(
-          tooltip: 'Code',
-          icon: const Icon(Icons.code, size: 20),
-          onPressed: () => _wrapSelection('`'),
-        ),
-        IconButton(
-          tooltip: 'Quote',
-          icon: const Icon(Icons.format_quote, size: 20),
-          onPressed: () => _prefixLines('> '),
-        ),
-        IconButton(
-          tooltip: 'Bullet list',
-          icon: const Icon(Icons.format_list_bulleted, size: 20),
-          onPressed: () => _prefixLines('- '),
-        ),
-      ],
+    final theme = Theme.of(context);
+    Widget button({required String tooltip, required IconData icon, required VoidCallback onPressed}) => IconButton(
+          tooltip: tooltip,
+          icon: Icon(icon, size: 19),
+          onPressed: onPressed,
+          visualDensity: VisualDensity.compact,
+          color: theme.colorScheme.onSurfaceVariant,
+        );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          button(tooltip: 'Bold', icon: Icons.format_bold, onPressed: () => _wrapSelection('**')),
+          button(tooltip: 'Italic', icon: Icons.format_italic, onPressed: () => _wrapSelection('_')),
+          button(tooltip: 'Underline', icon: Icons.format_underline, onPressed: () => _wrapSelection('++')),
+          button(tooltip: 'Code', icon: Icons.code, onPressed: () => _wrapSelection('`')),
+          button(tooltip: 'Quote', icon: Icons.format_quote, onPressed: () => _prefixLines('> ')),
+          button(tooltip: 'Bullet list', icon: Icons.format_list_bulleted, onPressed: () => _prefixLines('- ')),
+        ],
+      ),
     );
   }
 }

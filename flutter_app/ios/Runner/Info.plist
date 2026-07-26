@@ -4,6 +4,10 @@
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Gather uses your location to help you tag where a post was made.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Gather uses your camera so you can take a photo or record a video for a post.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Gather uses your microphone to record audio when you record a video for a post.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
