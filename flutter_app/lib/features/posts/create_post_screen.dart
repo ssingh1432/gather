@@ -248,6 +248,9 @@ class _P extends State<CreatePostScreen> {
         return 'This post may have already gone through — check your feed before posting again.';
       }
     }
+    if (e is StorageException && e.statusCode == '403') {
+      return 'Your session needs a refresh before uploading — please try again, or sign out and back in if it keeps happening.';
+    }
     return 'Upload failed. Please check your connection and try again.';
   }
 
@@ -352,9 +355,17 @@ class _P extends State<CreatePostScreen> {
         context.go('/');
       }
     } catch (e, stackTrace) {
-      BetaErrorLoggingService.instance.record(e, stackTrace, 
-        context: 'post_creation_submit', 
-        metadata: {'community_id': widget.communityId}
+      final session = SupabaseConfig.maybeClient?.auth.currentSession;
+      final secondsLeft = session?.expiresAt == null
+          ? null
+          : session!.expiresAt! - (DateTime.now().millisecondsSinceEpoch ~/ 1000);
+      BetaErrorLoggingService.instance.record(e, stackTrace,
+        context: 'post_creation_submit',
+        metadata: {
+          'community_id': widget.communityId,
+          'had_session': session != null,
+          'token_seconds_left_at_failure': secondsLeft,
+        },
       );
 
       if (mounted) {

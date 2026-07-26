@@ -83,16 +83,27 @@ class MediaUploadService {
   /// which re-derives auth per request) went through fine.
   ///
   /// This proactively refreshes when the token is close to expiring, and
-  /// [_withAuthRetry] below does one forced-refresh-and-retry if a storage
-  /// call still comes back with a 403, so a single stale-token race never
-  /// surfaces as a user-facing failure.
+  /// [_withAuthRetry] below retries with backoff if a storage call still
+  /// comes back with a 403. A *single* immediate retry (the previous
+  /// version of this method) turned out not to be enough: confirmed via a
+  /// direct simulated-auth INSERT against storage.objects that the RLS
+  /// policy itself accepts a valid token with zero issue, so a persistent
+  /// 403 even after one refresh+retry means the SDK's internal storage
+  /// client hadn't picked up the new access token yet at the moment of
+  /// that immediate retry — a propagation race, not an auth or policy
+  /// failure. Backing off between attempts gives that propagation time to
+  /// land instead of re-firing into the same race.
   Future<void> _ensureFreshSession() async {
     final session = _client.auth.currentSession;
     if (session == null) return;
     final expiresAt = session.expiresAt;
     if (expiresAt == null) return;
     final secondsLeft = expiresAt - (DateTime.now().millisecondsSinceEpoch ~/ 1000);
-    if (secondsLeft < 60) {
+    // Was <60s — widened to 5 minutes. Picking media (especially camera
+    // capture, which backgrounds the app) can easily eat several minutes,
+    // so a tighter margin was letting tokens go stale between pick and
+    // publish more often than it should have.
+    if (secondsLeft < 300) {
       try {
         await _client.auth.refreshSession();
       } catch (_) {
@@ -102,19 +113,25 @@ class MediaUploadService {
     }
   }
 
-  /// Runs [action] (a storage upload), retrying exactly once after a forced
-  /// session refresh if it fails with a 403 (RLS violation / stale token).
+  /// Runs [action] (a storage upload), retrying up to twice more after a
+  /// forced session refresh if it keeps failing with a 403 (RLS violation
+  /// / stale token), backing off briefly between attempts so the SDK has
+  /// time to actually propagate the refreshed token to the storage
+  /// client before the next try.
   Future<T> _withAuthRetry<T>(Future<T> Function() action) async {
     await _ensureFreshSession();
-    try {
-      return await action();
-    } on StorageException catch (e) {
-      if (e.statusCode == '403') {
-        await _client.auth.refreshSession();
+    StorageException? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
         return await action();
+      } on StorageException catch (e) {
+        lastError = e;
+        if (e.statusCode != '403') rethrow;
+        await _client.auth.refreshSession().catchError((_) {});
+        await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
       }
-      rethrow;
     }
+    throw lastError!;
   }
 
   /// Prepares [image] for upload. On mobile this compresses to temp files;
