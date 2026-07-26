@@ -73,43 +73,25 @@ class MediaUploadService {
 
   SupabaseClient get _client => SupabaseConfig.client;
 
-  /// Opening the image/video picker backgrounds the app; on resume, the
-  /// Supabase session's access token can be at or past expiry (or mid
-  /// auto-refresh) at the exact moment Publish fires the storage request.
-  /// Storage RLS on these buckets only has policies for the `authenticated`
-  /// role — a request that goes out unauthenticated gets a generic
-  /// "new row violates row-level security policy" 403, which is what shows
-  /// up as "Upload failed" even though the post row itself (via Postgrest,
-  /// which re-derives auth per request) went through fine.
+  /// Always force a fresh session immediately before a storage call.
   ///
-  /// This proactively refreshes when the token is close to expiring, and
-  /// [_withAuthRetry] below retries with backoff if a storage call still
-  /// comes back with a 403. A *single* immediate retry (the previous
-  /// version of this method) turned out not to be enough: confirmed via a
-  /// direct simulated-auth INSERT against storage.objects that the RLS
-  /// policy itself accepts a valid token with zero issue, so a persistent
-  /// 403 even after one refresh+retry means the SDK's internal storage
-  /// client hadn't picked up the new access token yet at the moment of
-  /// that immediate retry — a propagation race, not an auth or policy
-  /// failure. Backing off between attempts gives that propagation time to
-  /// land instead of re-firing into the same race.
+  /// This used to be conditional (only refresh if <60s/<5min remained),
+  /// on the theory that this was purely a stale/near-expiry token race.
+  /// That theory is now disproven: a real failure was captured with
+  /// token_seconds_left_at_failure = 3598 (nearly a full hour left), so
+  /// time-to-expiry was never the actual gate. Refreshing unconditionally
+  /// costs one extra round-trip per upload sequence but removes staleness
+  /// as a variable entirely while the JWT-sub-vs-author diagnostic
+  /// (logged on failure in create_post_screen.dart) gathers proof of
+  /// what's actually different about the failing request's auth context.
   Future<void> _ensureFreshSession() async {
     final session = _client.auth.currentSession;
     if (session == null) return;
-    final expiresAt = session.expiresAt;
-    if (expiresAt == null) return;
-    final secondsLeft = expiresAt - (DateTime.now().millisecondsSinceEpoch ~/ 1000);
-    // Was <60s — widened to 5 minutes. Picking media (especially camera
-    // capture, which backgrounds the app) can easily eat several minutes,
-    // so a tighter margin was letting tokens go stale between pick and
-    // publish more often than it should have.
-    if (secondsLeft < 300) {
-      try {
-        await _client.auth.refreshSession();
-      } catch (_) {
-        // Best-effort — if this fails, the upload call itself will surface
-        // whatever the real auth problem is.
-      }
+    try {
+      await _client.auth.refreshSession();
+    } catch (_) {
+      // Best-effort — if this fails, the upload call itself will surface
+      // whatever the real auth problem is.
     }
   }
 

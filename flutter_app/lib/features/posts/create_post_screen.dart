@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -254,6 +255,22 @@ class _P extends State<CreatePostScreen> {
     return 'Upload failed. Please check your connection and try again.';
   }
 
+  /// Decodes a JWT's payload segment without verifying its signature —
+  /// this is purely for client-side diagnostics (comparing the token's
+  /// `sub` against who we think is logged in), never for trusting the
+  /// token's contents for anything security-relevant.
+  Map<String, dynamic>? _decodeJwtPayload(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+      payload += '=' * ((4 - payload.length % 4) % 4);
+      return jsonDecode(utf8.decode(base64.decode(payload))) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _publish() async {
     if (_scheduledFor != null) return _schedule();
 
@@ -359,12 +376,23 @@ class _P extends State<CreatePostScreen> {
       final secondsLeft = session?.expiresAt == null
           ? null
           : session!.expiresAt! - (DateTime.now().millisecondsSinceEpoch ~/ 1000);
+      final jwtPayload = session == null ? null : _decodeJwtPayload(session.accessToken);
       BetaErrorLoggingService.instance.record(e, stackTrace,
         context: 'post_creation_submit',
         metadata: {
           'community_id': widget.communityId,
           'had_session': session != null,
           'token_seconds_left_at_failure': secondsLeft,
+          // The decisive check: does the token actually being sent carry
+          // the same user we think is logged in and posting? A mismatch
+          // here (or a null role/sub) would explain an RLS 403/400 that
+          // otherwise looks inexplicable, since Postgres would correctly
+          // reject a request authenticated as someone other than the
+          // post's author.
+          'jwt_sub': jwtPayload?['sub'],
+          'jwt_role': jwtPayload?['role'],
+          'expected_author_id': uid,
+          'jwt_sub_matches_author': jwtPayload?['sub'] == uid,
         },
       );
 
