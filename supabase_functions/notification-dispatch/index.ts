@@ -211,36 +211,48 @@ async function getFcmAccessToken(): Promise<string | null> {
 }
 
 async function sendPush(fcmToken: string, title: string, body: string, notif: NotificationRow): Promise<boolean> {
-  if (!FCM_PROJECT_ID) return false;
-  const accessToken = await getFcmAccessToken();
-  if (!accessToken) return false;
-
-  const res = await fetch(`https://fcm.googleapis.com/v1/projects/${FCM_PROJECT_ID}/messages:send`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message: {
-        token: fcmToken,
-        notification: { title, body },
-        data: {
-          type: notif.type,
-          notification_id: notif.id,
-          post_id: notif.post_id ?? "",
-        },
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const detail = await res.text();
-    console.log("DEBUG: FCM send failed", res.status, detail);
-    // Token no longer valid (uninstalled app, expired) — stop retrying it.
-    if (res.status === 404 || detail.includes("UNREGISTERED") || detail.includes("INVALID_ARGUMENT")) {
-      await admin.from("users").update({ fcm_token: null }).eq("id", notif.recipient_id);
-    }
+  if (!FCM_PROJECT_ID) {
+    console.log("DEBUG: FCM_PROJECT_ID not set, skipping push");
     return false;
   }
-  return true;
+  try {
+    const accessToken = await getFcmAccessToken();
+    if (!accessToken) {
+      console.log("DEBUG: could not obtain FCM access token, skipping push");
+      return false;
+    }
+
+    const res = await fetch(`https://fcm.googleapis.com/v1/projects/${FCM_PROJECT_ID}/messages:send`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          token: fcmToken,
+          notification: { title, body },
+          data: {
+            type: notif.type,
+            notification_id: notif.id,
+            post_id: notif.post_id ?? "",
+          },
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text();
+      console.log("DEBUG: FCM send failed", res.status, detail);
+      // Token no longer valid (uninstalled app, expired) — stop retrying it.
+      if (res.status === 404 || detail.includes("UNREGISTERED") || detail.includes("INVALID_ARGUMENT")) {
+        await admin.from("users").update({ fcm_token: null }).eq("id", notif.recipient_id);
+      }
+      return false;
+    }
+    console.log("DEBUG: FCM send ok");
+    return true;
+  } catch (err) {
+    console.log("DEBUG: sendPush threw", String(err));
+    return false;
+  }
 }
 
 // ---- Email (Resend) -------------------------------------------------------
@@ -272,18 +284,30 @@ function emailShell(preheader: string, heading: string, bodyHtml: string): strin
 }
 
 async function sendEmail(toEmail: string, title: string, body: string): Promise<void> {
-  if (!RESEND_API_KEY) return;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: FROM_ADDRESS,
-      to: [toEmail],
-      subject: title,
-      html: emailShell(body, title, `<p style="color:#374151;font-size:15px;line-height:1.5;">${body}</p>`),
-    }),
-  });
-  if (!res.ok) console.log("DEBUG: Resend send failed", res.status, await res.text());
+  if (!RESEND_API_KEY) {
+    console.log("DEBUG: RESEND_API_KEY not set, skipping email");
+    return;
+  }
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: FROM_ADDRESS,
+        to: [toEmail],
+        subject: title,
+        html: emailShell(body, title, `<p style="color:#374151;font-size:15px;line-height:1.5;">${body}</p>`),
+      }),
+    });
+    const responseBody = await res.text();
+    if (!res.ok) {
+      console.log("DEBUG: Resend send failed", res.status, responseBody);
+    } else {
+      console.log("DEBUG: Resend send ok", res.status, responseBody);
+    }
+  } catch (err) {
+    console.log("DEBUG: Resend send threw", String(err));
+  }
 }
 
 // ---- Entry point -----------------------------------------------------------
@@ -310,16 +334,24 @@ Deno.serve(async (req: Request) => {
   const notif = payload.record;
 
   try {
-    const { data: recipient } = await admin
+    if (!SERVICE_ROLE_KEY) {
+      console.log("DEBUG: SUPABASE_SERVICE_ROLE_KEY is empty — every DB call below will fail auth silently");
+    }
+
+    const { data: recipient, error: recipientError } = await admin
       .from("users")
       .select("fcm_token, email, notification_settings, username")
       .eq("id", notif.recipient_id)
       .single();
 
+    if (recipientError) {
+      console.log("DEBUG: recipient fetch error", JSON.stringify(recipientError));
+    }
     if (!recipient) return new Response(JSON.stringify({ ok: true, note: "recipient not found" }), { status: 200 });
 
     const settings = (recipient.notification_settings as Record<string, unknown>) ?? {};
     if (!isCategoryEnabled(settings, notif.type)) {
+      console.log("DEBUG: category muted for type", notif.type);
       return new Response(JSON.stringify({ ok: true, note: "category muted" }), { status: 200 });
     }
 
@@ -334,6 +366,7 @@ Deno.serve(async (req: Request) => {
     const tasks: Promise<unknown>[] = [];
     if (recipient.fcm_token) tasks.push(sendPush(recipient.fcm_token as string, title, body, notif));
     if (recipient.email && EMAIL_TYPES.has(notif.type)) tasks.push(sendEmail(recipient.email as string, title, body));
+    console.log("DEBUG: tasks queued", tasks.length, "has_fcm_token", Boolean(recipient.fcm_token), "has_email", Boolean(recipient.email));
 
     await Promise.allSettled(tasks);
 
