@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "990991400124",
+    "project_id": "rucg-c8146",
+    "storage_bucket": "rucg-c8146.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:990991400124:android:d3e7a65668e6095475e4b9",
+        "android_client_info": {
+          "package_name": "com.eiquoab.gather"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBq1RdtwMpBEtkY5Jh0WoxQvOq1XHgN_5s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
