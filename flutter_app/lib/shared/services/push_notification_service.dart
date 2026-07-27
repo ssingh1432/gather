@@ -10,11 +10,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/router.dart';
 import '../../core/supabase_client.dart';
+import '../../firebase_options.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (_) {
     // Firebase can already be initialized in warm-started isolates.
   }
@@ -35,7 +36,7 @@ class PushNotificationService {
     if (_initialized || kIsWeb) return;
 
     try {
-      await Firebase.initializeApp();
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
       final settings = await _messaging.requestPermission(
