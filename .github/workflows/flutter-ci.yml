@@ -37,6 +37,46 @@ jobs:
       - name: Run Flutter tests
         run: flutter test
 
+  build-android-apk:
+    name: Build Android APK
+    needs: analyze-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter_app
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release
+        # Signed with the debug keystore for now (see build.gradle.kts TODO) —
+        # fine for sideloading/testing, not for Play Store submission.
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gather-android-apk
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
+
   deploy:
     name: Build web and deploy to VPS
     needs: analyze-and-test
