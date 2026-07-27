@@ -35,7 +35,13 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+// The platform auto-injects SUPABASE_SERVICE_ROLE_KEY, but on this project
+// that value was observed authenticating as a role with no usage grant on
+// the public schema (42501 permission denied) — almost certainly a side
+// effect of this project having moved to the new Secret Keys / JWT Signing
+// Keys system. MANUAL_SERVICE_ROLE_KEY, set explicitly from Project
+// Settings > API Keys, takes priority until that's root-caused.
+const SERVICE_ROLE_KEY = Deno.env.get("MANUAL_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const WEBHOOK_SECRET = Deno.env.get("NOTIFICATION_WEBHOOK_SECRET") ?? "";
 const FCM_SERVICE_ACCOUNT_JSON = Deno.env.get("FCM_SERVICE_ACCOUNT_JSON") ?? "";
 const FCM_PROJECT_ID = Deno.env.get("FCM_PROJECT_ID") ?? "";
@@ -335,7 +341,9 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (!SERVICE_ROLE_KEY) {
-      console.log("DEBUG: SUPABASE_SERVICE_ROLE_KEY is empty — every DB call below will fail auth silently");
+      console.log("DEBUG: no service role key available at all (neither MANUAL_SERVICE_ROLE_KEY nor SUPABASE_SERVICE_ROLE_KEY set)");
+    } else {
+      console.log("DEBUG: using service key source:", Deno.env.get("MANUAL_SERVICE_ROLE_KEY") ? "MANUAL_SERVICE_ROLE_KEY" : "SUPABASE_SERVICE_ROLE_KEY (auto-injected)");
     }
 
     const { data: recipient, error: recipientError } = await admin
