@@ -551,7 +551,7 @@ class _ReportedContentPreview extends StatelessWidget {
                 size: 16,
               ),
               const SizedBox(width: 6),
-              Text('Reported content (${contentType})', style: theme.textTheme.labelMedium),
+              Text('Reported content ($contentType)', style: theme.textTheme.labelMedium),
               if (isSensitive) ...[
                 const SizedBox(width: 8),
                 Chip(label: const Text('Marked sensitive'), visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
