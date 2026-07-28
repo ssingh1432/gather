@@ -7,7 +7,10 @@ plugins {
 
 android {
     namespace = "com.eiquoab.gather"
-    compileSdk = flutter.compileSdkVersion
+    // receive_sharing_intent requires SDK 37; Flutter's own default
+    // (flutter.compileSdkVersion) is still 36 as of Flutter stable 3.44.
+    // compileSdk is backwards-compatible, so this is safe to raise on its own.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
