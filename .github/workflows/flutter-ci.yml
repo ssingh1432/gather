@@ -56,6 +56,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Install Android SDK platform 37
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-37" "build-tools;36.0.0"
+        # receive_sharing_intent requires compileSdk 37; the pre-installed
+        # SDK on GitHub-hosted runners doesn't always include the newest
+        # platform yet, and AGP won't auto-fetch it mid-build.
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
