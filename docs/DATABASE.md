@@ -78,6 +78,7 @@ privilege escalations.
 | `send_event_reminders()` | none | void | **Not client-callable** — pg_cron only, every 15 min. |
 | `purge_expired_account_deletions()` | none | void | **Not client-callable** — pg_cron only, daily. |
 | `soft_remove_post`, `restore_post`, `suspend_user`, `ban_user`, `issue_warning`, `resolve_report`, `add_strike` | various | void | Moderator/admin actions; internally check `is_admin_or_mod()`/`ensure_admin_or_mod()`. |
+| `restore_post_to_version(p_post_id, p_edit_history_id)` | uuid, uuid | void | **`security definer`.** Phase 10 closeout, Item 1. Admin/mod only (`is_admin_or_mod()`, raises `42501` otherwise). Reverts `posts.text_content` to a `post_edit_history` snapshot; the pre-restore state is itself saved as a new history row (`edit_type = 'restore'`) before overwriting, so restoring is itself undoable. Logs to `admin_audit_log` via `log_admin_action`. |
 | `fake_account_signals(min_score)` | int | scored user rows | Advisory heuristic for the admin review queue, never auto-acts. |
 | `record_login_device(device_hash, device_label)` | text, text | void | Phase 9. Client calls once per successful sign-in; inserts a `login_alert` notification the first time a device hash is seen for that user. |
 | `admin_send_broadcast(title, body, audience)` | text, text, text | int (recipient count) | Phase 9. Admin/mod only. Fans an `admin_broadcast` notification out to `audience` (`all`\|`moderators`\|`admins`). |
@@ -219,6 +220,9 @@ this doc did):
                                                     login/security/moderation/appeal/report/broadcast
                                                     triggers, record_login_device(),
                                                     admin_send_broadcast()]
+045_phase10_closeout_version_restore.sql           [Phase 10 closeout, Item 1 — restore_post_to_version()]
+046_phase10_closeout_poll_event_moderation.sql     [Phase 10 closeout, Item 2 — keyword-filter triggers
+                                                    on polls/poll_options/events, ai_moderation_status hook]
 ```
 
 **Live-vs-file drift (found 2026-07-25):** the following functions exist on
@@ -247,7 +251,32 @@ noted inline above.
   takedowns go through the generic report pipeline (category
   `copyright`), which is functional but not a dedicated legal workflow.
 - No live malware/CSAM scanner — `post_media.scan_status` is the hook
-  point, everything defaults `clean`.
+  point, everything defaults `clean`. `posts.ai_moderation_status` (046)
+  is the equivalent hook for text/poll/event content — same pattern,
+  also defaults to a no-op state (`not_scanned`) with nothing wired up.
+- **Fixed 2026-07-28 (045):** `post_edit_history` had correct RLS and was
+  written to on every edit, but nothing ever read it — `editHistory()`
+  existed on the repository but was called from nowhere in the app, and
+  there was no restore path at all. Added an admin edit-history viewer
+  (Posts tab → history icon) and `restore_post_to_version()`. Restoring
+  is scoped to `text_content` only, matching what `editPost()` actually
+  tracks today — `previous_media`/tags/visibility are columns that exist
+  on the table but nothing populates them yet, so they're intentionally
+  not part of the restore.
+- **Fixed 2026-07-28 (046):** `auto_moderate_post_block`/`_flag`
+  (021) only ever inspected `posts.text_content`, which is null/empty for
+  polls and events — their user text lives in `polls.question`,
+  `poll_options.option_text`, and `events.title`/`description`. Banned
+  keywords placed there were never caught by either the block or the
+  auto-flag path. Added equivalent triggers on `polls`, `poll_options`,
+  and `events` reusing `check_keyword_filters()`. Also fixed: the report
+  queue rendered no post content at all for any content type (not just
+  polls/events) — a reported poll or event showed as a blank card. Added
+  `reportedContentPreview()` + a preview widget in the moderation screen.
+  `posts.is_sensitive` and `reports.target_post_id` were already generic
+  across content types and needed no change — the composer's sensitivity
+  toggle and the report pipeline already worked correctly for polls and
+  events before this migration.
 - **Fixed 2026-07-25 (040):** `publish_scheduled_posts`,
   `send_event_reminders`, `purge_expired_account_deletions`,
   `run_backup_heartbeat`, and `lift_expired_suspensions` were revoked from

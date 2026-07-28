@@ -402,6 +402,7 @@ class _ReportDetailExtrasState extends State<_ReportDetailExtras> {
   List<Map<String, dynamic>> _evidence = const [];
   Map<String, String> _signedUrls = const {};
   List<Map<String, dynamic>> _notes = const [];
+  Map<String, dynamic>? _contentPreview;
 
   @override
   void initState() {
@@ -415,12 +416,15 @@ class _ReportDetailExtrasState extends State<_ReportDetailExtras> {
       final targetUserId = widget.report['target_user_id']?.toString();
       final targetPostId = widget.report['target_post_id']?.toString();
 
+      final preview = targetPostId == null ? null : await widget.repo.reportedContentPreview(targetPostId).catchError((_) => null);
+
       final results = await Future.wait([
         widget.repo.evidenceFor(reportId),
         widget.repo.moderatorNotesFor(targetUserId: targetUserId, targetPostId: targetPostId),
       ]);
       final evidence = results[0];
       final notes = results[1];
+      _contentPreview = preview;
 
       // Evidence lives in a private bucket, so each file_url is a storage
       // path, not a viewable link — resolve one short-lived signed URL per
@@ -458,11 +462,15 @@ class _ReportDetailExtrasState extends State<_ReportDetailExtras> {
         child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
-    if (_evidence.isEmpty && _notes.isEmpty) return const SizedBox.shrink();
+    if (_evidence.isEmpty && _notes.isEmpty && _contentPreview == null) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_contentPreview != null) ...[
+          _ReportedContentPreview(preview: _contentPreview!),
+          const SizedBox(height: 12),
+        ],
         if (_evidence.isNotEmpty) ...[
           Text('Evidence (${_evidence.length})', style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 6),
@@ -504,6 +512,66 @@ class _ReportDetailExtrasState extends State<_ReportDetailExtras> {
               )),
         ],
       ],
+    );
+  }
+}
+
+/// Phase 10 closeout — Item 2: renders whatever was actually reported —
+/// plain text, or a poll question + its options, or an event title +
+/// description — so a moderator reviewing a reported poll/event isn't
+/// looking at a blank card. Reuses posts.is_sensitive / ai_moderation_status
+/// as small context chips rather than duplicating that state anywhere.
+class _ReportedContentPreview extends StatelessWidget {
+  const _ReportedContentPreview({required this.preview});
+  final Map<String, dynamic> preview;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final contentType = preview['content_type']?.toString() ?? 'text';
+    final title = preview['preview_title']?.toString();
+    final body = preview['preview_body']?.toString();
+    final options = (preview['preview_options'] as List?)?.cast<String>() ?? const [];
+    final isSensitive = preview['is_sensitive'] == true;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                contentType == 'poll' ? Icons.poll_outlined : (contentType == 'event' ? Icons.event_outlined : Icons.article_outlined),
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text('Reported content (${contentType})', style: theme.textTheme.labelMedium),
+              if (isSensitive) ...[
+                const SizedBox(width: 8),
+                Chip(label: const Text('Marked sensitive'), visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (title != null && title.isNotEmpty) Text(title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+          if (body != null && body.isNotEmpty) Text(body, style: theme.textTheme.bodySmall),
+          if (options.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            ...options.map((o) => Padding(
+                  padding: const EdgeInsets.only(left: 4, top: 2),
+                  child: Text('• $o', style: theme.textTheme.bodySmall),
+                )),
+          ],
+          if ((title == null || title.isEmpty) && (body == null || body.isEmpty) && options.isEmpty)
+            Text('No text content (media-only or unavailable).', style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic)),
+        ],
+      ),
     );
   }
 }

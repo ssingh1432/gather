@@ -1063,6 +1063,31 @@ class ModerationRepository {
   Future<List<Map<String, dynamic>>> evidenceFor(String reportId) async =>
       ((await _c.from('moderation_evidence').select().eq('report_id', reportId).order('created_at')) as List).cast<Map<String, dynamic>>();
 
+  /// Phase 10 closeout — Item 2: the report queue previously rendered no
+  /// post content at all, which meant a reported poll or event showed up
+  /// completely blank (their user-supplied text lives in polls/events, not
+  /// posts.text_content). This resolves a display-ready preview for any
+  /// content_type so a moderator can actually see what was reported.
+  Future<Map<String, dynamic>?> reportedContentPreview(String postId) async {
+    final post = await _c.from('posts').select('content_type, text_content, is_sensitive, ai_moderation_status').eq('id', postId).maybeSingle();
+    if (post == null) return null;
+    final contentType = post['content_type']?.toString();
+
+    if (contentType == 'poll') {
+      final poll = await _c.from('polls').select('question, poll_options(option_text)').eq('post_id', postId).maybeSingle();
+      return {
+        ...post,
+        'preview_title': poll?['question'],
+        'preview_options': ((poll?['poll_options'] as List?) ?? const []).map((o) => o['option_text']?.toString() ?? '').toList(),
+      };
+    }
+    if (contentType == 'event') {
+      final event = await _c.from('events').select('title, description').eq('post_id', postId).maybeSingle();
+      return {...post, 'preview_title': event?['title'], 'preview_body': event?['description']};
+    }
+    return {...post, 'preview_body': post['text_content']};
+  }
+
   /// Uploads an evidence screenshot to the private `moderation-evidence`
   /// bucket and records it via [addEvidence]. `file_url` on the row stores
   /// the storage **path** (bucket is private, unlike post-media/avatars),
@@ -1568,6 +1593,23 @@ class AdminRepository {
     await _c.from('posts').update({'is_removed': false}).eq('id', postId);
     await logAction('restore_post', targetType: 'post', targetId: postId);
   }
+
+  /// Phase 10 closeout — Item 1: full edit trail for a post, newest first.
+  /// RLS (migration 031) already restricts this to the post's own author
+  /// or an admin/mod, so no extra client-side gating is needed here — a
+  /// non-admin caller just gets an empty/denied result.
+  Future<List<Map<String, dynamic>>> editHistory(String postId) async {
+    final rows = await _c.from('post_edit_history').select().eq('post_id', postId).order('edited_at', ascending: false);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Reverts a post's text_content to a prior post_edit_history snapshot.
+  /// Server-side (migration 045) re-checks admin/mod, snapshots the
+  /// pre-restore state as its own history row (tagged edit_type='restore'
+  /// so the trail is never destroyed), and logs to admin_audit_log — this
+  /// call is just the client-side entry point.
+  Future<void> restorePostToVersion(String postId, String editHistoryId) =>
+      _c.rpc('restore_post_to_version', params: {'p_post_id': postId, 'p_edit_history_id': editHistoryId});
 
   // ---- Communities ----
 

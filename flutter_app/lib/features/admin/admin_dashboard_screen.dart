@@ -528,15 +528,135 @@ class _PostsTabState extends State<_PostsTab> {
                   return ListTile(
                     title: Text('@$author', style: TextStyle(decoration: removed ? TextDecoration.lineThrough : null)),
                     subtitle: Text(p['text_content']?.toString() ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
-                    trailing: removed
-                        ? TextButton(onPressed: () => widget.repo.restorePost(p['id'].toString()).then((_) => _load()), child: const Text('Restore'))
-                        : TextButton(onPressed: () => widget.repo.removePost(p['id'].toString()).then((_) => _load()), child: const Text('Remove')),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Edit history',
+                          icon: const Icon(Icons.history),
+                          onPressed: () => showDialog(
+                            context: context,
+                            builder: (_) => _EditHistoryDialog(repo: widget.repo, postId: p['id'].toString(), onRestored: _load),
+                          ),
+                        ),
+                        removed
+                            ? TextButton(onPressed: () => widget.repo.restorePost(p['id'].toString()).then((_) => _load()), child: const Text('Restore'))
+                            : TextButton(onPressed: () => widget.repo.removePost(p['id'].toString()).then((_) => _load()), child: const Text('Remove')),
+                      ],
+                    ),
                   );
                 },
               ),
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Phase 10 closeout — Item 1: edit-history viewer + restore-to-version.
+/// Lists every post_edit_history row for a post (newest first), shows the
+/// prior text alongside the current text so an admin/mod can diff at a
+/// glance, and lets them restore to any prior snapshot. Restore entries
+/// (edit_type == 'restore') are labeled distinctly so the trail stays
+/// legible after a restore has happened.
+class _EditHistoryDialog extends StatefulWidget {
+  const _EditHistoryDialog({required this.repo, required this.postId, required this.onRestored});
+  final AdminRepository repo;
+  final String postId;
+  final Future<void> Function() onRestored;
+
+  @override
+  State<_EditHistoryDialog> createState() => _EditHistoryDialogState();
+}
+
+class _EditHistoryDialogState extends State<_EditHistoryDialog> {
+  late Future<List<Map<String, dynamic>>> _future;
+  bool _restoring = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.repo.editHistory(widget.postId);
+  }
+
+  Future<void> _restore(String historyId, String preview) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Restore this version?'),
+        content: Text('The post will be reverted to:\n\n"$preview"\n\nThe current text will itself be saved to history first, so this can be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Restore')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _restoring = true);
+    try {
+      await widget.repo.restorePostToVersion(widget.postId, historyId);
+      await widget.onRestored();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Restore failed: $e')));
+        setState(() => _restoring = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit history'),
+      content: SizedBox(
+        width: 480,
+        height: 420,
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _future,
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snap.hasError) {
+              return Center(child: Text('Could not load history: ${snap.error}'));
+            }
+            final rows = snap.data ?? const [];
+            if (rows.isEmpty) {
+              return const Center(child: Text('No edits recorded for this post.'));
+            }
+            return ListView.separated(
+              itemCount: rows.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, i) {
+                final row = rows[i];
+                final isRestore = row['edit_type'] == 'restore';
+                final preview = (row['previous_text_content'] as String?)?.trim() ?? '';
+                final editedAt = DateTime.tryParse(row['edited_at']?.toString() ?? '');
+                return ListTile(
+                  leading: Icon(isRestore ? Icons.restore : Icons.edit_note, size: 20),
+                  title: Text(
+                    preview.isEmpty ? '(empty)' : preview,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${isRestore ? 'Restored' : 'Edited'} ${editedAt != null ? editedAt.toLocal().toString().substring(0, 16) : ''}',
+                  ),
+                  trailing: _restoring
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : TextButton(
+                          onPressed: () => _restore(row['id'].toString(), preview),
+                          child: const Text('Restore'),
+                        ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
     );
   }
 }
