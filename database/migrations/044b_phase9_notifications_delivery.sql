@@ -59,6 +59,7 @@ create index if not exists idx_user_known_devices_user on public.user_known_devi
 alter table public.user_known_devices enable row level security;
 revoke all on public.user_known_devices from anon, authenticated;
 
+drop policy if exists "Users read their own known devices" on public.user_known_devices;
 create policy "Users read their own known devices"
   on public.user_known_devices for select
   to authenticated
@@ -86,6 +87,7 @@ create index if not exists idx_admin_broadcasts_created on public.admin_broadcas
 alter table public.admin_broadcasts enable row level security;
 revoke all on public.admin_broadcasts from anon, authenticated;
 
+drop policy if exists "Admins and mods can read broadcasts" on public.admin_broadcasts;
 create policy "Admins and mods can read broadcasts"
   on public.admin_broadcasts for select
   to authenticated
