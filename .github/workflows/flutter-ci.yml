@@ -56,12 +56,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install Android SDK platform 37
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-37" "build-tools;36.0.0"
-        # receive_sharing_intent requires compileSdk 37; the pre-installed
-        # SDK on GitHub-hosted runners doesn't always include the newest
-        # platform yet, and AGP won't auto-fetch it mid-build.
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -72,9 +66,15 @@ jobs:
         run: flutter pub get
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --android-skip-build-dependency-validation
         # Signed with the debug keystore for now (see build.gradle.kts TODO) —
         # fine for sideloading/testing, not for Play Store submission.
+        # receive_sharing_intent declares a compileSdk 37 requirement, but
+        # platform 37 isn't an actual installable SDK yet (sdkmanager: "Failed
+        # to find package"). compileSdk is backwards-compatible in practice
+        # for a plugin like this (no SDK-37-specific APIs at play), so we
+        # skip Flutter's validation rather than chase a platform that
+        # doesn't exist.
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
