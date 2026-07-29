@@ -1190,6 +1190,12 @@ class StoryRepository {
         .select()
         .eq('author_id', authorId)
         .gt('expires_at', DateTime.now().toIso8601String())
+        // A story row is inserted with media_url = '' before its upload
+        // starts (see story_bar.dart) and only committed with a real URL
+        // once the upload succeeds. If the app died mid-upload before the
+        // rollback ran, this excludes the leftover placeholder so the
+        // viewer never tries to render a broken/empty story.
+        .neq('media_url', '')
         .order('created_at', ascending: true);
     return (data as List).map((e) => StoryModel.fromMap(Map<String, dynamic>.from(e))).toList();
   }

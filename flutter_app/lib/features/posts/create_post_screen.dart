@@ -233,6 +233,24 @@ class _P extends State<CreatePostScreen> {
       .toSet()
       .toList();
 
+  /// `posts.content_type` used to be hardcoded to only `'poll' | 'event' |
+  /// 'text'`, so every image/video/audio/document post was mislabeled as
+  /// plain text — breaking anything downstream that branches on
+  /// content_type (feed filters, search, analytics, moderation triage).
+  /// A post can carry multiple attachments at once (see the non-else-if
+  /// upload block in [_publish]), so this picks one representative type by
+  /// priority: poll/event (their own content model) > video > image >
+  /// audio > document > text.
+  String get _resolvedContentType {
+    if (pollDraft != null) return 'poll';
+    if (eventDraft != null) return 'event';
+    if (video != null) return 'video';
+    if (image != null) return 'image';
+    if (audio != null) return 'audio';
+    if (document != null) return 'document';
+    return 'text';
+  }
+
   /// Turns known backend errors into plain-language messages. Full
   /// technical detail (code/message/hint) still goes to
   /// BetaErrorLoggingService for debugging — it's just no longer shown
@@ -316,7 +334,7 @@ class _P extends State<CreatePostScreen> {
         'link_preview_image_url': _linkPreview?.imageUrl,
         'link_preview_site_name': _linkPreview?.siteName,
         'is_sensitive': _isSensitive,
-        'content_type': pollDraft != null ? 'poll' : (eventDraft != null ? 'event' : 'text'),
+        'content_type': _resolvedContentType,
       }))['id'].toString();
 
       if (pollDraft != null) {
@@ -326,6 +344,7 @@ class _P extends State<CreatePostScreen> {
           options: pollDraft!.options,
           allowMultiple: pollDraft!.allowMultiple,
           isAnonymous: pollDraft!.isAnonymous,
+          expiresAt: pollDraft!.expiresAt,
         );
       } else if (eventDraft != null) {
         await postRepository.createEvent(
@@ -448,6 +467,7 @@ class _P extends State<CreatePostScreen> {
         communityId: widget.communityId,
         textContent: text.text.trim(),
         visibility: _visibility,
+        contentType: _resolvedContentType,
         tags: _parsedTags,
         location: location.text.trim().isEmpty ? null : location.text.trim(),
         locationLat: _pickedLat,
@@ -722,6 +742,15 @@ class _P extends State<CreatePostScreen> {
     if (choice == 'video') await _pickVideo(ImageSource.camera);
   }
 
+  /// Human-readable file size for the document/audio preview chip, e.g.
+  /// "1.4 MB" — PlatformFile.size is already known synchronously (no
+  /// disk read needed), so this is cheap to compute on every rebuild.
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
   Widget _attachTile(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap, bool active = false}) {
     final theme = Theme.of(context);
     final color = active ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant;
@@ -953,6 +982,7 @@ class _P extends State<CreatePostScreen> {
                           context,
                           leading: const Icon(Icons.audiotrack, size: 28),
                           title: audio!.name,
+                          subtitle: _formatFileSize(audio!.size),
                           onRemove: () => setState(() => audio = null),
                         ),
                       ),
@@ -963,6 +993,7 @@ class _P extends State<CreatePostScreen> {
                           context,
                           leading: const Icon(Icons.description, size: 28),
                           title: document!.name,
+                          subtitle: _formatFileSize(document!.size),
                           onRemove: () => setState(() => document = null),
                         ),
                       ),
@@ -973,7 +1004,7 @@ class _P extends State<CreatePostScreen> {
                           context,
                           leading: const Icon(Icons.poll, size: 28),
                           title: pollDraft!.question,
-                          subtitle: '${pollDraft!.options.length} options',
+                          subtitle: '${pollDraft!.options.length} options${pollDraft!.expiresAt != null ? ' · ends ${_formatPollEnd(pollDraft!.expiresAt!)}' : ''}',
                           onRemove: () => setState(() => pollDraft = null),
                         ),
                       ),
@@ -1083,17 +1114,20 @@ class _P extends State<CreatePostScreen> {
               const SizedBox(height: 8),
               const Text('You can press Publish again to retry the same post upload.'),
             ],
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: loading ? null : _publish,
-                child: loading
-                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text(_scheduledFor != null ? 'Schedule' : 'Publish'),
-              ),
-            ),
+            const SizedBox(height: 12),
           ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: loading ? null : _publish,
+            child: loading
+                ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : Text(_scheduledFor != null ? 'Schedule' : 'Publish'),
+          ),
         ),
       ),
     );
@@ -1295,6 +1329,7 @@ Future<_PollDraft?> _showPollSheet(BuildContext context, _PollDraft? existing) {
   );
   bool allowMultiple = existing?.allowMultiple ?? false;
   bool isAnonymous = existing?.isAnonymous ?? true;
+  DateTime? expiresAt = existing?.expiresAt;
 
   return showModalBottomSheet<_PollDraft>(
     context: context,
@@ -1348,6 +1383,28 @@ Future<_PollDraft?> _showPollSheet(BuildContext context, _PollDraft? existing) {
                 value: isAnonymous,
                 onChanged: (v) => setSheetState(() => isAnonymous = v),
               ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.timer_outlined),
+                title: Text(expiresAt == null ? 'No end time' : 'Ends ${_formatPollEnd(expiresAt!)}'),
+                subtitle: const Text('Optional — voting closes automatically'),
+                trailing: expiresAt == null
+                    ? null
+                    : IconButton(icon: const Icon(Icons.close), onPressed: () => setSheetState(() => expiresAt = null)),
+                onTap: () async {
+                  final now = DateTime.now();
+                  final date = await showDatePicker(
+                    context: sheetContext,
+                    initialDate: expiresAt ?? now.add(const Duration(hours: 24)),
+                    firstDate: now,
+                    lastDate: now.add(const Duration(days: 30)),
+                  );
+                  if (date == null || !sheetContext.mounted) return;
+                  final time = await showTimePicker(context: sheetContext, initialTime: TimeOfDay.fromDateTime(expiresAt ?? now.add(const Duration(hours: 24))));
+                  if (time == null) return;
+                  setSheetState(() => expiresAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));
+                },
+              ),
               const SizedBox(height: 8),
               FilledButton(
                 onPressed: () {
@@ -1359,7 +1416,13 @@ Future<_PollDraft?> _showPollSheet(BuildContext context, _PollDraft? existing) {
                     );
                     return;
                   }
-                  Navigator.pop(sheetContext, _PollDraft(question: q, options: opts, allowMultiple: allowMultiple, isAnonymous: isAnonymous));
+                  if (expiresAt != null && expiresAt!.isBefore(DateTime.now().add(const Duration(minutes: 1)))) {
+                    ScaffoldMessenger.of(sheetContext).showSnackBar(
+                      const SnackBar(content: Text('End time must be in the future.')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(sheetContext, _PollDraft(question: q, options: opts, allowMultiple: allowMultiple, isAnonymous: isAnonymous, expiresAt: expiresAt));
                 },
                 child: const Text('Save poll'),
               ),
@@ -1369,6 +1432,14 @@ Future<_PollDraft?> _showPollSheet(BuildContext context, _PollDraft? existing) {
       ),
     ),
   );
+}
+
+String _formatPollEnd(DateTime dt) {
+  final local = dt.toLocal();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+  final ampm = local.hour >= 12 ? 'PM' : 'AM';
+  return '${months[local.month - 1]} ${local.day}, ${hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')} $ampm';
 }
 
 Future<_EventDraft?> _showEventSheet(BuildContext context, _EventDraft? existing) {
@@ -1448,11 +1519,12 @@ Future<_EventDraft?> _showEventSheet(BuildContext context, _EventDraft? existing
 }
 
 class _PollDraft {
-  _PollDraft({required this.question, required this.options, this.allowMultiple = false, this.isAnonymous = true});
+  _PollDraft({required this.question, required this.options, this.allowMultiple = false, this.isAnonymous = true, this.expiresAt});
   final String question;
   final List<String> options;
   final bool allowMultiple;
   final bool isAnonymous;
+  final DateTime? expiresAt;
 }
 
 class _EventDraft {

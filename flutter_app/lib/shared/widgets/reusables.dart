@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -670,20 +671,79 @@ class _PostPollCardState extends State<_PostPollCard> {
 
   Future<void> _vote(String optionId, bool alreadyVoted, bool allowMultiple) async {
     final uid = SupabaseConfig.currentUserId;
-    if (uid == null || _voting) return;
-    setState(() => _voting = true);
+    if (uid == null || _voting || _poll == null) return;
+
+    // Optimistic update: flip the local vote state immediately so the tap
+    // feels instant, then sync with the server in the background. If the
+    // server call fails, revert to the snapshot taken before the tap.
+    final snapshot = Map<String, dynamic>.from(_poll!);
+    setState(() {
+      _voting = true;
+      _poll = _optimisticPollState(_poll!, optionId, alreadyVoted, allowMultiple);
+    });
+
     try {
       if (alreadyVoted) {
         await PostRepository().unvotePollOption(pollId: _poll!['id'], optionId: optionId, userId: uid);
       } else {
         await PostRepository().votePoll(pollId: _poll!['id'], optionId: optionId, userId: uid, allowMultiple: allowMultiple);
       }
-      await _load();
-    } catch (_) {
-      // Best-effort — the tap just won't visibly register; user can retry.
+      // Reconcile with the server's real counts in the background — covers
+      // concurrent votes from other users landing at the same time.
+      unawaited(_load());
+    } catch (e) {
+      // Revert to the pre-tap snapshot; most failures (network blip) just
+      // don't visibly stick and the user can retry. A poll-closed
+      // rejection from the new server-side expiry trigger is worth a
+      // word, though, since silently reverting would look like a bug
+      // rather than "the poll ended while you were looking at it".
+      if (mounted) {
+        setState(() => _poll = snapshot);
+        if (e is PostgrestException && e.code == 'P0001') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.message)),
+          );
+          unawaited(_load());
+        }
+      }
     } finally {
       if (mounted) setState(() => _voting = false);
     }
+  }
+
+  /// Computes what the poll's options/vote counts *should* look like right
+  /// after a tap, without waiting for the round trip. Mirrors the same
+  /// allow-multiple-vs-single-choice logic as [PostRepository.votePoll].
+  Map<String, dynamic> _optimisticPollState(Map<String, dynamic> poll, String optionId, bool alreadyVoted, bool allowMultiple) {
+    final options = (poll['options'] as List).cast<Map<String, dynamic>>().map((o) => Map<String, dynamic>.from(o)).toList();
+    var total = poll['total_votes'] as int;
+    if (alreadyVoted) {
+      final idx = options.indexWhere((o) => o['id'] == optionId);
+      if (idx != -1) {
+        options[idx]['vote_count'] = (options[idx]['vote_count'] as int) - 1;
+        options[idx]['voted_by_me'] = false;
+      }
+    } else {
+      if (!allowMultiple) {
+        // Single-choice: clear any other option this user had selected.
+        for (final o in options) {
+          if (o['voted_by_me'] == true) {
+            o['vote_count'] = (o['vote_count'] as int) - 1;
+            o['voted_by_me'] = false;
+          }
+        }
+      }
+      final idx = options.indexWhere((o) => o['id'] == optionId);
+      if (idx != -1) {
+        options[idx]['vote_count'] = (options[idx]['vote_count'] as int) + 1;
+        options[idx]['voted_by_me'] = true;
+      }
+    }
+    final wasVotedAtAll = (poll['options'] as List).cast<Map<String, dynamic>>().any((o) => o['voted_by_me'] == true);
+    final isVotedAtAll = options.any((o) => o['voted_by_me'] == true);
+    if (!wasVotedAtAll && isVotedAtAll) total += 1;
+    if (wasVotedAtAll && !isVotedAtAll) total -= 1;
+    return {...poll, 'options': options, 'total_votes': total};
   }
 
   @override
@@ -696,6 +756,9 @@ class _PostPollCardState extends State<_PostPollCard> {
     final total = poll['total_votes'] as int;
     final allowMultiple = poll['allow_multiple'] == true;
     final hasVoted = options.any((o) => o['voted_by_me'] == true);
+    final expiresAtRaw = poll['expires_at'] as String?;
+    final expiresAt = expiresAtRaw == null ? null : DateTime.tryParse(expiresAtRaw);
+    final isExpired = expiresAt != null && expiresAt.isBefore(DateTime.now());
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -714,16 +777,26 @@ class _PostPollCardState extends State<_PostPollCard> {
               voteCount: option['vote_count'] as int,
               total: total,
               votedByMe: option['voted_by_me'] == true,
-              showResults: hasVoted,
-              onTap: () => _vote(option['id'] as String, option['voted_by_me'] == true, allowMultiple),
+              showResults: hasVoted || isExpired,
+              onTap: isExpired ? null : () => _vote(option['id'] as String, option['voted_by_me'] == true, allowMultiple),
             ),
             const SizedBox(height: 6),
           ],
-          Text('$total vote${total == 1 ? '' : 's'}${allowMultiple ? ' · multiple choice' : ''}',
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            '$total vote${total == 1 ? '' : 's'}${allowMultiple ? ' · multiple choice' : ''}'
+            '${isExpired ? ' · Poll closed' : (expiresAt != null ? ' · ${_pollTimeLeft(expiresAt)}' : '')}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
       ),
     );
+  }
+
+  String _pollTimeLeft(DateTime expiresAt) {
+    final remaining = expiresAt.difference(DateTime.now());
+    if (remaining.inDays >= 1) return 'Ends in ${remaining.inDays}d';
+    if (remaining.inHours >= 1) return 'Ends in ${remaining.inHours}h';
+    return 'Ends in ${remaining.inMinutes.clamp(1, 59)}m';
   }
 }
 
@@ -742,7 +815,7 @@ class _PollOptionBar extends StatelessWidget {
   final int total;
   final bool votedByMe;
   final bool showResults;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
