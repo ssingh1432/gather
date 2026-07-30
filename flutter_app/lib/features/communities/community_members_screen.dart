@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/supabase_client.dart';
 import '../data/repositories.dart';
 import '../../shared/widgets/reusables.dart';
+import 'community_audit_log_screen.dart';
 
 /// Member roster + role management + (for private communities) pending
 /// join-request approval. All mutations go through the SECURITY DEFINER
@@ -23,8 +24,10 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
   String? _error;
   List<Map<String, dynamic>> _members = const [];
   List<Map<String, dynamic>> _requests = const [];
+  List<Map<String, dynamic>> _bans = const [];
   String? _myRole;
   bool _isPrivate = false;
+  bool _canManageBans = false;
 
   @override
   void initState() {
@@ -45,6 +48,12 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
       _myRole = uid == null ? null : _members.firstWhere((m) => m['user_id'] == uid, orElse: () => const {})['role'] as String?;
       final canSeeRequests = _isPrivate && (_myRole == 'owner' || _myRole == 'admin' || _myRole == 'moderator');
       _requests = canSeeRequests ? await repo.listJoinRequests(widget.communityId) : const [];
+      // manage_bans is permission-based (migration 052), not a raw role
+      // check, so it correctly reflects any per-community override an
+      // owner has set — unlike role/removal actions below, which are
+      // still gated by the simpler role hierarchy from migration 049.
+      _canManageBans = await repo.hasPermission(widget.communityId, 'manage_bans');
+      _bans = _canManageBans ? await repo.listActiveBans(widget.communityId) : const [];
     } catch (e) {
       _error = 'Could not load members. $e';
     } finally {
@@ -96,10 +105,80 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
     }
   }
 
+  Future<void> _warn(String userId, String username) async {
+    final reason = await _promptReason(context, title: 'Warn @$username', hint: 'Reason for this warning');
+    if (reason == null || reason.trim().isEmpty) return;
+    try {
+      await repo.warnMember(widget.communityId, userId, reason.trim());
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('@$username has been warned.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not warn member: $e')));
+    }
+  }
+
+  Future<void> _ban(String userId, String username) async {
+    final result = await showDialog<_BanChoice>(
+      context: context,
+      builder: (ctx) => _BanDialog(username: username),
+    );
+    if (result == null) return;
+    try {
+      await repo.banMember(widget.communityId, userId, reason: result.reason, expiresAt: result.expiresAt);
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('@$username has been banned and removed from the community.')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not ban member: $e')));
+    }
+  }
+
+  Future<void> _unban(String userId, String username) async {
+    try {
+      await repo.unbanMember(widget.communityId, userId);
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('@$username has been unbanned.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not unban member: $e')));
+    }
+  }
+
+  Future<String?> _promptReason(BuildContext context, {required String title, required String hint}) {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          decoration: InputDecoration(hintText: hint, border: const OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Send warning')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Members')),
+      appBar: AppBar(
+        title: const Text('Members'),
+        actions: [
+          if (_canManageBans)
+            IconButton(
+              icon: const Icon(Icons.history),
+              tooltip: 'Moderation log',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => CommunityAuditLogScreen(communityId: widget.communityId)),
+              ),
+            ),
+        ],
+      ),
       body: _loading
           ? const FeedSkeletonList()
           : _error != null
@@ -125,15 +204,41 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
                         _MemberTile(
                           member: m,
                           canManage: _canManage,
+                          canManageBans: _canManageBans,
                           myRole: _myRole,
                           onSetRole: _setRole,
                           onRemove: _remove,
+                          onWarn: _warn,
+                          onBan: _ban,
                         ),
+                      if (_bans.isNotEmpty) ...[
+                        const Divider(height: 24),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Text('Banned (${_bans.length})', style: Theme.of(context).textTheme.titleSmall),
+                        ),
+                        for (final b in _bans) _BannedUserTile(ban: b, onUnban: _unban),
+                      ],
                     ],
                   ),
                 ),
     );
   }
+}
+
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/// Absolute date for a future ban expiry — timeAgo() only handles past
+/// timestamps, so it can't be reused here.
+String _formatExpiry(DateTime dateTime) {
+  final local = dateTime.toLocal();
+  return '${_months[local.month - 1]} ${local.day}, ${local.year}';
+}
+
+class _BanChoice {
+  const _BanChoice({this.reason, this.expiresAt});
+  final String? reason;
+  final DateTime? expiresAt;
 }
 
 class _RequestTile extends StatelessWidget {
@@ -164,12 +269,24 @@ class _RequestTile extends StatelessWidget {
 }
 
 class _MemberTile extends StatelessWidget {
-  const _MemberTile({required this.member, required this.canManage, required this.myRole, required this.onSetRole, required this.onRemove});
+  const _MemberTile({
+    required this.member,
+    required this.canManage,
+    required this.canManageBans,
+    required this.myRole,
+    required this.onSetRole,
+    required this.onRemove,
+    required this.onWarn,
+    required this.onBan,
+  });
   final Map<String, dynamic> member;
   final bool canManage;
+  final bool canManageBans;
   final String? myRole;
   final Future<void> Function(String userId, String role) onSetRole;
   final Future<void> Function(String userId, String username) onRemove;
+  final Future<void> Function(String userId, String username) onWarn;
+  final Future<void> Function(String userId, String username) onBan;
 
   @override
   Widget build(BuildContext context) {
@@ -179,6 +296,9 @@ class _MemberTile extends StatelessWidget {
     final userId = member['user_id'].toString();
     // Owner can manage anyone but themselves; admin can manage moderators/members only.
     final canManageThisRow = canManage && role != 'owner' && (myRole == 'owner' || (myRole == 'admin' && role != 'admin'));
+    // Bans/warnings use the migration-052 permission system rather than
+    // this hardcoded hierarchy, but the owner is still never a valid target.
+    final canDiscipline = canManageBans && role != 'owner';
 
     return ListTile(
       leading: CircleAvatar(
@@ -191,25 +311,128 @@ class _MemberTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _RoleBadge(role: role),
-          if (canManageThisRow)
+          if (canManageThisRow || canDiscipline)
             PopupMenuButton<String>(
               onSelected: (value) {
-                if (value == 'remove') {
-                  onRemove(userId, username);
-                } else {
-                  onSetRole(userId, value);
+                switch (value) {
+                  case 'remove':
+                    onRemove(userId, username);
+                  case 'warn':
+                    onWarn(userId, username);
+                  case 'ban':
+                    onBan(userId, username);
+                  default:
+                    onSetRole(userId, value);
                 }
               },
               itemBuilder: (context) => [
-                if (role != 'admin' && myRole == 'owner') const PopupMenuItem(value: 'admin', child: Text('Make admin')),
-                if (role != 'moderator') const PopupMenuItem(value: 'moderator', child: Text('Make moderator')),
-                if (role != 'member') const PopupMenuItem(value: 'member', child: Text('Make member')),
-                const PopupMenuDivider(),
-                const PopupMenuItem(value: 'remove', child: Text('Remove from community', style: TextStyle(color: Colors.red))),
+                if (canManageThisRow) ...[
+                  if (role != 'admin' && myRole == 'owner') const PopupMenuItem(value: 'admin', child: Text('Make admin')),
+                  if (role != 'moderator') const PopupMenuItem(value: 'moderator', child: Text('Make moderator')),
+                  if (role != 'trusted_member') const PopupMenuItem(value: 'trusted_member', child: Text('Make trusted member')),
+                  if (role != 'member') const PopupMenuItem(value: 'member', child: Text('Make member')),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(value: 'remove', child: Text('Remove from community', style: TextStyle(color: Colors.red))),
+                ],
+                if (canDiscipline) ...[
+                  if (canManageThisRow) const PopupMenuDivider(),
+                  const PopupMenuItem(value: 'warn', child: Text('Warn')),
+                  const PopupMenuItem(value: 'ban', child: Text('Ban', style: TextStyle(color: Colors.red))),
+                ],
               ],
             ),
         ],
       ),
+    );
+  }
+}
+
+class _BannedUserTile extends StatelessWidget {
+  const _BannedUserTile({required this.ban, required this.onUnban});
+  final Map<String, dynamic> ban;
+  final Future<void> Function(String userId, String username) onUnban;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = (ban['users'] as Map<String, dynamic>?) ?? const {};
+    final username = user['username'] as String? ?? 'user';
+    final userId = ban['user_id'].toString();
+    final expiresAt = ban['expires_at'] as String?;
+    final reason = ban['reason'] as String?;
+    final expiryText = expiresAt == null ? 'Permanent' : 'Until ${_formatExpiry(DateTime.parse(expiresAt))}';
+
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundImage: (user['profile_photo_url'] as String?)?.isNotEmpty == true ? NetworkImage(user['profile_photo_url']) : null,
+        child: (user['profile_photo_url'] as String?)?.isNotEmpty != true ? const Icon(Icons.person) : null,
+      ),
+      title: Text(user['display_name'] as String? ?? '@$username'),
+      subtitle: Text('@$username · $expiryText${reason?.isNotEmpty == true ? ' · $reason' : ''}'),
+      trailing: TextButton(onPressed: () => onUnban(userId, username), child: const Text('Unban')),
+    );
+  }
+}
+
+class _BanDialog extends StatefulWidget {
+  const _BanDialog({required this.username});
+  final String username;
+
+  @override
+  State<_BanDialog> createState() => _BanDialogState();
+}
+
+class _BanDialogState extends State<_BanDialog> {
+  final _reasonController = TextEditingController();
+  int _durationDays = 0; // 0 = permanent
+
+  static const _durations = {0: 'Permanent', 1: '1 day', 7: '7 days', 30: '30 days'};
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Ban @${widget.username}'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _reasonController,
+            autofocus: true,
+            maxLines: 2,
+            decoration: const InputDecoration(hintText: 'Reason for this ban', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 12),
+          const Text('Duration'),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final entry in _durations.entries)
+                ChoiceChip(
+                  label: Text(entry.value),
+                  selected: _durationDays == entry.key,
+                  onSelected: (_) => setState(() => _durationDays = entry.key),
+                ),
+            ],
+          ),
+          Text(
+            'They will be removed from the community immediately and cannot rejoin while banned.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(
+            context,
+            _BanChoice(
+              reason: _reasonController.text.trim().isEmpty ? null : _reasonController.text.trim(),
+              expiresAt: _durationDays == 0 ? null : DateTime.now().add(Duration(days: _durationDays)),
+            ),
+          ),
+          child: const Text('Ban', style: TextStyle(color: Colors.red)),
+        ),
+      ],
     );
   }
 }
@@ -225,6 +448,7 @@ class _RoleBadge extends StatelessWidget {
       'owner': Colors.amber,
       'admin': Colors.deepPurple,
       'moderator': Colors.teal,
+      'trusted_member': Colors.blueGrey,
     };
     return Padding(
       padding: const EdgeInsets.only(right: 4),

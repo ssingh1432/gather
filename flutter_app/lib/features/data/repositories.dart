@@ -355,6 +355,97 @@ class CommunityRepository {
 
   Future<String> uploadBanner(String communityId, XFile image) async =>
       MediaUploadService().uploadCommunityImage(communityId: communityId, image: image, kind: CommunityImageKind.banner);
+
+  // -- Permissions (migration 052) ------------------------------------
+  /// Does the current user hold `permissionKey` in this community, per the
+  /// role/permission-override system in migration 052? Prefer this over
+  /// hardcoded role checks for anything gated by manage_bans, manage_posts,
+  /// manage_reports, etc. — it respects per-community overrides.
+  Future<bool> hasPermission(String communityId, String permissionKey) async {
+    final result = await _c.rpc('current_user_community_permission', params: {
+      'p_community_id': communityId,
+      'p_permission_key': permissionKey,
+    });
+    return result as bool? ?? false;
+  }
+
+  // -- Bans / warnings / audit log (migration 053) ---------------------
+  /// Active bans for a community (already-lifted or expired bans are
+  /// excluded server-side isn't enforced by RLS alone here, so filter
+  /// expiry client-side too since `lifted_at is null` doesn't account for
+  /// natural expiry).
+  Future<List<Map<String, dynamic>>> listActiveBans(String communityId) async {
+    final rows = await _c
+        .from('community_bans')
+        .select('id, user_id, reason, expires_at, created_at, banned_by, users!community_bans_user_id_fkey(username, display_name, profile_photo_url)')
+        .eq('community_id', communityId)
+        .filter('lifted_at', 'is', null)
+        .order('created_at', ascending: false);
+    final now = DateTime.now();
+    return (rows as List).cast<Map<String, dynamic>>().where((b) {
+      final expires = b['expires_at'] as String?;
+      return expires == null || DateTime.parse(expires).isAfter(now);
+    }).toList();
+  }
+
+  Future<void> banMember(String communityId, String userId, {String? reason, DateTime? expiresAt}) async {
+    await _c.rpc('ban_community_member', params: {
+      'p_community_id': communityId,
+      'p_user_id': userId,
+      'p_reason': reason,
+      'p_expires_at': expiresAt?.toIso8601String(),
+    });
+  }
+
+  Future<void> unbanMember(String communityId, String userId) async {
+    await _c.rpc('unban_community_member', params: {'p_community_id': communityId, 'p_user_id': userId});
+  }
+
+  Future<void> warnMember(String communityId, String userId, String reason) async {
+    await _c.rpc('warn_community_member', params: {'p_community_id': communityId, 'p_user_id': userId, 'p_reason': reason});
+  }
+
+  Future<void> acknowledgeWarning(String warningId) async {
+    await _c.rpc('acknowledge_community_warning', params: {'p_warning_id': warningId});
+  }
+
+  /// Warnings a member has received in this community, most recent first.
+  Future<List<Map<String, dynamic>>> listWarnings(String communityId, String userId) async {
+    final rows = await _c
+        .from('community_warnings')
+        .select('id, reason, acknowledged_at, created_at, warned_by')
+        .eq('community_id', communityId)
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// This user's own unacknowledged warnings across all their communities —
+  /// powers a "you have a warning" banner if wired up outside this screen.
+  Future<List<Map<String, dynamic>>> myUnacknowledgedWarnings(String userId) async {
+    final rows = await _c
+        .from('community_warnings')
+        .select('id, community_id, reason, created_at, communities(name)')
+        .eq('user_id', userId)
+        .filter('acknowledged_at', 'is', null)
+        .order('created_at', ascending: false);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Moderation history for a community — role changes, removals, bans,
+  /// unbans, warnings, permission overrides, settings changes. Requires
+  /// manage_bans or manage_reports (enforced server-side by RLS).
+  Future<List<Map<String, dynamic>>> listAuditLog(String communityId, {int limit = 50}) async {
+    final rows = await _c
+        .from('community_audit_logs')
+        .select('id, actor_id, action, target_user_id, metadata, created_at, '
+            'actor:users!community_audit_logs_actor_id_fkey(username, display_name), '
+            'target:users!community_audit_logs_target_user_id_fkey(username, display_name)')
+        .eq('community_id', communityId)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration
