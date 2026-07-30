@@ -218,22 +218,22 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
                   ),
                   const SizedBox(height: 8),
                   Card(
-                    child: Column(children: [
-                      RadioListTile<String>(
-                        value: 'public',
-                        groupValue: visibility,
-                        title: const Text('Public'),
-                        subtitle: const Text('Anyone can find and join instantly'),
-                        onChanged: (v) => setState(() => visibility = v ?? 'public'),
-                      ),
-                      RadioListTile<String>(
-                        value: 'private',
-                        groupValue: visibility,
-                        title: const Text('Private'),
-                        subtitle: const Text('Joining requires owner/admin approval'),
-                        onChanged: (v) => setState(() => visibility = v ?? 'public'),
-                      ),
-                    ]),
+                    child: RadioGroup<String>(
+                      groupValue: visibility,
+                      onChanged: (v) => setState(() => visibility = v ?? 'public'),
+                      child: const Column(children: [
+                        RadioListTile<String>(
+                          value: 'public',
+                          title: Text('Public'),
+                          subtitle: Text('Anyone can find and join instantly'),
+                        ),
+                        RadioListTile<String>(
+                          value: 'private',
+                          title: Text('Private'),
+                          subtitle: Text('Joining requires owner/admin approval'),
+                        ),
+                      ]),
+                    ),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
