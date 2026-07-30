@@ -20,8 +20,13 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   static const double _preloadExtent = 640;
 
   final repo = FeedRepository();
+  final communityRepo = CommunityRepository();
   final postCtrl = TextEditingController();
   final _scrollController = ScrollController();
+
+  Map<String, dynamic>? _community;
+  String? _myRole;
+  bool _joinRequestPending = false;
 
   Set<String> liked = <String>{};
   Set<String> bookmarked = <String>{};
@@ -31,7 +36,13 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   bool _loadingMore = false;
   bool _hasMore = true;
   bool _posting = false;
+  bool _joining = false;
   String? _error;
+
+  String? get _uid => SupabaseConfig.maybeClient?.auth.currentUser?.id;
+  bool get _isMember => _myRole != null;
+  bool get _canManage => _myRole == 'owner' || _myRole == 'admin' || _myRole == 'moderator';
+  bool get _isPrivate => _community?['visibility'] == 'private';
 
   @override
   void initState() {
@@ -55,11 +66,28 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
       _hasMore = true;
     });
     try {
-      final posts = await _fetchPage(0);
-      _posts = posts;
-      _nextPage = 1;
-      _hasMore = posts.length == _pageSize;
-      await _refreshStates(_posts.map((e) => e.id).toList());
+      final community = await communityRepo.getCommunity(widget.communityId);
+      final uid = _uid;
+      String? role;
+      if (uid != null) role = await communityRepo.myRole(widget.communityId, uid);
+      _community = community;
+      _myRole = role;
+
+      // Only fetch posts if we can actually see them: a private community's
+      // feed is server-gated to members/site staff anyway (get_community_feed,
+      // migration 049), but skipping the call for a non-member avoids a
+      // pointless empty round-trip and lets us show a clearer "request to
+      // join" state instead of a bare empty list.
+      if (!_isPrivate || _isMember) {
+        final posts = await _fetchPage(0);
+        _posts = posts;
+        _nextPage = 1;
+        _hasMore = posts.length == _pageSize;
+        await _refreshStates(_posts.map((e) => e.id).toList());
+      } else {
+        _posts = const [];
+        _hasMore = false;
+      }
     } catch (e) {
       _error = 'Network failure. Check your connection and try again.';
     } finally {
@@ -68,12 +96,11 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   }
 
   Future<List<PostModel>> _fetchPage(int page) async {
-    final uid = SupabaseConfig.maybeClient?.auth.currentUser?.id;
-    return repo.communityFeed(widget.communityId, userId: uid, page: page, pageSize: _pageSize);
+    return repo.communityFeed(widget.communityId, userId: _uid, page: page, pageSize: _pageSize);
   }
 
   Future<void> _refreshStates(List<String> ids) async {
-    final uid = SupabaseConfig.maybeClient?.auth.currentUser?.id;
+    final uid = _uid;
     if (uid != null && ids.isNotEmpty) {
       liked = await repo.likedPostIds(uid, ids);
       bookmarked = await repo.bookmarkedPostIds(uid, ids);
@@ -110,13 +137,11 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
 
   void _maybePreloadNextPage() {
     if (!_scrollController.hasClients) return;
-    // Preloading while there is still content below avoids layout jumps at the
-    // end of the list and makes pagination observable under slow networks.
     if (_scrollController.position.extentAfter < _preloadExtent) _loadNextPage();
   }
 
   Future<void> _publishCommunityPost() async {
-    final uid = SupabaseConfig.maybeClient?.auth.currentUser?.id;
+    final uid = _uid;
     if (uid == null) {
       redirectToLogin(context, redirect: '/community?id=${widget.communityId}', message: 'Please log in or create an account to create a post.');
       return;
@@ -145,91 +170,256 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
     }
   }
 
+  Future<void> _handleJoinLeave() async {
+    final uid = _uid;
+    if (uid == null) {
+      redirectToLogin(context, redirect: '/community?id=${widget.communityId}', message: 'Please log in or create an account to join this community.');
+      return;
+    }
+    setState(() => _joining = true);
+    try {
+      if (_isMember) {
+        if (_myRole == 'owner') {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('As the owner, you can\'t leave. Delete the community instead if you want to shut it down.')),
+            );
+          }
+          return;
+        }
+        await communityRepo.leaveCommunity(widget.communityId, uid);
+      } else {
+        final result = await communityRepo.requestJoin(widget.communityId);
+        if (result == 'requested' && mounted) {
+          setState(() => _joinRequestPending = true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Join request sent. An owner or admin will review it.')),
+          );
+        }
+      }
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update membership: $e')));
+    } finally {
+      if (mounted) setState(() => _joining = false);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Community')),
-        body: Column(children: [
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: TextField(controller: postCtrl, decoration: const InputDecoration(labelText: 'Create post text')),
-          ),
-          ElevatedButton(
-            onPressed: _posting ? null : _publishCommunityPost,
-            child: _posting ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Post'),
-          ),
-          Expanded(
-            child: _loading
-                ? const FeedSkeletonList()
-                : _error != null
-                    ? ErrorRetryState(title: 'Unable to load community posts', message: _error!, onRetry: _load)
-                    : _posts.isEmpty
-                        ? RefreshIndicator(
-                            onRefresh: _load,
-                            child: const CustomScrollView(
-                              physics: AlwaysScrollableScrollPhysics(),
-                              slivers: [
-                                SliverFillRemaining(
-                                  child: EmptyState(icon: Icons.forum_outlined, title: 'No posts', message: 'Be the first to start this community conversation.'),
-                                ),
-                              ],
+  Widget build(BuildContext context) {
+    final c = _community;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(c?['name'] as String? ?? 'Community'),
+        actions: [
+          if (_isMember)
+            IconButton(
+              icon: const Icon(Icons.people_outline),
+              tooltip: 'Members',
+              onPressed: () => context.push('/community-members?id=${widget.communityId}'),
+            ),
+          if (_canManage)
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Manage community',
+              onPressed: () async {
+                await context.push('/edit-community?id=${widget.communityId}');
+                if (mounted) _load();
+              },
+            ),
+        ],
+      ),
+      body: _loading
+          ? const FeedSkeletonList()
+          : _error != null
+              ? ErrorRetryState(title: 'Unable to load community', message: _error!, onRetry: _load)
+              : c == null
+                  ? const EmptyState(icon: Icons.error_outline, title: 'Community not found')
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: CustomScrollView(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          SliverToBoxAdapter(child: _Header(community: c, myRole: _myRole, joining: _joining, onJoinLeave: _handleJoinLeave)),
+                          if (_isMember)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Column(children: [
+                                  TextField(controller: postCtrl, decoration: const InputDecoration(labelText: 'Create post text')),
+                                  const SizedBox(height: 8),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: ElevatedButton(
+                                      onPressed: _posting ? null : _publishCommunityPost,
+                                      child: _posting
+                                          ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                          : const Text('Post'),
+                                    ),
+                                  ),
+                                ]),
+                              ),
                             ),
-                          )
-                        : RefreshIndicator(
-                            onRefresh: _load,
-                            child: ListView.builder(
-                              controller: _scrollController,
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              itemCount: _posts.length + (_loadingMore ? 1 : 0),
-                              itemBuilder: (context, index) {
-                                if (index >= _posts.length) {
-                                  return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
-                                }
-                                final p = _posts[index];
-                                return PostCard(
-                                  post: p,
-                                  liked: liked.contains(p.id) || p.isLiked,
-                                  bookmarked: bookmarked.contains(p.id) || p.isBookmarked,
-                                  onLike: () async {
-                                    final uid = SupabaseConfig.maybeClient?.auth.currentUser?.id;
-                                    if (uid == null) {
-                                      redirectToLogin(context, redirect: '/community?id=${widget.communityId}', message: 'Please log in or create an account to like posts.');
-                                      return;
-                                    }
-                                    if (liked.contains(p.id) || p.isLiked) {
-                                      await repo.unlikePost(p.id, uid);
-                                    } else {
-                                      await repo.likePost(p.id, uid);
-                                    }
-                                    await _refreshStates(_posts.map((e) => e.id).toList());
-                                    if (mounted) setState(() {});
-                                  },
-                                  onComment: () {
-                                    final uid = SupabaseConfig.maybeClient?.auth.currentUser?.id;
-                                    if (uid == null) {
-                                      redirectToLogin(context, redirect: '/post?id=${p.id}', message: 'Please log in or create an account to comment.');
-                                      return;
-                                    }
-                                    context.push('/post?id=${p.id}');
-                                  },
-                                  onBookmark: () async {
-                                    final uid = SupabaseConfig.maybeClient?.auth.currentUser?.id;
-                                    if (uid == null) {
-                                      redirectToLogin(context, redirect: '/community?id=${widget.communityId}', message: 'Please log in or create an account to save posts.');
-                                      return;
-                                    }
-                                    if (bookmarked.contains(p.id) || p.isBookmarked) {
-                                      await repo.unbookmarkPost(p.id, uid);
-                                    } else {
-                                      await repo.bookmarkPost(p.id, uid);
-                                    }
-                                    await _refreshStates(_posts.map((e) => e.id).toList());
-                                    if (mounted) setState(() {});
-                                  },
-                                );
-                              },
+                          if (_isPrivate && !_isMember)
+                            SliverFillRemaining(
+                              child: EmptyState(
+                                icon: Icons.lock_outline,
+                                title: 'This community is private',
+                                message: _joinRequestPending
+                                    ? 'Your request to join has been sent.'
+                                    : 'Request to join to see posts and take part in the conversation.',
+                              ),
+                            )
+                          else if (_posts.isEmpty)
+                            const SliverFillRemaining(
+                              child: EmptyState(icon: Icons.forum_outlined, title: 'No posts', message: 'Be the first to start this community conversation.'),
+                            )
+                          else
+                            SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  if (index >= _posts.length) {
+                                    return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
+                                  }
+                                  final p = _posts[index];
+                                  return PostCard(
+                                    post: p,
+                                    liked: liked.contains(p.id) || p.isLiked,
+                                    bookmarked: bookmarked.contains(p.id) || p.isBookmarked,
+                                    onLike: () async {
+                                      final uid = _uid;
+                                      if (uid == null) {
+                                        redirectToLogin(context, redirect: '/community?id=${widget.communityId}', message: 'Please log in or create an account to like posts.');
+                                        return;
+                                      }
+                                      if (liked.contains(p.id) || p.isLiked) {
+                                        await repo.unlikePost(p.id, uid);
+                                      } else {
+                                        await repo.likePost(p.id, uid);
+                                      }
+                                      await _refreshStates(_posts.map((e) => e.id).toList());
+                                      if (mounted) setState(() {});
+                                    },
+                                    onComment: () {
+                                      final uid = _uid;
+                                      if (uid == null) {
+                                        redirectToLogin(context, redirect: '/post?id=${p.id}', message: 'Please log in or create an account to comment.');
+                                        return;
+                                      }
+                                      context.push('/post?id=${p.id}');
+                                    },
+                                    onBookmark: () async {
+                                      final uid = _uid;
+                                      if (uid == null) {
+                                        redirectToLogin(context, redirect: '/community?id=${widget.communityId}', message: 'Please log in or create an account to save posts.');
+                                        return;
+                                      }
+                                      if (bookmarked.contains(p.id) || p.isBookmarked) {
+                                        await repo.unbookmarkPost(p.id, uid);
+                                      } else {
+                                        await repo.bookmarkPost(p.id, uid);
+                                      }
+                                      await _refreshStates(_posts.map((e) => e.id).toList());
+                                      if (mounted) setState(() {});
+                                    },
+                                  );
+                                },
+                                childCount: _posts.length + (_loadingMore ? 1 : 0),
+                              ),
                             ),
-                          ),
-          )
-        ]),
-      );
+                        ],
+                      ),
+                    ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({required this.community, required this.myRole, required this.joining, required this.onJoinLeave});
+
+  final Map<String, dynamic> community;
+  final String? myRole;
+  final bool joining;
+  final VoidCallback onJoinLeave;
+
+  @override
+  Widget build(BuildContext context) {
+    final bannerUrl = community['banner_url'] as String?;
+    final iconUrl = community['image_url'] as String?;
+    final isPrivate = community['visibility'] == 'private';
+    final memberCount = (community['member_count'] as num?)?.toInt() ?? 0;
+    final isMember = myRole != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AspectRatio(
+          aspectRatio: 3,
+          child: (bannerUrl != null && bannerUrl.isNotEmpty)
+              ? Image.network(bannerUrl, fit: BoxFit.cover)
+              : Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundImage: (iconUrl != null && iconUrl.isNotEmpty) ? NetworkImage(iconUrl) : null,
+                child: (iconUrl == null || iconUrl.isEmpty) ? const Icon(Icons.groups) : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Flexible(
+                        child: Text(community['name'] ?? '', style: Theme.of(context).textTheme.titleLarge, overflow: TextOverflow.ellipsis),
+                      ),
+                      if (isPrivate) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.lock_outline, size: 16)),
+                      if (community['is_verified'] == true) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.verified, size: 16, color: Colors.blue)),
+                    ]),
+                    const SizedBox(height: 2),
+                    Text(
+                      [
+                        if ((community['category'] as String?)?.isNotEmpty ?? false) community['category'],
+                        '$memberCount member${memberCount == 1 ? '' : 's'}',
+                      ].join(' · '),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    if ((community['description'] as String?)?.isNotEmpty ?? false) ...[
+                      const SizedBox(height: 8),
+                      Text(community['description']),
+                    ],
+                    if (myRole != null && myRole != 'member') ...[
+                      const SizedBox(height: 4),
+                      Chip(label: Text(myRole!), visualDensity: VisualDensity.compact),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: SizedBox(
+            width: double.infinity,
+            child: myRole == 'owner'
+                ? const SizedBox.shrink()
+                : OutlinedButton(
+                    onPressed: joining ? null : onJoinLeave,
+                    child: joining
+                        ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Text(isMember ? 'Leave community' : (isPrivate ? 'Request to join' : 'Join community')),
+                  ),
+          ),
+        ),
+        const Divider(height: 24),
+      ],
+    );
+  }
 }

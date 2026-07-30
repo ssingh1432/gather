@@ -1,8 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
+import '../../shared/services/media/web_safe_pick.dart';
+import '../../shared/widgets/profile_view.dart' show PickedImagePreview;
 import '../data/repositories.dart';
+
+/// Suggested categories — free-text is still allowed via the "Other" field
+/// so nobody is blocked by an incomplete list.
+const _categories = [
+  'General', 'Local / City', 'Sports', 'Music', 'Movies & TV', 'Gaming',
+  'Tech', 'Business', 'Education', 'Food', 'Travel', 'News & Politics',
+  'Art & Design', 'Fitness & Health', 'Fashion', 'Other',
+];
 
 class CreateCommunityScreen extends StatefulWidget {
   const CreateCommunityScreen({super.key});
@@ -11,9 +22,17 @@ class CreateCommunityScreen extends StatefulWidget {
 }
 
 class _CC extends State<CreateCommunityScreen> {
+  final _formKey = GlobalKey<FormState>();
   final name = TextEditingController();
   final desc = TextEditingController();
-  final img = TextEditingController();
+  final rules = TextEditingController();
+  final customCategory = TextEditingController();
+
+  String category = 'General';
+  String visibility = 'public';
+  XFile? iconPick;
+  XFile? bannerPick;
+
   String? err;
   bool loading = false;
 
@@ -30,65 +49,204 @@ class _CC extends State<CreateCommunityScreen> {
   }
 
   @override
+  void dispose() {
+    name.dispose();
+    desc.dispose();
+    rules.dispose();
+    customCategory.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImage({required bool banner}) async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+    final safe = await materializeIfWeb(picked);
+    setState(() {
+      if (banner) {
+        bannerPick = safe;
+      } else {
+        iconPick = safe;
+      }
+    });
+  }
+
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final uid = SupabaseConfig.client.auth.currentUser?.id;
+    if (uid == null) {
+      context.go('/login?redirect=${Uri.encodeComponent('/create-community')}');
+      return;
+    }
+
+    setState(() {
+      loading = true;
+      err = null;
+    });
+
+    final repo = CommunityRepository();
+    try {
+      final resolvedCategory = category == 'Other' && customCategory.text.trim().isNotEmpty ? customCategory.text.trim() : category;
+
+      final community = await repo.createCommunity({
+        'name': name.text.trim(),
+        'description': desc.text.trim(),
+        'created_by': uid,
+        'category': resolvedCategory,
+        'visibility': visibility,
+        'rules': rules.text.trim().isEmpty ? null : rules.text.trim(),
+      });
+      final communityId = community['id'].toString();
+
+      String? iconUrl;
+      String? bannerUrl;
+      if (iconPick != null) iconUrl = await repo.uploadIcon(communityId, iconPick!);
+      if (bannerPick != null) bannerUrl = await repo.uploadBanner(communityId, bannerPick!);
+      if (iconUrl != null || bannerUrl != null) {
+        await repo.updateCommunity(communityId, {
+          if (iconUrl != null) 'image_url': iconUrl,
+          if (bannerUrl != null) 'banner_url': bannerUrl,
+        });
+      }
+
+      if (!mounted) return;
+      context.pushReplacement('/community?id=$communityId');
+    } catch (e) {
+      final message = e.toString().contains('duplicate key') || e.toString().contains('communities_name_key')
+          ? 'That community name is already taken. Try another.'
+          : 'Could not create community. $e';
+      setState(() => err = message);
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Create Community')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
           children: [
-            TextField(
+            _ImagePickerTile(
+              label: 'Banner (optional)',
+              aspect: 3,
+              image: bannerPick,
+              onTap: () => _pickImage(banner: true),
+            ),
+            const SizedBox(height: 12),
+            _ImagePickerTile(
+              label: 'Icon (optional)',
+              aspect: 1,
+              image: iconPick,
+              circular: true,
+              onTap: () => _pickImage(banner: false),
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
               controller: name,
-              decoration: const InputDecoration(labelText: 'Name'),
+              maxLength: 60,
+              decoration: const InputDecoration(labelText: 'Name', hintText: 'e.g. Kathmandu Photographers'),
+              validator: (v) => (v == null || v.trim().length < 3) ? 'Name must be at least 3 characters' : null,
             ),
-            TextField(
+            TextFormField(
               controller: desc,
-              decoration: const InputDecoration(labelText: 'Description'),
+              maxLength: 300,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Description', hintText: 'What is this community about?'),
             ),
-            TextField(
-              controller: img,
-              decoration: const InputDecoration(labelText: 'Image URL'),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              initialValue: category,
+              decoration: const InputDecoration(labelText: 'Category'),
+              items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+              onChanged: (v) => setState(() => category = v ?? 'General'),
             ),
-            if (err != null) Text(err!, style: const TextStyle(color: Colors.red)),
+            if (category == 'Other')
+              TextFormField(
+                controller: customCategory,
+                decoration: const InputDecoration(labelText: 'Custom category'),
+              ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: rules,
+              maxLength: 1000,
+              maxLines: 4,
+              decoration: const InputDecoration(labelText: 'Community rules (optional)', hintText: 'Shown to members before they post'),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: Column(children: [
+                RadioListTile<String>(
+                  value: 'public',
+                  groupValue: visibility,
+                  title: const Text('Public'),
+                  subtitle: const Text('Anyone can find and join instantly'),
+                  onChanged: (v) => setState(() => visibility = v ?? 'public'),
+                ),
+                RadioListTile<String>(
+                  value: 'private',
+                  groupValue: visibility,
+                  title: const Text('Private'),
+                  subtitle: const Text('Visible in search, but joining requires owner/admin approval'),
+                  onChanged: (v) => setState(() => visibility = v ?? 'public'),
+                ),
+              ]),
+            ),
+            if (err != null) ...[
+              const SizedBox(height: 12),
+              Text(err!, style: const TextStyle(color: Colors.red)),
+            ],
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: loading
-                  ? null
-                  : () async {
-                if (name.text.trim().isEmpty) {
-                  setState(() => err = 'Name required');
-                  return;
-                }
-                final uid = SupabaseConfig.client.auth.currentUser?.id;
-                if (uid == null) {
-                  context.go('/login?redirect=${Uri.encodeComponent('/create-community')}');
-                  return;
-                }
-
-                setState(() => loading = true);
-
-                try {
-                  final cty = await CommunityRepository().createCommunity({
-                    'name': name.text.trim(),
-                    'description': desc.text.trim(),
-                    'image_url': img.text.trim(),
-                    'created_by': uid,
-                  });
-                  await CommunityRepository().joinCommunity(cty['id'], uid);
-                  if (!context.mounted) return;
-                  Navigator.pop(context);
-                } catch (e) {
-                  setState(() => err = e.toString());
-                } finally {
-                  if (mounted) setState(() => loading = false);
-                }
-              },
+              onPressed: loading ? null : _submit,
               child: loading
-                  ? const CircularProgressIndicator()
+                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Text('Create'),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ImagePickerTile extends StatelessWidget {
+  const _ImagePickerTile({required this.label, required this.aspect, required this.image, required this.onTap, this.circular = false});
+
+  final String label;
+  final double aspect;
+  final XFile? image;
+  final VoidCallback onTap;
+  final bool circular;
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      alignment: Alignment.center,
+      child: Icon(circular ? Icons.groups : Icons.image_outlined, color: Theme.of(context).colorScheme.outline),
+    );
+    Widget preview = placeholder;
+    if (image != null) {
+      preview = PickedImagePreview(bytesFuture: image!.readAsBytes());
+    }
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(circular ? 999 : 8),
+            child: AspectRatio(
+              aspectRatio: circular ? 1 : aspect,
+              child: SizedBox(width: circular ? 88 : double.infinity, child: preview),
+            ),
+          ),
+        ],
       ),
     );
   }

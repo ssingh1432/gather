@@ -1791,13 +1791,37 @@ class CommunityCard extends StatelessWidget {
   final VoidCallback onJoinLeave;
   final bool joined;
   const CommunityCard({super.key, required this.community, required this.onOpen, required this.onJoinLeave, required this.joined});
+
   @override
-  Widget build(BuildContext context) => ListTile(
-        onTap: onOpen,
-        title: Text(community['name'] ?? ''),
-        subtitle: Text(community['description'] ?? ''),
-        trailing: TextButton(onPressed: onJoinLeave, child: Text(joined ? 'Leave' : 'Join')),
-      );
+  Widget build(BuildContext context) {
+    final isPrivate = community['visibility'] == 'private';
+    final memberCount = (community['member_count'] as num?)?.toInt() ?? 0;
+    final iconUrl = community['image_url'] as String?;
+    return ListTile(
+      onTap: onOpen,
+      leading: CircleAvatar(
+        backgroundImage: (iconUrl != null && iconUrl.isNotEmpty) ? NetworkImage(iconUrl) : null,
+        child: (iconUrl == null || iconUrl.isEmpty) ? const Icon(Icons.groups) : null,
+      ),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(child: Text(community['name'] ?? '', overflow: TextOverflow.ellipsis)),
+          if (isPrivate) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.lock_outline, size: 14)),
+          if (community['is_verified'] == true) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.verified, size: 14, color: Colors.blue)),
+        ],
+      ),
+      subtitle: Text(
+        [
+          if ((community['description'] as String?)?.isNotEmpty ?? false) community['description'],
+          '$memberCount member${memberCount == 1 ? '' : 's'}',
+        ].join(' · '),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: TextButton(onPressed: onJoinLeave, child: Text(joined ? 'Leave' : (isPrivate ? 'Request' : 'Join'))),
+    );
+  }
 }
 
 class EmptyState extends StatelessWidget {

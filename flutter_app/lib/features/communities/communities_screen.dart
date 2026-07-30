@@ -15,10 +15,47 @@ class CommunitiesScreen extends StatefulWidget {
 class _C extends State<CommunitiesScreen> {
   final repo = CommunityRepository();
   final q = TextEditingController();
-  late Future<List<Map<String, dynamic>>> f = repo.listCommunities();
+  late Future<List<Map<String, dynamic>>> f = _load();
   Map<String, bool> joined = {};
 
-  void _retry() => setState(() => f = repo.listCommunities(q.text.trim()));
+  Future<List<Map<String, dynamic>>> _load() async {
+    final data = await repo.listCommunities(q.text.trim());
+    final uid = SupabaseConfig.currentUserId;
+    if (uid != null && data.isNotEmpty) {
+      joined = await repo.joinedStates(data.map((e) => e['id'].toString()).toList(), uid);
+    } else {
+      joined = {};
+    }
+    return data;
+  }
+
+  void _retry() => setState(() => f = _load());
+
+  Future<void> _handleJoinLeave(Map<String, dynamic> community) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) {
+      redirectToLogin(context, redirect: '/communities', message: 'Please log in or create an account to join a community.');
+      return;
+    }
+    final id = community['id'].toString();
+    final isMember = joined[id] ?? false;
+    try {
+      if (isMember) {
+        await repo.leaveCommunity(id, uid);
+      } else {
+        final result = await repo.requestJoin(id);
+        if (result == 'requested' && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Join request sent. An owner or admin will review it.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update membership: $e')));
+      return;
+    }
+    _retry();
+  }
 
   @override
   void dispose() {
@@ -46,9 +83,10 @@ class _C extends State<CommunitiesScreen> {
           child: TextField(
             controller: q,
             decoration: InputDecoration(
-              hintText: 'Search',
+              hintText: 'Search communities',
               suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _retry),
             ),
+            onSubmitted: (_) => _retry(),
           ),
         ),
         Expanded(
@@ -63,20 +101,24 @@ class _C extends State<CommunitiesScreen> {
               }
               final data = snapshot.data ?? const <Map<String, dynamic>>[];
               if (data.isEmpty) {
-                return const EmptyState(icon: Icons.groups_outlined, title: 'No communities', message: 'Try a different search or create the first community.');
+                return EmptyState(
+                  icon: Icons.groups_outlined,
+                  title: 'No communities',
+                  message: q.text.trim().isEmpty ? 'Be the first to create a community.' : 'Try a different search or create it yourself.',
+                );
               }
-              return ListView(
-                children: data
-                    .map((e) => CommunityCard(
-                          community: e,
-                          joined: joined[e['id'].toString()] ?? false,
-                          onOpen: () => context.push('/community?id=${e['id']}'),
-                          onJoinLeave: () async {
-                            // Existing join/leave behavior is preserved; refresh only this list.
-                            _retry();
-                          },
-                        ))
-                    .toList(),
+              return RefreshIndicator(
+                onRefresh: () async => _retry(),
+                child: ListView(
+                  children: data
+                      .map((e) => CommunityCard(
+                            community: e,
+                            joined: joined[e['id'].toString()] ?? false,
+                            onOpen: () => context.push('/community?id=${e['id']}'),
+                            onJoinLeave: () => _handleJoinLeave(e),
+                          ))
+                      .toList(),
+                ),
               );
             },
           ),

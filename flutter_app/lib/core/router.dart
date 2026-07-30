@@ -14,7 +14,9 @@ import '../features/beta/beta_gate.dart';
 import '../features/bookmarks/bookmarks_screen.dart';
 import '../features/communities/communities_screen.dart';
 import '../features/communities/community_detail_screen.dart';
+import '../features/communities/community_members_screen.dart';
 import '../features/communities/create_community_screen.dart';
+import '../features/communities/edit_community_screen.dart';
 import '../features/home/home_feed_screen.dart';
 import '../features/home/post_detail_screen.dart';
 import '../features/home/post_replies_screen.dart';
@@ -143,6 +145,8 @@ final appRouter = GoRouter(
     ),
     GoRoute(path: '/community', builder: (_, s) => CommunityDetailScreen(communityId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/create-community', builder: (_, __) => const CreateCommunityScreen()),
+    GoRoute(path: '/community-members', builder: (_, s) => CommunityMembersScreen(communityId: s.uri.queryParameters['id'] ?? '')),
+    GoRoute(path: '/edit-community', builder: (_, s) => EditCommunityScreen(communityId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
     GoRoute(path: '/user', builder: (_, s) => UserProfileScreen(userId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/bookmarks', builder: (_, __) => const BookmarksScreen()),
@@ -262,6 +266,8 @@ const _protectedRoutes = {
   '/',
   '/communities',
   '/community',
+  '/community-members',
+  '/edit-community',
   '/post',
   '/media',
   '/search',

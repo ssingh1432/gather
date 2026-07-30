@@ -224,16 +224,42 @@ class FeedRepository {
   }
 }
 
+/// Backs the community/"page" feature: creation, discovery, membership,
+/// roles (owner/admin/moderator/member), private-community join requests,
+/// and community management (edit info, member list, delete). Role
+/// enforcement and the private-community feed gate live in the database
+/// (migration 049) — this repository is a thin, un-privileged client on top
+/// of that, so it can't be used to bypass anything RLS/the RPCs wouldn't
+/// already allow.
 class CommunityRepository {
   SupabaseClient get _c => SupabaseConfig.client;
+
   Future<List<Map<String, dynamic>>> listCommunities([String query = '']) async {
     var req = _c.from('communities').select();
     if (query.isNotEmpty) req = req.ilike('name', '%$query%');
-    final data = await req.order('name');
+    final data = await req.order('member_count', ascending: false).order('name');
     return (data as List).cast<Map<String, dynamic>>();
   }
 
-  Future<bool> isJoined(String communityId, String userId) async => (await _c.from('community_memberships').select('community_id').match({'community_id': communityId, 'user_id': userId}).maybeSingle()) != null;
+  Future<Map<String, dynamic>?> getCommunity(String communityId) async =>
+      await _c.from('communities').select().eq('id', communityId).maybeSingle();
+
+  /// Communities the current user belongs to, most recently joined first —
+  /// powers a "My communities" tab/section.
+  Future<List<Map<String, dynamic>>> listMyCommunities(String userId) async {
+    final rows = await _c
+        .from('community_memberships')
+        .select('role, created_at, communities(*)')
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+    return (rows as List)
+        .map((e) => {...(e['communities'] as Map<String, dynamic>), 'my_role': e['role']})
+        .toList();
+  }
+
+  Future<bool> isJoined(String communityId, String userId) async =>
+      (await _c.from('community_memberships').select('community_id').match({'community_id': communityId, 'user_id': userId}).maybeSingle()) != null;
+
   Future<Map<String, bool>> joinedStates(List<String> communityIds, String userId) async {
     if (communityIds.isEmpty) return {};
     final rows = await _c.from('community_memberships').select('community_id').eq('user_id', userId).inFilter('community_id', communityIds);
@@ -241,12 +267,94 @@ class CommunityRepository {
     return {for (final id in communityIds) id: joined.contains(id)};
   }
 
-  Future<Map<String, dynamic>> createCommunity(Map<String, dynamic> payload) async => await _c.from('communities').insert(payload).select().single();
+  /// Current user's role in a community, or null if they're not a member.
+  Future<String?> myRole(String communityId, String userId) async {
+    final row = await _c.from('community_memberships').select('role').match({'community_id': communityId, 'user_id': userId}).maybeSingle();
+    return row?['role'] as String?;
+  }
+
+  /// Creates the community. The DB trigger `trg_community_created_owner`
+  /// (migration 049) adds the creator as `owner` automatically — no
+  /// separate `joinCommunity` call is needed (and calling it afterwards
+  /// would incorrectly overwrite that role, so don't).
+  Future<Map<String, dynamic>> createCommunity(Map<String, dynamic> payload) async =>
+      await _c.from('communities').insert(payload).select().single();
+
+  Future<void> updateCommunity(String communityId, Map<String, dynamic> patch) async {
+    await _c.from('communities').update(patch).eq('id', communityId);
+  }
+
+  /// Owner (or site admin/mod) only — enforced server-side by
+  /// `delete_community`, which also detaches any drafts/scheduled posts
+  /// that still reference this community before removing it.
+  Future<void> deleteCommunity(String communityId) async {
+    await _c.rpc('delete_community', params: {'p_community_id': communityId});
+  }
+
+  /// Joins a public community immediately, or files a join request for a
+  /// private one. Returns 'joined', 'requested', or 'already_member'.
+  Future<String> requestJoin(String communityId, {String? message}) async {
+    final result = await _c.rpc('request_join_community', params: {'p_community_id': communityId, 'p_message': message});
+    if (result == 'joined') {
+      AnalyticsService.instance.communityJoined(communityId: communityId);
+    }
+    return result as String;
+  }
+
+  /// Legacy direct-join helper, kept only for public communities where the
+  /// caller already knows visibility == public. Prefer [requestJoin], which
+  /// handles both public and private correctly.
   Future<void> joinCommunity(String communityId, String userId) async {
     await _c.from('community_memberships').upsert({'community_id': communityId, 'user_id': userId});
     AnalyticsService.instance.communityJoined(communityId: communityId);
   }
-  Future<void> leaveCommunity(String communityId, String userId) => _c.from('community_memberships').delete().match({'community_id': communityId, 'user_id': userId});
+
+  Future<void> leaveCommunity(String communityId, String userId) =>
+      _c.from('community_memberships').delete().match({'community_id': communityId, 'user_id': userId});
+
+  /// Members visible to the caller: any fellow member can see the roster
+  /// (migration 049 fixed the RLS gap that previously hid it), ordered so
+  /// owner/admin/moderator show first.
+  Future<List<Map<String, dynamic>>> listMembers(String communityId) async {
+    final rows = await _c
+        .from('community_memberships')
+        .select('user_id, role, created_at, users(username, display_name, profile_photo_url)')
+        .eq('community_id', communityId);
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    const order = {'owner': 0, 'admin': 1, 'moderator': 2, 'member': 3};
+    list.sort((a, b) => (order[a['role']] ?? 9).compareTo(order[b['role']] ?? 9));
+    return list;
+  }
+
+  Future<void> setMemberRole(String communityId, String userId, String role) async {
+    await _c.rpc('set_community_member_role', params: {'p_community_id': communityId, 'p_user_id': userId, 'p_role': role});
+  }
+
+  Future<void> removeMember(String communityId, String userId) async {
+    await _c.rpc('remove_community_member', params: {'p_community_id': communityId, 'p_user_id': userId});
+  }
+
+  /// Pending join requests for a private community — only visible to that
+  /// community's owner/admin/moderator (or a site admin/mod), per RLS.
+  Future<List<Map<String, dynamic>>> listJoinRequests(String communityId) async {
+    final rows = await _c
+        .from('community_join_requests')
+        .select('id, user_id, message, created_at, users(username, display_name, profile_photo_url)')
+        .eq('community_id', communityId)
+        .eq('status', 'pending')
+        .order('created_at');
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> decideJoinRequest(String requestId, bool approve) async {
+    await _c.rpc('decide_community_join_request', params: {'p_request_id': requestId, 'p_approve': approve});
+  }
+
+  Future<String> uploadIcon(String communityId, XFile image) async =>
+      MediaUploadService().uploadCommunityImage(communityId: communityId, image: image, kind: CommunityImageKind.icon);
+
+  Future<String> uploadBanner(String communityId, XFile image) async =>
+      MediaUploadService().uploadCommunityImage(communityId: communityId, image: image, kind: CommunityImageKind.banner);
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration
