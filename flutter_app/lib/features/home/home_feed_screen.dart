@@ -20,6 +20,7 @@ import '../../shared/widgets/people_you_may_know.dart';
 import '../../shared/widgets/feed_ad_card.dart';
 import '../../shared/widgets/story_bar.dart';
 import '../../shared/widgets/top_bar_profile_link.dart';
+import '../../shared/widgets/notification_bell.dart';
 import '../../shared/providers/app_providers.dart';
 import '../../shared/services/remote_config_service.dart';
 
@@ -361,7 +362,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
             const Text('Gather'),
           ],
         ),
-        actions: const [TopBarProfileLink()],
+        actions: const [NotificationBell(), TopBarProfileLink()],
         bottom: appBarBottomBorder(c),
       ),
       body: Stack(

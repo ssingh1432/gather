@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -17,6 +19,53 @@ final betaAccessProvider = FutureProvider<bool>((ref) async {
 final authStateProvider = StreamProvider<AuthState>((ref) => ref.watch(authServiceProvider).authChanges());
 final feedRepositoryProvider = Provider((_) => FeedRepository());
 final profileRepositoryProvider = Provider((_) => ProfileRepository());
+
+/// Live count of the current user's unread notifications, for the bell
+/// badge. Rebuilds whenever auth state changes (so it picks up a fresh
+/// `currentUser` on login/logout even though it's `.autoDispose` and stays
+/// watched continuously by the always-visible bell icon), does one initial
+/// count fetch, then keeps itself current via a Realtime subscription on
+/// `notifications` (already enabled — migration 044b) filtered to this
+/// user's `recipient_id`. Any insert/update (e.g. marking something read)
+/// triggers a cheap re-count rather than trying to hand-patch state.
+final unreadNotificationCountProvider = StreamProvider.autoDispose<int>((ref) {
+  ref.watch(authStateProvider);
+  final client = SupabaseConfig.maybeClient;
+  final uid = client?.auth.currentUser?.id;
+  if (client == null || uid == null) return Stream.value(0);
+
+  final controller = StreamController<int>();
+
+  Future<void> refresh() async {
+    try {
+      final unread = await client.from('notifications').count(CountOption.exact).eq('recipient_id', uid).eq('is_read', false);
+      if (!controller.isClosed) controller.add(unread);
+    } catch (_) {
+      // Transient network blip: leave the last known count rather than
+      // flashing the badge to an error/zero state.
+    }
+  }
+
+  final channel = client
+      .channel('public:notifications-unread-$uid')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'notifications',
+        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'recipient_id', value: uid),
+        callback: (_) => refresh(),
+      )
+      .subscribe();
+
+  refresh();
+
+  ref.onDispose(() {
+    controller.close();
+    client.removeChannel(channel);
+  });
+
+  return controller.stream;
+});
 
 final homeFeedProvider = FutureProvider.family<List<PostModel>, int>((ref, page) async {
   final client = SupabaseConfig.maybeClient;
