@@ -66,16 +66,21 @@ class _C extends State<CommunitiesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Communities')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          if (SupabaseConfig.currentUserId == null) {
-            redirectToLogin(context, redirect: '/create-community', message: 'Please log in or create an account to create a community.');
-            return;
-          }
-          context.push('/create-community');
-        },
-        child: const Icon(Icons.add),
+      appBar: AppBar(
+        title: const Text('Communities'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: 'Create community',
+            onPressed: () {
+              if (SupabaseConfig.currentUserId == null) {
+                redirectToLogin(context, redirect: '/create-community', message: 'Please log in or create an account to create a community.');
+                return;
+              }
+              context.push('/create-community');
+            },
+          ),
+        ],
       ),
       body: Column(children: [
         Padding(
@@ -105,6 +110,17 @@ class _C extends State<CommunitiesScreen> {
                   icon: Icons.groups_outlined,
                   title: 'No communities',
                   message: q.text.trim().isEmpty ? 'Be the first to create a community.' : 'Try a different search or create it yourself.',
+                  action: ElevatedButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create community'),
+                    onPressed: () {
+                      if (SupabaseConfig.currentUserId == null) {
+                        redirectToLogin(context, redirect: '/create-community', message: 'Please log in or create an account to create a community.');
+                        return;
+                      }
+                      context.push('/create-community');
+                    },
+                  ),
                 );
               }
               return RefreshIndicator(
