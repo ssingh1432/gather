@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
 import '../../shared/widgets/reusables.dart';
+import '../data/repositories.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -84,6 +85,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return '$actorName tagged you in a post';
       case 'community_post':
         return '$actorName posted in a community you\'re in';
+      case 'community_invite':
+        final communityName = (n['metadata'] as Map?)?['community_name']?.toString() ?? 'a community';
+        return '$actorName invited you to join $communityName';
       case 'post_repost':
         return '$actorName reposted your post';
       case 'poll_vote':
@@ -127,6 +131,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.alternate_email;
       case 'community_post':
         return Icons.groups_outlined;
+      case 'community_invite':
+        return Icons.mail_outline;
       case 'post_repost':
         return Icons.repeat_outlined;
       case 'poll_vote':
@@ -167,7 +173,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       context.push('/my-moderation');
     } else if (type == 'report_update') {
       context.push('/my-legal');
+    } else if (type == 'community_post') {
+      final communityId = (n['metadata'] as Map?)?['community_id']?.toString();
+      if (communityId != null) context.push('/community?id=$communityId');
     }
+    // community_invite: handled entirely by the inline Accept/Decline
+    // buttons on its tile — tapping the row elsewhere just marks it read.
     // security_alert, login_alert, admin_broadcast: mark-as-read is enough,
     // there's no dedicated detail screen for these yet.
   }
@@ -204,6 +215,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       final preview = (post?['text_content'] as String?)?.trim();
                       final isRead = n['is_read'] == true;
 
+                      if (n['type'] == 'community_invite') {
+                        return _InviteNotificationTile(notification: n, actorName: actorName, avatarUrl: avatarUrl, isRead: isRead);
+                      }
+
                       return ListTile(
                         tileColor: isRead ? null : Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.25),
                         leading: CircleAvatar(
@@ -222,6 +237,85 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 );
               },
             ),
+    );
+  }
+}
+
+/// A community_invite notification row with inline Accept/Decline instead
+/// of the plain tap-through the other notification types get — accepting
+/// or declining is the entire point of this notification, so it shouldn't
+/// require a second screen.
+class _InviteNotificationTile extends StatefulWidget {
+  const _InviteNotificationTile({
+    required this.notification,
+    required this.actorName,
+    required this.avatarUrl,
+    required this.isRead,
+  });
+  final Map<String, dynamic> notification;
+  final String actorName;
+  final String? avatarUrl;
+  final bool isRead;
+
+  @override
+  State<_InviteNotificationTile> createState() => _InviteNotificationTileState();
+}
+
+class _InviteNotificationTileState extends State<_InviteNotificationTile> {
+  final repo = CommunityRepository();
+  bool _busy = false;
+  String? _resolution; // 'accepted' | 'declined' | 'error', so the tile updates in place without a full reload
+
+  Future<void> _respond(bool accept) async {
+    final metadata = widget.notification['metadata'] as Map? ?? const {};
+    final inviteId = metadata['invite_id']?.toString();
+    if (inviteId == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      if (accept) {
+        await repo.acceptInvite(inviteId);
+      } else {
+        await repo.revokeInvite(inviteId);
+      }
+      await SupabaseConfig.client.from('notifications').update({'is_read': true}).eq('id', widget.notification['id']);
+      if (mounted) setState(() => _resolution = accept ? 'accepted' : 'declined');
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not respond to invite: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final metadata = widget.notification['metadata'] as Map? ?? const {};
+    final communityName = metadata['community_name']?.toString() ?? 'a community';
+    final communityId = metadata['community_id']?.toString();
+
+    return ListTile(
+      tileColor: widget.isRead ? null : Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.25),
+      leading: CircleAvatar(
+        backgroundImage: widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty ? NetworkImage(widget.avatarUrl!) : null,
+        child: widget.avatarUrl == null || widget.avatarUrl!.isEmpty ? const Icon(Icons.mail_outline) : null,
+      ),
+      title: Text('${widget.actorName} invited you to join $communityName'),
+      subtitle: _busy
+          ? const LinearProgressIndicator()
+          : switch (_resolution) {
+              'accepted' => TextButton(
+                  onPressed: communityId == null ? null : () => GoRouter.of(context).push('/community?id=$communityId'),
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero, alignment: Alignment.centerLeft),
+                  child: const Text('Joined — view community'),
+                ),
+              'declined' => const Text('Invite declined'),
+              _ => Row(
+                  children: [
+                    TextButton(onPressed: () => _respond(true), child: const Text('Accept')),
+                    TextButton(onPressed: () => _respond(false), child: const Text('Decline')),
+                  ],
+                ),
+            },
     );
   }
 }

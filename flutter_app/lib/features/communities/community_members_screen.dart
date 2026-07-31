@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/supabase_client.dart';
 import '../data/repositories.dart';
@@ -28,6 +30,7 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
   String? _myRole;
   bool _isPrivate = false;
   bool _canManageBans = false;
+  bool _canManageMembers = false;
 
   @override
   void initState() {
@@ -54,6 +57,7 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
       // still gated by the simpler role hierarchy from migration 049.
       _canManageBans = await repo.hasPermission(widget.communityId, 'manage_bans');
       _bans = _canManageBans ? await repo.listActiveBans(widget.communityId) : const [];
+      _canManageMembers = await repo.hasPermission(widget.communityId, 'manage_members');
     } catch (e) {
       _error = 'Could not load members. $e';
     } finally {
@@ -103,6 +107,14 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not remove member: $e')));
     }
+  }
+
+  Future<void> _openInviteSheet() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _InviteSheet(communityId: widget.communityId, repo: repo),
+    );
   }
 
   Future<void> _warn(String userId, String username) async {
@@ -169,6 +181,12 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
       appBar: AppBar(
         title: const Text('Members'),
         actions: [
+          if (_canManageMembers)
+            IconButton(
+              icon: const Icon(Icons.person_add_alt_outlined),
+              tooltip: 'Invite',
+              onPressed: _openInviteSheet,
+            ),
           if (_canManageBans)
             IconButton(
               icon: const Icon(Icons.history),
@@ -233,6 +251,155 @@ const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 
 String _formatExpiry(DateTime dateTime) {
   final local = dateTime.toLocal();
   return '${_months[local.month - 1]} ${local.day}, ${local.year}';
+}
+
+/// Bottom sheet for both invite flows: invite a specific person by
+/// username (accept/decline required on their end), or generate a
+/// shareable code with an optional use-limit/expiry.
+class _InviteSheet extends StatefulWidget {
+  const _InviteSheet({required this.communityId, required this.repo});
+  final String communityId;
+  final CommunityRepository repo;
+
+  @override
+  State<_InviteSheet> createState() => _InviteSheetState();
+}
+
+class _InviteSheetState extends State<_InviteSheet> {
+  final _usernameController = TextEditingController();
+  bool _sendingInvite = false;
+  bool _creatingLink = false;
+  String? _generatedCode;
+  int? _linkMaxUses;
+  static const _maxUsesOptions = {null: 'Unlimited', 5: '5 uses', 20: '20 uses', 100: '100 uses'};
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendUsernameInvite() async {
+    final username = _usernameController.text.trim().replaceFirst('@', '');
+    if (username.isEmpty || _sendingInvite) return;
+    setState(() => _sendingInvite = true);
+    try {
+      await widget.repo.inviteUserByUsername(widget.communityId, username);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invite sent to @$username.')));
+        _usernameController.clear();
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not send invite: $e')));
+    } finally {
+      if (mounted) setState(() => _sendingInvite = false);
+    }
+  }
+
+  Future<void> _generateLink() async {
+    setState(() => _creatingLink = true);
+    try {
+      final code = await widget.repo.createInviteLink(widget.communityId, maxUses: _linkMaxUses);
+      if (mounted) setState(() => _generatedCode = code);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not create invite link: $e')));
+    } finally {
+      if (mounted) setState(() => _creatingLink = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Invite people', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 16),
+          Text('By username', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _usernameController,
+                  decoration: const InputDecoration(hintText: '@username', border: OutlineInputBorder(), isDense: true),
+                  onSubmitted: (_) => _sendUsernameInvite(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _sendingInvite ? null : _sendUsernameInvite,
+                child: _sendingInvite ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Send'),
+              ),
+            ],
+          ),
+          Text(
+            'They\'ll get a notification and can accept or decline — nothing happens automatically.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const Divider(height: 32),
+          Text('Shareable link', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          if (_generatedCode == null) ...[
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final entry in _maxUsesOptions.entries)
+                  ChoiceChip(
+                    label: Text(entry.value),
+                    selected: _linkMaxUses == entry.key,
+                    onSelected: (_) => setState(() => _linkMaxUses = entry.key),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _creatingLink ? null : _generateLink,
+              icon: _creatingLink
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.link),
+              label: const Text('Create invite link'),
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(border: Border.all(color: Theme.of(context).dividerColor), borderRadius: BorderRadius.circular(8)),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(_generatedCode!, style: Theme.of(context).textTheme.titleMedium?.copyWith(letterSpacing: 2, fontFamily: 'monospace')),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy_outlined),
+                    tooltip: 'Copy code',
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: _generatedCode!));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copied.')));
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.share_outlined),
+                    tooltip: 'Share',
+                    onPressed: () => Share.share('Join my community on Gather! Use invite code $_generatedCode in the app.'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(onPressed: () => setState(() => _generatedCode = null), child: const Text('Create another link')),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _BanChoice {

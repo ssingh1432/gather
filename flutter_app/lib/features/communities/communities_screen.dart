@@ -57,6 +57,41 @@ class _C extends State<CommunitiesScreen> {
     _retry();
   }
 
+  Future<void> _redeemCodeDialog() async {
+    final controller = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enter invite code'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.characters,
+          decoration: const InputDecoration(hintText: 'e.g. 73SX83G2', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Join')),
+        ],
+      ),
+    );
+    if (code == null || code.trim().isEmpty || !mounted) return;
+
+    try {
+      final result = await repo.redeemInviteCode(code.trim());
+      final communityId = result['community_id']?.toString();
+      if (!mounted) return;
+      final joined = result['result'] == 'joined';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(joined ? 'Joined!' : 'You\'re already a member of that community.')),
+      );
+      if (communityId != null) context.push('/community?id=$communityId');
+      _retry();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not redeem that code: $e')));
+    }
+  }
+
   @override
   void dispose() {
     q.dispose();
@@ -69,6 +104,17 @@ class _C extends State<CommunitiesScreen> {
       appBar: AppBar(
         title: const Text('Communities'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.key_outlined),
+            tooltip: 'Have an invite code?',
+            onPressed: () {
+              if (SupabaseConfig.currentUserId == null) {
+                redirectToLogin(context, redirect: '/communities', message: 'Please log in or create an account to redeem an invite.');
+                return;
+              }
+              _redeemCodeDialog();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             tooltip: 'Create community',

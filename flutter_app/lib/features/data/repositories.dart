@@ -446,6 +446,54 @@ class CommunityRepository {
         .limit(limit);
     return (rows as List).cast<Map<String, dynamic>>();
   }
+
+  // -- Invites (migration 054a/054b) ------------------------------------
+  Future<String> inviteUserByUsername(String communityId, String username) async {
+    final id = await _c.rpc('invite_user_to_community', params: {
+      'p_community_id': communityId,
+      'p_username': username,
+    });
+    return id as String;
+  }
+
+  Future<void> acceptInvite(String inviteId) async {
+    await _c.rpc('accept_community_invite', params: {'p_invite_id': inviteId});
+  }
+
+  /// Also used to decline an invite you received (an invited user revoking
+  /// their own not-yet-accepted invite is allowed by the RPC).
+  Future<void> revokeInvite(String inviteId) async {
+    await _c.rpc('revoke_community_invite', params: {'p_invite_id': inviteId});
+  }
+
+  Future<String> createInviteLink(String communityId, {int? maxUses, DateTime? expiresAt}) async {
+    final code = await _c.rpc('create_community_invite_link', params: {
+      'p_community_id': communityId,
+      'p_max_uses': maxUses,
+      'p_expires_at': expiresAt?.toIso8601String(),
+    });
+    return code as String;
+  }
+
+  /// Returns {'result': 'joined' | 'already_member', 'community_id': ...}.
+  Future<Map<String, dynamic>> redeemInviteCode(String code) async {
+    final result = await _c.rpc('redeem_community_invite_code', params: {'p_code': code.trim().toUpperCase()});
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  /// Pending direct invites + non-revoked, non-expired links for a
+  /// community, for the "Manage invites" view (manage_members required,
+  /// enforced by RLS on community_invites).
+  Future<List<Map<String, dynamic>>> listCommunityInvites(String communityId) async {
+    final rows = await _c
+        .from('community_invites')
+        .select('id, invite_type, code, invited_user_id, max_uses, use_count, expires_at, accepted_at, created_at, '
+            'invited_user:users!community_invites_invited_user_id_fkey(username, display_name)')
+        .eq('community_id', communityId)
+        .filter('revoked_at', 'is', null)
+        .order('created_at', ascending: false);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration
