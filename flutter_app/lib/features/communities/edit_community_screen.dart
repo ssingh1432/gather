@@ -6,6 +6,7 @@ import '../../core/supabase_client.dart';
 import '../../shared/services/media/web_safe_pick.dart';
 import '../../shared/widgets/profile_view.dart' show PickedImagePreview;
 import '../data/repositories.dart';
+import 'tag_input.dart';
 
 const _categories = [
   'General', 'Local / City', 'Sports', 'Music', 'Movies & TV', 'Gaming',
@@ -36,6 +37,7 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
 
   String category = 'General';
   String visibility = 'public';
+  List<String> tags = [];
   String? _existingIconUrl;
   String? _existingBannerUrl;
   XFile? iconPick;
@@ -82,6 +84,7 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
       _existingIconUrl = community['image_url'] as String?;
       _existingBannerUrl = community['banner_url'] as String?;
       _isOwner = role == 'owner';
+      tags = await repo.getCommunityTags(widget.communityId);
     } catch (e) {
       _error = 'Could not load community. $e';
     } finally {
@@ -124,6 +127,7 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
         if (iconUrl != null) 'image_url': iconUrl,
         if (bannerUrl != null) 'banner_url': bannerUrl,
       });
+      await repo.setCommunityTags(widget.communityId, tags);
 
       if (!mounted) return;
       context.pop(true);
@@ -209,6 +213,8 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
                   ),
                   if (category == 'Other')
                     TextFormField(controller: customCategory, decoration: const InputDecoration(labelText: 'Custom category')),
+                  const SizedBox(height: 12),
+                  TagInput(tags: tags, onChanged: (t) => setState(() => tags = t)),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: rules,

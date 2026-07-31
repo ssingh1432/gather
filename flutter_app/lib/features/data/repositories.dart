@@ -350,6 +350,58 @@ class CommunityRepository {
     await _c.rpc('decide_community_join_request', params: {'p_request_id': requestId, 'p_approve': approve});
   }
 
+  // -- Categories / tags (migration 055) --------------------------------
+  Future<List<Map<String, dynamic>>> listCategoryOptions() async {
+    final rows = await _c.from('community_categories').select('id, name, slug').order('name');
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Autocomplete source for the tag input — existing tags matching what's
+  /// typed so far, so people converge on shared tags instead of near-duplicates.
+  Future<List<Map<String, dynamic>>> searchTagOptions(String query) async {
+    var req = _c.from('community_tags').select('id, name, slug');
+    if (query.trim().isNotEmpty) req = req.ilike('name', '%${query.trim()}%');
+    final rows = await req.order('name').limit(20);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<String>> getCommunityTags(String communityId) async {
+    final rows = await _c
+        .from('community_tag_assignments')
+        .select('community_tags(name)')
+        .eq('community_id', communityId);
+    return (rows as List).map((r) => (r['community_tags'] as Map)['name'] as String).toList();
+  }
+
+  Future<void> setCommunityTags(String communityId, List<String> tagNames) async {
+    await _c.rpc('set_community_tags', params: {'p_community_id': communityId, 'p_tag_names': tagNames});
+  }
+
+  Future<void> setCommunityCategory(String communityId, String categoryName) async {
+    await _c.rpc('set_community_category', params: {'p_community_id': communityId, 'p_category_name': categoryName});
+  }
+
+  /// Communities list with optional category/tag filtering, for the
+  /// discovery screen's filter chips.
+  Future<List<Map<String, dynamic>>> listCommunitiesFiltered({String query = '', String? categoryId, String? tagId}) async {
+    if (tagId != null) {
+      // Filter via the join table, then hydrate full community rows.
+      final tagged = await _c.from('community_tag_assignments').select('community_id').eq('tag_id', tagId);
+      final ids = (tagged as List).map((r) => r['community_id'].toString()).toList();
+      if (ids.isEmpty) return [];
+      var req = _c.from('communities').select().inFilter('id', ids);
+      if (query.isNotEmpty) req = req.ilike('name', '%$query%');
+      if (categoryId != null) req = req.eq('category_id', categoryId);
+      final data = await req.order('member_count', ascending: false).order('name');
+      return (data as List).cast<Map<String, dynamic>>();
+    }
+    var req = _c.from('communities').select();
+    if (query.isNotEmpty) req = req.ilike('name', '%$query%');
+    if (categoryId != null) req = req.eq('category_id', categoryId);
+    final data = await req.order('member_count', ascending: false).order('name');
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
   Future<String> uploadIcon(String communityId, XFile image) async =>
       MediaUploadService().uploadCommunityImage(communityId: communityId, image: image, kind: CommunityImageKind.icon);
 

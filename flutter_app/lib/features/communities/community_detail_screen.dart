@@ -27,6 +27,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   Map<String, dynamic>? _community;
   String? _myRole;
   bool _joinRequestPending = false;
+  List<String> _tags = const [];
 
   Set<String> liked = <String>{};
   Set<String> bookmarked = <String>{};
@@ -72,6 +73,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
       if (uid != null) role = await communityRepo.myRole(widget.communityId, uid);
       _community = community;
       _myRole = role;
+      _tags = await communityRepo.getCommunityTags(widget.communityId);
 
       // Only fetch posts if we can actually see them: a private community's
       // feed is server-gated to members/site staff anyway (get_community_feed,
@@ -241,7 +243,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
-                          SliverToBoxAdapter(child: _Header(community: c, myRole: _myRole, joining: _joining, onJoinLeave: _handleJoinLeave)),
+                          SliverToBoxAdapter(child: _Header(community: c, myRole: _myRole, joining: _joining, onJoinLeave: _handleJoinLeave, tags: _tags)),
                           if (_isMember)
                             SliverToBoxAdapter(
                               child: Padding(
@@ -336,12 +338,13 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.community, required this.myRole, required this.joining, required this.onJoinLeave});
+  const _Header({required this.community, required this.myRole, required this.joining, required this.onJoinLeave, this.tags = const []});
 
   final Map<String, dynamic> community;
   final String? myRole;
   final bool joining;
   final VoidCallback onJoinLeave;
+  final List<String> tags;
 
   @override
   Widget build(BuildContext context) {
@@ -393,6 +396,14 @@ class _Header extends StatelessWidget {
                     if ((community['description'] as String?)?.isNotEmpty ?? false) ...[
                       const SizedBox(height: 8),
                       Text(community['description']),
+                    ],
+                    if (tags.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [for (final t in tags) Chip(label: Text(t), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap)],
+                      ),
                     ],
                     if (myRole != null && myRole != 'member') ...[
                       const SizedBox(height: 4),

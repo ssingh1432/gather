@@ -6,6 +6,7 @@ import '../../core/supabase_client.dart';
 import '../../shared/services/media/web_safe_pick.dart';
 import '../../shared/widgets/profile_view.dart' show PickedImagePreview;
 import '../data/repositories.dart';
+import 'tag_input.dart';
 
 /// Suggested categories — free-text is still allowed via the "Other" field
 /// so nobody is blocked by an incomplete list.
@@ -30,6 +31,7 @@ class _CC extends State<CreateCommunityScreen> {
 
   String category = 'General';
   String visibility = 'public';
+  List<String> tags = [];
   XFile? iconPick;
   XFile? bannerPick;
 
@@ -96,6 +98,8 @@ class _CC extends State<CreateCommunityScreen> {
         'rules': rules.text.trim().isEmpty ? null : rules.text.trim(),
       });
       final communityId = community['id'].toString();
+
+      if (tags.isNotEmpty) await repo.setCommunityTags(communityId, tags);
 
       String? iconUrl;
       String? bannerUrl;
@@ -168,6 +172,8 @@ class _CC extends State<CreateCommunityScreen> {
                 controller: customCategory,
                 decoration: const InputDecoration(labelText: 'Custom category'),
               ),
+            const SizedBox(height: 12),
+            TagInput(tags: tags, onChanged: (t) => setState(() => tags = t)),
             const SizedBox(height: 8),
             TextFormField(
               controller: rules,

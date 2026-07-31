@@ -17,9 +17,21 @@ class _C extends State<CommunitiesScreen> {
   final q = TextEditingController();
   late Future<List<Map<String, dynamic>>> f = _load();
   Map<String, bool> joined = {};
+  List<Map<String, dynamic>> _categoryOptions = const [];
+  String? _selectedCategoryId;
+  String? _selectedTagId;
+  String? _selectedTagName;
+
+  @override
+  void initState() {
+    super.initState();
+    repo.listCategoryOptions().then((options) {
+      if (mounted) setState(() => _categoryOptions = options);
+    });
+  }
 
   Future<List<Map<String, dynamic>>> _load() async {
-    final data = await repo.listCommunities(q.text.trim());
+    final data = await repo.listCommunitiesFiltered(query: q.text.trim(), categoryId: _selectedCategoryId, tagId: _selectedTagId);
     final uid = SupabaseConfig.currentUserId;
     if (uid != null && data.isNotEmpty) {
       joined = await repo.joinedStates(data.map((e) => e['id'].toString()).toList(), uid);
@@ -27,6 +39,64 @@ class _C extends State<CommunitiesScreen> {
       joined = {};
     }
     return data;
+  }
+
+  void _selectCategory(String? categoryId) {
+    setState(() {
+      _selectedCategoryId = categoryId;
+      f = _load();
+    });
+  }
+
+  void _clearTagFilter() => setState(() {
+        _selectedTagId = null;
+        _selectedTagName = null;
+        f = _load();
+      });
+
+  Future<void> _openTagFilterDialog() async {
+    final controller = TextEditingController();
+    List<Map<String, dynamic>> results = const [];
+    final picked = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Filter by tag'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: const InputDecoration(hintText: 'Search tags', border: OutlineInputBorder()),
+                  onChanged: (query) async {
+                    final r = await repo.searchTagOptions(query);
+                    setDialogState(() => results = r);
+                  },
+                ),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [for (final t in results) ListTile(title: Text(t['name'] as String), onTap: () => Navigator.pop(ctx, t))],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _selectedTagId = picked['id'] as String;
+      _selectedTagName = picked['name'] as String;
+      f = _load();
+    });
   }
 
   void _retry() => setState(() => f = _load());
@@ -138,6 +208,41 @@ class _C extends State<CommunitiesScreen> {
               suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _retry),
             ),
             onSubmitted: (_) => _retry(),
+          ),
+        ),
+        if (_categoryOptions.isNotEmpty)
+          SizedBox(
+            height: 40,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: ChoiceChip(label: const Text('All'), selected: _selectedCategoryId == null, onSelected: (_) => _selectCategory(null)),
+                ),
+                for (final cat in _categoryOptions)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: ChoiceChip(
+                      label: Text(cat['name'] as String),
+                      selected: _selectedCategoryId == cat['id'],
+                      onSelected: (_) => _selectCategory(cat['id'] as String),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              if (_selectedTagId == null)
+                TextButton.icon(onPressed: _openTagFilterDialog, icon: const Icon(Icons.sell_outlined, size: 18), label: const Text('Filter by tag'))
+              else
+                Chip(label: Text('#$_selectedTagName'), onDeleted: _clearTagFilter, visualDensity: VisualDensity.compact),
+            ],
           ),
         ),
         Expanded(
