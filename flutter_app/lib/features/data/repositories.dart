@@ -640,6 +640,108 @@ class CommunityRepository {
         .order('created_at', ascending: false);
     return (rows as List).cast<Map<String, dynamic>>();
   }
+
+  // ---------------------------------------------------------------------
+  // Community chat (Step 10, migration 059)
+  // ---------------------------------------------------------------------
+
+  /// Cursor-paginated message fetch via `get_community_chat_messages`.
+  /// Pass [before] as the oldest message currently loaded to fetch the
+  /// next page further back in history; leave null for the initial load
+  /// (most recent [limit] messages).
+  Future<List<ChatMessageModel>> fetchChatMessages(
+    String communityId, {
+    DateTime? before,
+    int limit = 40,
+    bool pinnedOnly = false,
+  }) async {
+    final rows = await _c.rpc('get_community_chat_messages', params: {
+      'p_community_id': communityId,
+      'p_before': before?.toIso8601String(),
+      'p_limit': limit,
+      'p_pinned_only': pinnedOnly,
+    });
+    return (rows as List).map((r) => ChatMessageModel.fromMap(r as Map<String, dynamic>)).toList();
+  }
+
+  /// Sends a text (and/or already-uploaded media) chat message. Pass
+  /// [mediaAttachments] as `{media_url (storage path), media_type, file_name,
+  /// file_size_bytes}` maps — upload each file first via
+  /// `MediaUploadService.uploadChatImage/Video/Document`, then call this once
+  /// with all of them attached to the new message row.
+  ///
+  /// [isAnnouncement] requires the `manage_chat` permission — RLS rejects
+  /// the insert outright for anyone without it, so this is a genuine
+  /// server-side gate, not just a UI toggle.
+  Future<String> sendChatMessage({
+    required String communityId,
+    required String senderId,
+    String? content,
+    String? replyToId,
+    bool isAnnouncement = false,
+    List<Map<String, dynamic>> mediaAttachments = const [],
+  }) async {
+    final inserted = await _c
+        .from('community_chat_messages')
+        .insert({
+          'community_id': communityId,
+          'sender_id': senderId,
+          'content': content,
+          'reply_to_id': replyToId,
+          'is_announcement': isAnnouncement,
+        })
+        .select('id')
+        .single();
+    final messageId = inserted['id'] as String;
+
+    if (mediaAttachments.isNotEmpty) {
+      await _c.from('community_chat_message_media').insert([
+        for (var i = 0; i < mediaAttachments.length; i++) {...mediaAttachments[i], 'message_id': messageId, 'position': i},
+      ]);
+    }
+    return messageId;
+  }
+
+  /// Sender-only edit of a message's own content (RLS: chat_messages_update_own).
+  Future<void> editChatMessage(String messageId, String newContent) async {
+    await _c.from('community_chat_messages').update({
+      'content': newContent,
+      'edited_at': DateTime.now().toIso8601String(),
+    }).eq('id', messageId);
+  }
+
+  /// Soft-deletes a message — either the sender deleting their own, or a
+  /// moderator (manage_chat) deleting someone else's. Both paths are RLS
+  /// policies; this call doesn't need to know which one applies.
+  Future<void> deleteChatMessage(String messageId, String deletedBy) async {
+    await _c.from('community_chat_messages').update({
+      'is_deleted': true,
+      'deleted_by': deletedBy,
+      'deleted_at': DateTime.now().toIso8601String(),
+      'content': null,
+    }).eq('id', messageId);
+  }
+
+  /// Pin/unpin — requires manage_chat (RLS: chat_messages_update_moderate).
+  Future<void> setChatMessagePinned(String messageId, bool pinned, {required String actorId}) async {
+    await _c.from('community_chat_messages').update({
+      'is_pinned': pinned,
+      'pinned_by': pinned ? actorId : null,
+      'pinned_at': pinned ? DateTime.now().toIso8601String() : null,
+    }).eq('id', messageId);
+  }
+
+  Future<int> getChatUnreadCount(String communityId) async {
+    final result = await _c.rpc('get_community_chat_unread_count', params: {'p_community_id': communityId});
+    return (result as num).toInt();
+  }
+
+  Future<void> markChatRead(String communityId, {String? lastMessageId}) async {
+    await _c.rpc('mark_community_chat_read', params: {
+      'p_community_id': communityId,
+      'p_last_message_id': lastMessageId,
+    });
+  }
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration

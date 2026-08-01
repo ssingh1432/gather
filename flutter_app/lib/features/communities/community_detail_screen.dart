@@ -276,6 +276,14 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
         actions: [
           if (_isMember)
             IconButton(
+              icon: const Icon(Icons.forum_outlined),
+              tooltip: 'Chat',
+              onPressed: () => context.push(
+                '/community-chat?id=${widget.communityId}&name=${Uri.encodeComponent(c?['name'] as String? ?? '')}',
+              ),
+            ),
+          if (_isMember)
+            IconButton(
               icon: const Icon(Icons.people_outline),
               tooltip: 'Members',
               onPressed: () => context.push('/community-members?id=${widget.communityId}'),

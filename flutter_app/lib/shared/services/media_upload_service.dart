@@ -39,6 +39,7 @@ class MediaUploadService {
   static const String storyBucket = 'story-media';
   static const String evidenceBucket = 'moderation-evidence';
   static const String communityMediaBucket = 'community-media';
+  static const String communityChatMediaBucket = 'community-chat-media';
 
   // Mirrors the file_size_limit set on each Supabase Storage bucket, so we
   // can reject an oversized pick instantly instead of letting the user
@@ -52,6 +53,7 @@ class MediaUploadService {
   static const int maxEvidenceBytes = 20 * 1024 * 1024; // 20MB — moderation-evidence
   static const int maxAudioBytes = 20 * 1024 * 1024; // 20MB — matches story-audio bucket limit
   static const int maxDocumentBytes = 25 * 1024 * 1024; // 25MB
+  static const int maxChatMediaBytes = 15 * 1024 * 1024; // 15MB — matches community-chat-media bucket limit
 
   static Future<void> _assertWithinLimit(XFile file, int maxBytes, String label) async {
     final size = await file.length();
@@ -318,6 +320,73 @@ class MediaUploadService {
       await video.uploadTo(storage, path, options);
       return storage.getPublicUrl(path);
     });
+  }
+  /// Uploads a community chat image or video to
+  /// `{communityId}/{senderId}/{timestamp}.{ext}` in the **private**
+  /// `community-chat-media` bucket (migration 059). Unlike post/story media,
+  /// chat attachments are not public — storage RLS only allows a community
+  /// member (or admin/mod) to read them. This returns the storage **path**,
+  /// not a public URL; callers must go through [createChatMediaSignedUrl] to
+  /// actually render it, same convention as [uploadEvidenceImage].
+  Future<String> uploadChatImage({
+    required String communityId,
+    required String senderId,
+    required XFile image,
+  }) async {
+    await _assertWithinLimit(image, maxChatMediaBytes, 'Image');
+    final prepared = await preparer.preparePostImage(image);
+    return _withAuthRetry(() async {
+      final options = FileOptions(contentType: prepared.contentType, cacheControl: '3600', upsert: false);
+      final storage = _client.storage.from(communityChatMediaBucket);
+      final ext = prepared.contentType.contains('png') ? 'png' : 'jpg';
+      final path = '$communityId/$senderId/${DateTime.now().millisecondsSinceEpoch}.$ext';
+      await prepared.original.uploadTo(storage, path, options);
+      return path;
+    });
+  }
+
+  Future<String> uploadChatVideo({
+    required String communityId,
+    required String senderId,
+    required XFile video,
+  }) async {
+    await _assertWithinLimit(video, maxChatMediaBytes, 'Video');
+    final prepared = await video_preparer.preparePostVideo(video);
+    return _withAuthRetry(() async {
+      final options = FileOptions(contentType: prepared.contentType, cacheControl: '3600', upsert: false);
+      final storage = _client.storage.from(communityChatMediaBucket);
+      final ext = prepared.contentType.split('/').last;
+      final path = '$communityId/$senderId/${DateTime.now().millisecondsSinceEpoch}.$ext';
+      await prepared.uploadTo(storage, path, options);
+      return path;
+    });
+  }
+
+  /// Uploads a chat document/file (from `file_picker`, bytes already in
+  /// memory on every platform — no io/web preparer split needed).
+  Future<String> uploadChatDocument({
+    required String communityId,
+    required String senderId,
+    required PlatformFile file,
+  }) async {
+    assertFileWithinLimit(file, maxChatMediaBytes, 'File');
+    return _withAuthRetry(() async {
+      final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final options = FileOptions(cacheControl: '3600', upsert: false);
+      final storage = _client.storage.from(communityChatMediaBucket);
+      final path = '$communityId/$senderId/${DateTime.now().millisecondsSinceEpoch}_$safeName';
+      await storage.uploadBinary(path, file.bytes!, fileOptions: options);
+      return path;
+    });
+  }
+
+  /// Short-lived signed URL for viewing a private chat attachment. Storage
+  /// RLS (migration 059) is the real gate — this just requests the URL.
+  /// 1 hour is long enough to cover a scroll session without re-signing on
+  /// every rebuild, while still expiring if the URL is ever shared outside
+  /// the app.
+  Future<String> createChatMediaSignedUrl(String path) async {
+    return _withAuthRetry(() => _client.storage.from(communityChatMediaBucket).createSignedUrl(path, 3600));
   }
 }
 

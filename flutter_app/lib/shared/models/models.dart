@@ -469,3 +469,106 @@ class StoryAudioTrack {
         durationSeconds: (map['duration_seconds'] as num?)?.toInt(),
       );
 }
+
+/// One attachment on a chat message. [mediaUrl] is a **storage path**, not
+/// a public URL — `community-chat-media` is a private bucket, so it must be
+/// resolved via `MediaUploadService.createChatMediaSignedUrl` before it can
+/// be rendered.
+class ChatMediaModel {
+  const ChatMediaModel({required this.id, required this.mediaUrl, required this.mediaType, this.fileName, this.fileSizeBytes});
+
+  final String id;
+  final String mediaUrl;
+  final String mediaType; // 'image' | 'video' | 'file'
+  final String? fileName;
+  final int? fileSizeBytes;
+
+  factory ChatMediaModel.fromMap(Map<String, dynamic> map) => ChatMediaModel(
+        id: map['id'].toString(),
+        mediaUrl: map['media_url'] as String,
+        mediaType: map['media_type'] as String,
+        fileName: map['file_name'] as String?,
+        fileSizeBytes: (map['file_size_bytes'] as num?)?.toInt(),
+      );
+}
+
+/// A single community chat message, matching the shape returned by the
+/// `get_community_chat_messages` RPC (migration 059) — sender info, reply
+/// preview, and media are all joined server-side in one round trip.
+class ChatMessageModel {
+  const ChatMessageModel({
+    required this.id,
+    required this.communityId,
+    required this.senderId,
+    required this.senderUsername,
+    this.senderAvatarUrl,
+    this.content,
+    required this.isAnnouncement,
+    required this.isPinned,
+    required this.isDeleted,
+    this.editedAt,
+    required this.createdAt,
+    this.replyToId,
+    this.replyToSenderUsername,
+    this.replyToContent,
+    this.replyToRemoved = false,
+    this.media = const [],
+  });
+
+  final String id;
+  final String communityId;
+  final String senderId;
+  final String senderUsername;
+  final String? senderAvatarUrl;
+  final String? content; // null when isDeleted
+  final bool isAnnouncement;
+  final bool isPinned;
+  final bool isDeleted;
+  final DateTime? editedAt;
+  final DateTime createdAt;
+  final String? replyToId;
+  final String? replyToSenderUsername;
+  final String? replyToContent;
+  final bool replyToRemoved;
+  final List<ChatMediaModel> media;
+
+  factory ChatMessageModel.fromMap(Map<String, dynamic> map) => ChatMessageModel(
+        id: map['id'].toString(),
+        communityId: map['community_id'].toString(),
+        senderId: map['sender_id'].toString(),
+        senderUsername: map['sender_username'] as String? ?? 'Unknown',
+        senderAvatarUrl: map['sender_avatar_url'] as String?,
+        content: map['content'] as String?,
+        isAnnouncement: map['is_announcement'] as bool? ?? false,
+        isPinned: map['is_pinned'] as bool? ?? false,
+        isDeleted: map['is_deleted'] as bool? ?? false,
+        editedAt: map['edited_at'] != null ? DateTime.parse(map['edited_at']) : null,
+        createdAt: DateTime.parse(map['created_at']),
+        replyToId: map['reply_to_id']?.toString(),
+        replyToSenderUsername: map['reply_to_sender_username'] as String?,
+        replyToContent: map['reply_to_content'] as String?,
+        replyToRemoved: map['reply_to_removed'] as bool? ?? false,
+        media: ((map['media'] as List?) ?? const [])
+            .map((m) => ChatMediaModel.fromMap(m as Map<String, dynamic>))
+            .toList(),
+      );
+
+  ChatMessageModel copyWith({bool? isPinned, bool? isDeleted, String? content, DateTime? editedAt}) => ChatMessageModel(
+        id: id,
+        communityId: communityId,
+        senderId: senderId,
+        senderUsername: senderUsername,
+        senderAvatarUrl: senderAvatarUrl,
+        content: isDeleted == true ? null : (content ?? this.content),
+        isAnnouncement: isAnnouncement,
+        isPinned: isPinned ?? this.isPinned,
+        isDeleted: isDeleted ?? this.isDeleted,
+        editedAt: editedAt ?? this.editedAt,
+        createdAt: createdAt,
+        replyToId: replyToId,
+        replyToSenderUsername: replyToSenderUsername,
+        replyToContent: replyToContent,
+        replyToRemoved: replyToRemoved,
+        media: media,
+      );
+}
