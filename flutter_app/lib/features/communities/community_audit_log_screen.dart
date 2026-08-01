@@ -107,6 +107,9 @@ class _AuditLogTile extends StatelessWidget {
       'member_warned' => '$actorName warned $target',
       'permission_overridden' => '$actorName changed a permission override',
       'settings_changed' => '$actorName updated community settings',
+      'report_resolved' => '$actorName resolved a report',
+      'report_dismissed' => '$actorName dismissed a report',
+      'post_removed' => '$actorName removed a post',
       _ => '$actorName performed $action on $target',
     };
   }
@@ -119,6 +122,9 @@ class _AuditLogTile extends StatelessWidget {
         'role_changed' => Icons.swap_horiz,
         'permission_overridden' => Icons.tune,
         'settings_changed' => Icons.settings,
+        'report_resolved' => Icons.check_circle_outline,
+        'report_dismissed' => Icons.cancel_outlined,
+        'post_removed' => Icons.delete_outline,
         _ => Icons.history,
       };
 

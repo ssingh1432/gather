@@ -7,6 +7,7 @@ import '../data/repositories.dart';
 import '../../shared/widgets/reusables.dart';
 import 'community_audit_log_screen.dart';
 import 'community_keyword_filters_screen.dart';
+import 'community_report_queue_screen.dart';
 
 /// Member roster + role management + (for private communities) pending
 /// join-request approval. All mutations go through the SECURITY DEFINER
@@ -189,6 +190,14 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
               icon: const Icon(Icons.person_add_alt_outlined),
               tooltip: 'Invite',
               onPressed: _openInviteSheet,
+            ),
+          if (_canManageReports)
+            IconButton(
+              icon: const Icon(Icons.flag_outlined),
+              tooltip: 'Report queue',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => CommunityReportQueueScreen(communityId: widget.communityId)),
+              ),
             ),
           if (_canManageReports)
             IconButton(

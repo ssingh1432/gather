@@ -547,6 +547,24 @@ class CommunityRepository {
   /// Moderation history for a community — role changes, removals, bans,
   /// unbans, warnings, permission overrides, settings changes. Requires
   /// manage_bans or manage_reports (enforced server-side by RLS).
+  // -- Community-scoped moderation queue (migration 058) ------------------
+  Future<List<Map<String, dynamic>>> getCommunityReportQueue(String communityId, {String? status = 'open'}) async {
+    final rows = await _c.rpc('get_community_report_queue', params: {'p_community_id': communityId, 'p_status': status});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> resolveCommunityReport(String reportId, {String? note}) async {
+    await _c.rpc('resolve_community_report', params: {'p_report_id': reportId, 'p_note': note});
+  }
+
+  Future<void> dismissCommunityReport(String reportId, {String? note}) async {
+    await _c.rpc('dismiss_community_report', params: {'p_report_id': reportId, 'p_note': note});
+  }
+
+  Future<void> removePostViaCommunityReport(String reportId, {String? note}) async {
+    await _c.rpc('remove_post_via_community_report', params: {'p_report_id': reportId, 'p_note': note});
+  }
+
   Future<String?> getPostPreview(String postId) async {
     final row = await _c.from('posts').select('text_content').eq('id', postId).maybeSingle();
     return row?['text_content'] as String?;
