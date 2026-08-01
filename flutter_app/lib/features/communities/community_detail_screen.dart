@@ -28,6 +28,9 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   String? _myRole;
   bool _joinRequestPending = false;
   List<String> _tags = const [];
+  Map<String, dynamic>? _activitySummary;
+  String? _announcementText;
+  bool _canManagePosts = false;
 
   Set<String> liked = <String>{};
   Set<String> bookmarked = <String>{};
@@ -43,7 +46,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   String? get _uid => SupabaseConfig.maybeClient?.auth.currentUser?.id;
   bool get _isMember => _myRole != null;
   bool get _canManage => _myRole == 'owner' || _myRole == 'admin' || _myRole == 'moderator';
-  bool get _isPrivate => _community?['visibility'] == 'private';
+  bool get _isPrivate => const {'private', 'secret', 'invite_only'}.contains(_community?['visibility']);
 
   @override
   void initState() {
@@ -73,7 +76,13 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
       if (uid != null) role = await communityRepo.myRole(widget.communityId, uid);
       _community = community;
       _myRole = role;
-      _tags = await communityRepo.getCommunityTags(widget.communityId);
+      if (community != null) {
+        _tags = await communityRepo.getCommunityTags(widget.communityId);
+        _activitySummary = await communityRepo.getCommunityActivitySummary(widget.communityId);
+        _canManagePosts = await communityRepo.hasPermission(widget.communityId, 'manage_posts');
+        final announcementPostId = community['pinned_announcement_post_id'] as String?;
+        _announcementText = announcementPostId == null ? null : await communityRepo.getPostPreview(announcementPostId);
+      }
 
       // Only fetch posts if we can actually see them: a private community's
       // feed is server-gated to members/site staff anyway (get_community_feed,
@@ -207,6 +216,57 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
     }
   }
 
+  Future<void> _openAnnouncementPicker() async {
+    List<Map<String, dynamic>> recentPosts = const [];
+    try {
+      recentPosts = await communityRepo.listRecentCommunityPosts(widget.communityId);
+    } catch (_) {
+      // fall through with an empty list; dialog still lets you clear
+    }
+    if (!mounted) return;
+    final choice = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pinned announcement'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_announcementText != null)
+                ListTile(
+                  leading: const Icon(Icons.clear, color: Colors.red),
+                  title: const Text('Clear announcement'),
+                  onTap: () => Navigator.pop(ctx, ''),
+                ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final p in recentPosts)
+                      ListTile(
+                        title: Text((p['text_content'] as String? ?? '').isEmpty ? '(no text)' : p['text_content'] as String, maxLines: 2, overflow: TextOverflow.ellipsis),
+                        onTap: () => Navigator.pop(ctx, p['id'] as String),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))],
+      ),
+    );
+    if (choice == null || !mounted) return;
+    try {
+      await communityRepo.setCommunityAnnouncement(widget.communityId, choice.isEmpty ? null : choice);
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update announcement: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = _community;
@@ -219,6 +279,12 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
               icon: const Icon(Icons.people_outline),
               tooltip: 'Members',
               onPressed: () => context.push('/community-members?id=${widget.communityId}'),
+            ),
+          if (_canManagePosts)
+            IconButton(
+              icon: const Icon(Icons.campaign_outlined),
+              tooltip: 'Manage announcement',
+              onPressed: _openAnnouncementPicker,
             ),
           if (_canManage)
             IconButton(
@@ -243,7 +309,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
-                          SliverToBoxAdapter(child: _Header(community: c, myRole: _myRole, joining: _joining, onJoinLeave: _handleJoinLeave, tags: _tags)),
+                          SliverToBoxAdapter(child: _Header(community: c, myRole: _myRole, joining: _joining, onJoinLeave: _handleJoinLeave, tags: _tags, announcementText: _announcementText, activitySummary: _activitySummary)),
                           if (_isMember)
                             SliverToBoxAdapter(
                               child: Padding(
@@ -338,19 +404,30 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.community, required this.myRole, required this.joining, required this.onJoinLeave, this.tags = const []});
+  const _Header({
+    required this.community,
+    required this.myRole,
+    required this.joining,
+    required this.onJoinLeave,
+    this.tags = const [],
+    this.announcementText,
+    this.activitySummary,
+  });
 
   final Map<String, dynamic> community;
   final String? myRole;
   final bool joining;
   final VoidCallback onJoinLeave;
   final List<String> tags;
+  final String? announcementText;
+  final Map<String, dynamic>? activitySummary;
 
   @override
   Widget build(BuildContext context) {
     final bannerUrl = community['banner_url'] as String?;
     final iconUrl = community['image_url'] as String?;
-    final isPrivate = community['visibility'] == 'private';
+    final visibility = community['visibility'] as String? ?? 'public';
+    final isPrivate = visibility != 'public';
     final memberCount = (community['member_count'] as num?)?.toInt() ?? 0;
     final isMember = myRole != null;
 
@@ -363,6 +440,20 @@ class _Header extends StatelessWidget {
               ? Image.network(bannerUrl, fit: BoxFit.cover)
               : Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
         ),
+        if (announcementText != null && announcementText!.trim().isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            color: Theme.of(context).colorScheme.primaryContainer,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.campaign, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text(announcementText!, maxLines: 3, overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -409,6 +500,13 @@ class _Header extends StatelessWidget {
                       const SizedBox(height: 4),
                       Chip(label: Text(myRole!), visualDensity: VisualDensity.compact),
                     ],
+                    if (activitySummary != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '${activitySummary!['posts_last_24h'] ?? 0} posts today · ${activitySummary!['new_members_last_7d'] ?? 0} new members this week',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -422,10 +520,10 @@ class _Header extends StatelessWidget {
             child: myRole == 'owner'
                 ? const SizedBox.shrink()
                 : OutlinedButton(
-                    onPressed: joining ? null : onJoinLeave,
+                    onPressed: joining || (!isMember && visibility != 'public' && visibility != 'private') ? null : onJoinLeave,
                     child: joining
                         ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Text(isMember ? 'Leave community' : (isPrivate ? 'Request to join' : 'Join community')),
+                        : Text(isMember ? 'Leave community' : (visibility == 'private' ? 'Request to join' : (isPrivate ? 'Ask for an invite' : 'Join community'))),
                   ),
           ),
         ),

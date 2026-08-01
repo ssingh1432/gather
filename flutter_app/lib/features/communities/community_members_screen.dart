@@ -6,6 +6,7 @@ import '../../core/supabase_client.dart';
 import '../data/repositories.dart';
 import '../../shared/widgets/reusables.dart';
 import 'community_audit_log_screen.dart';
+import 'community_keyword_filters_screen.dart';
 
 /// Member roster + role management + (for private communities) pending
 /// join-request approval. All mutations go through the SECURITY DEFINER
@@ -31,6 +32,7 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
   bool _isPrivate = false;
   bool _canManageBans = false;
   bool _canManageMembers = false;
+  bool _canManageReports = false;
 
   @override
   void initState() {
@@ -58,6 +60,7 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
       _canManageBans = await repo.hasPermission(widget.communityId, 'manage_bans');
       _bans = _canManageBans ? await repo.listActiveBans(widget.communityId) : const [];
       _canManageMembers = await repo.hasPermission(widget.communityId, 'manage_members');
+      _canManageReports = await repo.hasPermission(widget.communityId, 'manage_reports');
     } catch (e) {
       _error = 'Could not load members. $e';
     } finally {
@@ -186,6 +189,14 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
               icon: const Icon(Icons.person_add_alt_outlined),
               tooltip: 'Invite',
               onPressed: _openInviteSheet,
+            ),
+          if (_canManageReports)
+            IconButton(
+              icon: const Icon(Icons.filter_alt_outlined),
+              tooltip: 'Keyword filters',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => CommunityKeywordFiltersScreen(communityId: widget.communityId)),
+              ),
             ),
           if (_canManageBans)
             IconButton(

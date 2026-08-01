@@ -402,6 +402,66 @@ class CommunityRepository {
     return (data as List).cast<Map<String, dynamic>>();
   }
 
+  // -- Creation/type/home/moderation gap-fill (migration 057) -----------
+  Future<bool> isCommunityNameAvailable(String name) async {
+    final result = await _c.rpc('is_community_name_available', params: {'p_name': name});
+    return result as bool? ?? true;
+  }
+
+  Future<void> setCommunityPostingPermission(String communityId, String permission) async {
+    await _c.rpc('set_community_posting_permission', params: {'p_community_id': communityId, 'p_permission': permission});
+  }
+
+  Future<void> setCommunityAnnouncement(String communityId, String? postId) async {
+    await _c.rpc('set_community_announcement', params: {'p_community_id': communityId, 'p_post_id': postId});
+  }
+
+  Future<Map<String, dynamic>> getCommunityActivitySummary(String communityId) async {
+    final result = await _c.rpc('get_community_activity_summary', params: {'p_community_id': communityId});
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<String> addCommunityKeywordFilter(String communityId, String keyword, {String category = 'other', String severity = 'flag'}) async {
+    final id = await _c.rpc('add_community_keyword_filter', params: {
+      'p_community_id': communityId,
+      'p_keyword': keyword,
+      'p_category': category,
+      'p_severity': severity,
+    });
+    return id as String;
+  }
+
+  Future<List<Map<String, dynamic>>> listCommunityKeywordFilters(String communityId) async {
+    final rows = await _c.from('keyword_filters').select().eq('community_id', communityId).order('created_at', ascending: false);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> deleteCommunityKeywordFilter(String filterId) async {
+    await _c.from('keyword_filters').delete().eq('id', filterId);
+  }
+
+  Future<String> addCommunityModeratorNote(String communityId, {String? targetUserId, String? targetPostId, required String note}) async {
+    final id = await _c.rpc('add_community_moderator_note', params: {
+      'p_community_id': communityId,
+      'p_target_type': targetUserId != null ? 'user' : 'post',
+      'p_target_user_id': targetUserId,
+      'p_target_post_id': targetPostId,
+      'p_note': note,
+    });
+    return id as String;
+  }
+
+  Future<List<Map<String, dynamic>>> listCommunityModeratorNotes(String communityId, {String? targetUserId}) async {
+    var req = _c
+        .from('community_moderator_notes')
+        .select('id, moderator_id, target_type, target_user_id, target_post_id, note, created_at, '
+            'moderator:users!community_moderator_notes_moderator_id_fkey(username)')
+        .eq('community_id', communityId);
+    if (targetUserId != null) req = req.eq('target_user_id', targetUserId);
+    final rows = await req.order('created_at', ascending: false);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   Future<String> uploadIcon(String communityId, XFile image) async =>
       MediaUploadService().uploadCommunityImage(communityId: communityId, image: image, kind: CommunityImageKind.icon);
 
@@ -487,6 +547,22 @@ class CommunityRepository {
   /// Moderation history for a community — role changes, removals, bans,
   /// unbans, warnings, permission overrides, settings changes. Requires
   /// manage_bans or manage_reports (enforced server-side by RLS).
+  Future<String?> getPostPreview(String postId) async {
+    final row = await _c.from('posts').select('text_content').eq('id', postId).maybeSingle();
+    return row?['text_content'] as String?;
+  }
+
+  Future<List<Map<String, dynamic>>> listRecentCommunityPosts(String communityId, {int limit = 20}) async {
+    final rows = await _c
+        .from('posts')
+        .select('id, text_content, created_at')
+        .eq('community_id', communityId)
+        .eq('is_removed', false)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   Future<List<Map<String, dynamic>>> listAuditLog(String communityId, {int limit = 50}) async {
     final rows = await _c
         .from('community_audit_logs')

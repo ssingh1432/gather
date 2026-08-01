@@ -34,9 +34,15 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
   final desc = TextEditingController();
   final rules = TextEditingController();
   final customCategory = TextEditingController();
+  final location = TextEditingController();
+  final website = TextEditingController();
 
   String category = 'General';
   String visibility = 'public';
+  String language = 'en';
+  int? minAge;
+  String postingPermission = 'all_members';
+  String _originalPostingPermission = 'all_members';
   List<String> tags = [];
   String? _existingIconUrl;
   String? _existingBannerUrl;
@@ -61,6 +67,8 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
     desc.dispose();
     rules.dispose();
     customCategory.dispose();
+    location.dispose();
+    website.dispose();
     super.dispose();
   }
 
@@ -81,6 +89,12 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
       category = (cat != null && _categories.contains(cat)) ? cat : (cat == null ? 'General' : 'Other');
       if (category == 'Other') customCategory.text = cat ?? '';
       visibility = community['visibility'] as String? ?? 'public';
+      location.text = community['location'] as String? ?? '';
+      website.text = community['website'] as String? ?? '';
+      language = community['language'] as String? ?? 'en';
+      minAge = community['min_age'] as int?;
+      postingPermission = community['posting_permission'] as String? ?? 'all_members';
+      _originalPostingPermission = postingPermission;
       _existingIconUrl = community['image_url'] as String?;
       _existingBannerUrl = community['banner_url'] as String?;
       _isOwner = role == 'owner';
@@ -124,10 +138,17 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
         'category': resolvedCategory,
         'rules': rules.text.trim().isEmpty ? null : rules.text.trim(),
         'visibility': visibility,
+        'location': location.text.trim().isEmpty ? null : location.text.trim(),
+        'website': website.text.trim().isEmpty ? null : website.text.trim(),
+        'language': language,
+        'min_age': minAge,
         if (iconUrl != null) 'image_url': iconUrl,
         if (bannerUrl != null) 'banner_url': bannerUrl,
       });
       await repo.setCommunityTags(widget.communityId, tags);
+      if (postingPermission != _originalPostingPermission) {
+        await repo.setCommunityPostingPermission(widget.communityId, postingPermission);
+      }
 
       if (!mounted) return;
       context.pop(true);
@@ -223,6 +244,40 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
                     decoration: const InputDecoration(labelText: 'Community rules (optional)'),
                   ),
                   const SizedBox(height: 8),
+                  TextFormField(controller: location, decoration: const InputDecoration(labelText: 'Location (optional)')),
+                  TextFormField(controller: website, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'Website (optional)')),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: language,
+                          decoration: const InputDecoration(labelText: 'Language'),
+                          items: const [
+                            DropdownMenuItem(value: 'en', child: Text('English')),
+                            DropdownMenuItem(value: 'ne', child: Text('नेपाली')),
+                          ],
+                          onChanged: (v) => setState(() => language = v ?? 'en'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<int?>(
+                          initialValue: minAge,
+                          decoration: const InputDecoration(labelText: 'Age restriction'),
+                          items: const [
+                            DropdownMenuItem(value: null, child: Text('None')),
+                            DropdownMenuItem(value: 13, child: Text('13+')),
+                            DropdownMenuItem(value: 16, child: Text('16+')),
+                            DropdownMenuItem(value: 18, child: Text('18+')),
+                            DropdownMenuItem(value: 21, child: Text('21+')),
+                          ],
+                          onChanged: (v) => setState(() => minAge = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   Card(
                     child: RadioGroup<String>(
                       groupValue: visibility,
@@ -236,9 +291,41 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
                         RadioListTile<String>(
                           value: 'private',
                           title: Text('Private'),
-                          subtitle: Text('Joining requires owner/admin approval'),
+                          subtitle: Text('Visible in search, but joining requires owner/admin approval'),
+                        ),
+                        RadioListTile<String>(
+                          value: 'invite_only',
+                          title: Text('Invite only'),
+                          subtitle: Text('Visible in search, but only joinable via a direct invite or invite link'),
+                        ),
+                        RadioListTile<String>(
+                          value: 'secret',
+                          title: Text('Secret'),
+                          subtitle: Text('Hidden from search entirely — only members and people you invite can find it'),
                         ),
                       ]),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Who can post', style: Theme.of(context).textTheme.titleSmall),
+                          const SizedBox(height: 4),
+                          RadioGroup<String>(
+                            groupValue: postingPermission,
+                            onChanged: (v) => setState(() => postingPermission = v ?? 'all_members'),
+                            child: const Column(children: [
+                              RadioListTile<String>(value: 'all_members', title: Text('All members'), dense: true),
+                              RadioListTile<String>(value: 'trusted_and_above', title: Text('Trusted members and above'), dense: true),
+                              RadioListTile<String>(value: 'admins_only', title: Text('Admins only'), dense: true),
+                            ]),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   if (_error != null) ...[

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -28,12 +30,22 @@ class _CC extends State<CreateCommunityScreen> {
   final desc = TextEditingController();
   final rules = TextEditingController();
   final customCategory = TextEditingController();
+  final location = TextEditingController();
+  final website = TextEditingController();
 
   String category = 'General';
   String visibility = 'public';
+  String language = 'en';
+  int? minAge;
   List<String> tags = [];
   XFile? iconPick;
   XFile? bannerPick;
+
+  Timer? _nameDebounce;
+  bool? _nameAvailable;
+  bool _checkingName = false;
+
+  final repo = CommunityRepository();
 
   String? err;
   bool loading = false;
@@ -48,14 +60,41 @@ class _CC extends State<CreateCommunityScreen> {
         }
       });
     }
+    name.addListener(_onNameChanged);
+  }
+
+  void _onNameChanged() {
+    _nameDebounce?.cancel();
+    final value = name.text.trim();
+    if (value.length < 3) {
+      setState(() {
+        _nameAvailable = null;
+        _checkingName = false;
+      });
+      return;
+    }
+    setState(() => _checkingName = true);
+    _nameDebounce = Timer(const Duration(milliseconds: 400), () async {
+      final available = await repo.isCommunityNameAvailable(value);
+      if (mounted && name.text.trim() == value) {
+        setState(() {
+          _nameAvailable = available;
+          _checkingName = false;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
+    name.removeListener(_onNameChanged);
+    _nameDebounce?.cancel();
     name.dispose();
     desc.dispose();
     rules.dispose();
     customCategory.dispose();
+    location.dispose();
+    website.dispose();
     super.dispose();
   }
 
@@ -74,6 +113,10 @@ class _CC extends State<CreateCommunityScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (_nameAvailable == false) {
+      setState(() => err = 'That community name is already taken. Try another.');
+      return;
+    }
     final uid = SupabaseConfig.client.auth.currentUser?.id;
     if (uid == null) {
       context.go('/login?redirect=${Uri.encodeComponent('/create-community')}');
@@ -85,7 +128,6 @@ class _CC extends State<CreateCommunityScreen> {
       err = null;
     });
 
-    final repo = CommunityRepository();
     try {
       final resolvedCategory = category == 'Other' && customCategory.text.trim().isNotEmpty ? customCategory.text.trim() : category;
 
@@ -96,6 +138,10 @@ class _CC extends State<CreateCommunityScreen> {
         'category': resolvedCategory,
         'visibility': visibility,
         'rules': rules.text.trim().isEmpty ? null : rules.text.trim(),
+        'location': location.text.trim().isEmpty ? null : location.text.trim(),
+        'website': website.text.trim().isEmpty ? null : website.text.trim(),
+        'language': language,
+        'min_age': minAge,
       });
       final communityId = community['id'].toString();
 
@@ -151,7 +197,19 @@ class _CC extends State<CreateCommunityScreen> {
             TextFormField(
               controller: name,
               maxLength: 60,
-              decoration: const InputDecoration(labelText: 'Name', hintText: 'e.g. Kathmandu Photographers'),
+              decoration: InputDecoration(
+                labelText: 'Name',
+                hintText: 'e.g. Kathmandu Photographers',
+                suffixIcon: _checkingName
+                    ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                    : _nameAvailable == true
+                        ? const Icon(Icons.check_circle, color: Colors.green)
+                        : _nameAvailable == false
+                            ? const Icon(Icons.cancel, color: Colors.red)
+                            : null,
+                helperText: _nameAvailable == false ? 'That name is already taken' : _nameAvailable == true ? 'Available' : null,
+                helperStyle: TextStyle(color: _nameAvailable == false ? Colors.red : Colors.green),
+              ),
               validator: (v) => (v == null || v.trim().length < 3) ? 'Name must be at least 3 characters' : null,
             ),
             TextFormField(
@@ -182,6 +240,47 @@ class _CC extends State<CreateCommunityScreen> {
               decoration: const InputDecoration(labelText: 'Community rules (optional)', hintText: 'Shown to members before they post'),
             ),
             const SizedBox(height: 8),
+            TextFormField(
+              controller: location,
+              decoration: const InputDecoration(labelText: 'Location (optional)', hintText: 'e.g. Kathmandu, Nepal'),
+            ),
+            TextFormField(
+              controller: website,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(labelText: 'Website (optional)', hintText: 'https://...'),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: language,
+                    decoration: const InputDecoration(labelText: 'Language'),
+                    items: const [
+                      DropdownMenuItem(value: 'en', child: Text('English')),
+                      DropdownMenuItem(value: 'ne', child: Text('नेपाली')),
+                    ],
+                    onChanged: (v) => setState(() => language = v ?? 'en'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<int?>(
+                    initialValue: minAge,
+                    decoration: const InputDecoration(labelText: 'Age restriction'),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('None')),
+                      DropdownMenuItem(value: 13, child: Text('13+')),
+                      DropdownMenuItem(value: 16, child: Text('16+')),
+                      DropdownMenuItem(value: 18, child: Text('18+')),
+                      DropdownMenuItem(value: 21, child: Text('21+')),
+                    ],
+                    onChanged: (v) => setState(() => minAge = v),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Card(
               child: RadioGroup<String>(
                 groupValue: visibility,
@@ -196,6 +295,16 @@ class _CC extends State<CreateCommunityScreen> {
                     value: 'private',
                     title: Text('Private'),
                     subtitle: Text('Visible in search, but joining requires owner/admin approval'),
+                  ),
+                  RadioListTile<String>(
+                    value: 'invite_only',
+                    title: Text('Invite only'),
+                    subtitle: Text('Visible in search, but only joinable via a direct invite or invite link'),
+                  ),
+                  RadioListTile<String>(
+                    value: 'secret',
+                    title: Text('Secret'),
+                    subtitle: Text('Hidden from search entirely — only members and people you invite can find it'),
                   ),
                 ]),
               ),
