@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/supabase_client.dart';
 import '../data/repositories.dart';
 import '../../shared/widgets/reusables.dart';
+import '../../shared/utils/time_ago.dart';
 import 'community_audit_log_screen.dart';
 import 'community_keyword_filters_screen.dart';
 import 'community_report_queue_screen.dart';
@@ -243,7 +244,9 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
                           member: m,
                           canManage: _canManage,
                           canManageBans: _canManageBans,
+                          canManageReports: _canManageReports,
                           myRole: _myRole,
+                          communityId: widget.communityId,
                           onSetRole: _setRole,
                           onRemove: _remove,
                           onWarn: _warn,
@@ -422,6 +425,125 @@ class _InviteSheetState extends State<_InviteSheet> {
   }
 }
 
+/// Bottom sheet: moderator note history for one member, plus an add form.
+/// Notes are visible to anyone with manage_reports in this community —
+/// they're internal moderator context, not shown to the member themselves.
+class _MemberNotesSheet extends StatefulWidget {
+  const _MemberNotesSheet({required this.communityId, required this.userId, required this.username});
+  final String communityId;
+  final String userId;
+  final String username;
+
+  @override
+  State<_MemberNotesSheet> createState() => _MemberNotesSheetState();
+}
+
+class _MemberNotesSheetState extends State<_MemberNotesSheet> {
+  final repo = CommunityRepository();
+  final _controller = TextEditingController();
+  bool _loading = true;
+  bool _saving = false;
+  List<Map<String, dynamic>> _notes = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _notes = await repo.listCommunityModeratorNotes(widget.communityId, targetUserId: widget.userId);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not load notes: $e')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _addNote() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _saving) return;
+    setState(() => _saving = true);
+    try {
+      await repo.addCommunityModeratorNote(widget.communityId, targetUserId: widget.userId, note: text);
+      _controller.clear();
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add note: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Moderator notes — @${widget.username}', style: Theme.of(context).textTheme.titleLarge),
+          Text('Only visible to moderators — not shown to this member.', style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 12),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 280),
+            child: _loading
+                ? const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+                : _notes.isEmpty
+                    ? const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Text('No notes yet.'))
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: _notes.length,
+                        separatorBuilder: (_, __) => const Divider(height: 16),
+                        itemBuilder: (context, i) {
+                          final n = _notes[i];
+                          final moderator = (n['moderator'] as Map?)?['username'] as String?;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(n['note'] as String? ?? ''),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${moderator != null ? '@$moderator' : 'A moderator'} · ${timeAgo(DateTime.tryParse(n['created_at'] as String? ?? '') ?? DateTime.now())}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+          ),
+          const Divider(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  decoration: const InputDecoration(hintText: 'Add a note', border: OutlineInputBorder(), isDense: true),
+                  onSubmitted: (_) => _addNote(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _saving ? null : _addNote,
+                child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Add'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BanChoice {
   const _BanChoice({this.reason, this.expiresAt});
   final String? reason;
@@ -460,7 +582,9 @@ class _MemberTile extends StatelessWidget {
     required this.member,
     required this.canManage,
     required this.canManageBans,
+    required this.canManageReports,
     required this.myRole,
+    required this.communityId,
     required this.onSetRole,
     required this.onRemove,
     required this.onWarn,
@@ -469,11 +593,21 @@ class _MemberTile extends StatelessWidget {
   final Map<String, dynamic> member;
   final bool canManage;
   final bool canManageBans;
+  final bool canManageReports;
   final String? myRole;
+  final String communityId;
   final Future<void> Function(String userId, String role) onSetRole;
   final Future<void> Function(String userId, String username) onRemove;
   final Future<void> Function(String userId, String username) onWarn;
   final Future<void> Function(String userId, String username) onBan;
+
+  Future<void> _openNotes(BuildContext context, String userId, String username) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _MemberNotesSheet(communityId: communityId, userId: userId, username: username),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -486,6 +620,9 @@ class _MemberTile extends StatelessWidget {
     // Bans/warnings use the migration-052 permission system rather than
     // this hardcoded hierarchy, but the owner is still never a valid target.
     final canDiscipline = canManageBans && role != 'owner';
+    // Notes are just documentation, not a disciplinary action, so unlike
+    // warn/ban there's no reason to exclude the owner as a target.
+    final canAddNotes = canManageReports;
 
     return ListTile(
       leading: CircleAvatar(
@@ -498,7 +635,7 @@ class _MemberTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _RoleBadge(role: role),
-          if (canManageThisRow || canDiscipline)
+          if (canManageThisRow || canDiscipline || canAddNotes)
             PopupMenuButton<String>(
               onSelected: (value) {
                 switch (value) {
@@ -508,6 +645,8 @@ class _MemberTile extends StatelessWidget {
                     onWarn(userId, username);
                   case 'ban':
                     onBan(userId, username);
+                  case 'notes':
+                    _openNotes(context, userId, username);
                   default:
                     onSetRole(userId, value);
                 }
@@ -525,6 +664,10 @@ class _MemberTile extends StatelessWidget {
                   if (canManageThisRow) const PopupMenuDivider(),
                   const PopupMenuItem(value: 'warn', child: Text('Warn')),
                   const PopupMenuItem(value: 'ban', child: Text('Ban', style: TextStyle(color: Colors.red))),
+                ],
+                if (canAddNotes) ...[
+                  if (canManageThisRow || canDiscipline) const PopupMenuDivider(),
+                  const PopupMenuItem(value: 'notes', child: Text('Moderator notes')),
                 ],
               ],
             ),
