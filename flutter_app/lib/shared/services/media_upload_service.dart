@@ -255,6 +255,31 @@ class MediaUploadService {
     });
   }
 
+  /// Uploads a community event's cover image to
+  /// `{communityId}/events/{eventId}/cover` in the `community-media` bucket.
+  /// Path shape matches the storage RLS added in migration 062, which checks
+  /// segment [1] (communityId) against `manage_events` and requires segment
+  /// [2] to literally be `events`.
+  Future<String> uploadEventCover({
+    required String communityId,
+    required String eventId,
+    required XFile image,
+  }) async {
+    await _assertWithinLimit(image, maxCommunityImageBytes, 'Event cover image');
+    final prepared = await preparer.preparePostImage(image);
+    return _withAuthRetry(() async {
+      final options = FileOptions(
+        contentType: prepared.contentType,
+        cacheControl: '31536000',
+        upsert: true,
+      );
+      final storage = _client.storage.from(communityMediaBucket);
+      final path = '$communityId/events/$eventId/cover';
+      await prepared.original.uploadTo(storage, path, options);
+      return storage.getPublicUrl(path);
+    });
+  }
+
   /// Uploads a story's media to `{userId}/{storyId}` in the `story-media`
   /// bucket — user-scoped path (not post-scoped) so storage RLS can check
   /// folder == auth.uid(), same convention as the avatars bucket.

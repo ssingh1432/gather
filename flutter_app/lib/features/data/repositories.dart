@@ -742,6 +742,148 @@ class CommunityRepository {
       'p_last_message_id': lastMessageId,
     });
   }
+
+  // -- Events (Step 11, migration 061/062) -----------------------------
+  // Community-native events (no attached post required). Non-recurring
+  // events get exactly one auto-created row in event_occurrences (DB
+  // trigger); recurring events have their occurrences expanded client-side
+  // (see EventRecurrence) and bulk-inserted via addRecurringOccurrences.
+  // RLS enforces manage_events for anything beyond a user's own RSVP.
+
+  /// Creates a community-native event (no post attached). Returns the new
+  /// event id. If [isRecurring] is true, call [addRecurringOccurrences]
+  /// afterward with the expanded dates — this only creates the event shell
+  /// plus a first occurrence matching [startsAt]/[endsAt] when not recurring.
+  Future<String> createCommunityEvent({
+    required String communityId,
+    required String title,
+    String? description,
+    required DateTime startsAt,
+    DateTime? endsAt,
+    String timezone = 'Asia/Kathmandu',
+    String? locationText,
+    double? locationLat,
+    double? locationLng,
+    String? onlineUrl,
+    bool isRecurring = false,
+    String? recurrenceRule,
+    DateTime? recurrenceEndAt,
+    int? maxAttendees,
+  }) async {
+    final row = await _c
+        .from('events')
+        .insert({
+          'community_id': communityId,
+          'title': title,
+          'description': description,
+          'starts_at': startsAt.toIso8601String(),
+          'ends_at': endsAt?.toIso8601String(),
+          'timezone': timezone,
+          'location_text': locationText,
+          'location_lat': locationLat,
+          'location_lng': locationLng,
+          'online_url': onlineUrl,
+          'is_recurring': isRecurring,
+          'recurrence_rule': recurrenceRule,
+          'recurrence_end_at': recurrenceEndAt?.toIso8601String(),
+          'max_attendees': maxAttendees,
+        })
+        .select('id')
+        .single();
+    return row['id'] as String;
+  }
+
+  Future<void> updateCommunityEvent(String eventId, Map<String, dynamic> patch) async {
+    await _c.from('events').update(patch).eq('id', eventId);
+  }
+
+  /// Soft-cancels an event (and, implicitly via query filters, all of its
+  /// future occurrences) without deleting history/RSVPs.
+  Future<void> cancelCommunityEvent(String eventId) async {
+    await _c.from('events').update({'status': 'cancelled'}).eq('id', eventId);
+  }
+
+  Future<String> uploadEventCover(String communityId, String eventId, XFile image) async =>
+      MediaUploadService().uploadEventCover(communityId: communityId, eventId: eventId, image: image);
+
+  /// Bulk-inserts expanded occurrence dates for a recurring event. Pass the
+  /// concrete dates computed client-side (e.g. via the `rrule` package) from
+  /// the event's recurrence_rule — Postgres never parses RRULE syntax itself.
+  Future<void> addRecurringOccurrences(String eventId, List<DateTime> occurrenceStarts, {Duration? duration}) async {
+    if (occurrenceStarts.isEmpty) return;
+    final rows = occurrenceStarts
+        .map((start) => {
+              'event_id': eventId,
+              'starts_at': start.toIso8601String(),
+              'ends_at': duration == null ? null : start.add(duration).toIso8601String(),
+            })
+        .toList();
+    await _c.from('event_occurrences').upsert(rows, onConflict: 'event_id,starts_at');
+  }
+
+  Future<void> cancelOccurrence(String occurrenceId, {String? reason}) async {
+    await _c.from('event_occurrences').update({'is_cancelled': true, 'cancelled_reason': reason}).eq('id', occurrenceId);
+  }
+
+  /// Lists upcoming occurrences for a community's calendar, joined with
+  /// their parent event and this user's own RSVP status (if any).
+  Future<List<Map<String, dynamic>>> listCommunityUpcomingEvents(
+    String communityId, {
+    DateTime? from,
+    DateTime? to,
+    int limit = 50,
+  }) async {
+    final start = (from ?? DateTime.now()).toIso8601String();
+    var req = _c
+        .from('event_occurrences')
+        .select('id, starts_at, ends_at, is_cancelled, title_override, description_override, location_override, '
+            'events!inner(id, title, description, location_text, online_url, cover_image_url, is_recurring, status, community_id, max_attendees)')
+        .eq('events.community_id', communityId)
+        .eq('events.status', 'active')
+        .eq('is_cancelled', false)
+        .gte('starts_at', start);
+    if (to != null) req = req.lte('starts_at', to.toIso8601String());
+    final rows = await req.order('starts_at').limit(limit);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>?> getOccurrence(String occurrenceId) async => await _c
+      .from('event_occurrences')
+      .select('*, events(*)')
+      .eq('id', occurrenceId)
+      .maybeSingle();
+
+  /// Upserts the current user's RSVP for a single occurrence.
+  /// [reminderMinutesBefore] controls this user's own lead time for the
+  /// event_reminder notification (default 60 = 1 hour before).
+  Future<void> rsvpToOccurrence(String occurrenceId, String userId, String status, {int reminderMinutesBefore = 60}) async {
+    await _c.from('event_occurrence_rsvps').upsert({
+      'occurrence_id': occurrenceId,
+      'user_id': userId,
+      'status': status,
+      'reminder_minutes_before': reminderMinutesBefore,
+      'reminder_sent_at': null,
+    }, onConflict: 'occurrence_id,user_id');
+  }
+
+  Future<Map<String, dynamic>?> myOccurrenceRsvp(String occurrenceId, String userId) async => await _c
+      .from('event_occurrence_rsvps')
+      .select()
+      .eq('occurrence_id', occurrenceId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+  Future<List<Map<String, dynamic>>> listOccurrenceRsvps(String occurrenceId, {String? status}) async {
+    var req = _c.from('event_occurrence_rsvps').select('*, users(id, username, display_name, profile_photo_url)').eq('occurrence_id', occurrenceId);
+    if (status != null) req = req.eq('status', status);
+    final rows = await req.order('created_at');
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<int> occurrenceGoingCount(String occurrenceId) async {
+    final rows = await _c.from('event_occurrence_rsvps').select('id').eq('occurrence_id', occurrenceId).eq('status', 'going');
+    return (rows as List).length;
+  }
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration

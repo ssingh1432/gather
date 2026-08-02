@@ -15,6 +15,7 @@ import '../features/bookmarks/bookmarks_screen.dart';
 import '../features/communities/communities_screen.dart';
 import '../features/communities/community_chat_screen.dart';
 import '../features/communities/community_detail_screen.dart';
+import '../features/communities/community_events_screen.dart';
 import '../features/communities/community_members_screen.dart';
 import '../features/communities/create_community_screen.dart';
 import '../features/communities/edit_community_screen.dart';
@@ -154,6 +155,13 @@ final appRouter = GoRouter(
         communityName: s.uri.queryParameters['name'],
       ),
     ),
+    GoRoute(
+      path: '/community-events',
+      builder: (_, s) => CommunityEventsScreen(
+        communityId: s.uri.queryParameters['id'] ?? '',
+        communityName: s.uri.queryParameters['name'],
+      ),
+    ),
     GoRoute(path: '/edit-community', builder: (_, s) => EditCommunityScreen(communityId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
     GoRoute(path: '/user', builder: (_, s) => UserProfileScreen(userId: s.uri.queryParameters['id'] ?? '')),
@@ -276,6 +284,7 @@ const _protectedRoutes = {
   '/community',
   '/community-members',
   '/community-chat',
+  '/community-events',
   '/edit-community',
   '/post',
   '/media',

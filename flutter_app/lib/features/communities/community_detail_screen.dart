@@ -274,6 +274,13 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
       appBar: AppBar(
         title: Text(c?['name'] as String? ?? 'Community'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.event_outlined),
+            tooltip: 'Events',
+            onPressed: () => context.push(
+              '/community-events?id=${widget.communityId}&name=${Uri.encodeComponent(c?['name'] as String? ?? '')}',
+            ),
+          ),
           if (_isMember)
             IconButton(
               icon: const Icon(Icons.forum_outlined),

@@ -32,3 +32,16 @@ String _month(int month) => const [
       'Nov',
       'Dec',
     ][month - 1];
+
+const _weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/// Formats an event/occurrence start time as e.g. "Sat, Jun 14 · 6:30 PM",
+/// matching the no-`intl` convention used by [timeAgo] above.
+String formatEventDateTime(DateTime dateTime) {
+  final local = dateTime.toLocal();
+  final weekday = _weekdayNames[local.weekday - 1];
+  final hour12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
+  final minute = local.minute.toString().padLeft(2, '0');
+  final period = local.hour >= 12 ? 'PM' : 'AM';
+  return '$weekday, ${_month(local.month)} ${local.day} · $hour12:$minute $period';
+}
