@@ -147,7 +147,7 @@ class _CreateCommunityEventScreenState extends State<CreateCommunityEventScreen>
       }
 
       if (isRecurring) {
-        final duration = _endsAt != null ? _endsAt!.difference(_startsAt!) : null;
+        final duration = _endsAt?.difference(_startsAt!);
         final dates = RecurrenceExpander.expand(
           firstStart: _startsAt!,
           rule: '${_recurrenceRule!};UNTIL=${(_recurrenceEndAt ?? _startsAt!.add(const Duration(days: 180))).toIso8601String()}',
