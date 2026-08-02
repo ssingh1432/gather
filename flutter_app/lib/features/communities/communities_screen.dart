@@ -12,15 +12,20 @@ class CommunitiesScreen extends StatefulWidget {
   State<CommunitiesScreen> createState() => _C();
 }
 
+enum _DiscoverySort { popular, trending, recentlyActive }
+
 class _C extends State<CommunitiesScreen> {
   final repo = CommunityRepository();
   final q = TextEditingController();
   late Future<List<Map<String, dynamic>>> f = _load();
+  Future<List<Map<String, dynamic>>>? _suggestedFuture;
   Map<String, bool> joined = {};
   List<Map<String, dynamic>> _categoryOptions = const [];
   String? _selectedCategoryId;
   String? _selectedTagId;
   String? _selectedTagName;
+  _DiscoverySort _sort = _DiscoverySort.popular;
+  bool _verifiedOnly = false;
 
   @override
   void initState() {
@@ -28,10 +33,38 @@ class _C extends State<CommunitiesScreen> {
     repo.listCategoryOptions().then((options) {
       if (mounted) setState(() => _categoryOptions = options);
     });
+    final uid = SupabaseConfig.currentUserId;
+    if (uid != null) {
+      _suggestedFuture = repo.suggestedCommunities(uid).catchError((_) => <Map<String, dynamic>>[]);
+    }
   }
 
   Future<List<Map<String, dynamic>>> _load() async {
-    final data = await repo.listCommunitiesFiltered(query: q.text.trim(), categoryId: _selectedCategoryId, tagId: _selectedTagId);
+    final query = q.text.trim();
+    List<Map<String, dynamic>> data;
+
+    if (_sort == _DiscoverySort.trending) {
+      data = await repo.trendingCommunities();
+    } else if (_sort == _DiscoverySort.recentlyActive) {
+      data = await repo.recentlyActiveCommunities();
+    } else if (query.isNotEmpty && _selectedCategoryId == null && _selectedTagId == null) {
+      // Typo-tolerant search (pg_trgm) only applies cleanly with no other
+      // filters active — category/tag filtering still goes through the
+      // plain substring path below, which supports combining filters.
+      data = await repo.searchCommunities(query);
+    } else {
+      data = await repo.listCommunitiesFiltered(query: query, categoryId: _selectedCategoryId, tagId: _selectedTagId, verifiedOnly: _verifiedOnly);
+    }
+
+    // Trending/recently-active/search results don't accept every filter as
+    // a server-side param, so apply the remaining ones client-side — these
+    // lists are small enough that this is cheap and keeps the UI consistent
+    // no matter which sort mode is active.
+    if (_sort != _DiscoverySort.popular || (query.isNotEmpty && _selectedCategoryId == null && _selectedTagId == null)) {
+      if (_selectedCategoryId != null) data = data.where((c) => c['category_id'] == _selectedCategoryId).toList();
+      if (_verifiedOnly) data = data.where((c) => c['is_verified'] == true).toList();
+    }
+
     final uid = SupabaseConfig.currentUserId;
     if (uid != null && data.isNotEmpty) {
       joined = await repo.joinedStates(data.map((e) => e['id'].toString()).toList(), uid);
@@ -44,6 +77,20 @@ class _C extends State<CommunitiesScreen> {
   void _selectCategory(String? categoryId) {
     setState(() {
       _selectedCategoryId = categoryId;
+      f = _load();
+    });
+  }
+
+  void _selectSort(_DiscoverySort sort) {
+    setState(() {
+      _sort = sort;
+      f = _load();
+    });
+  }
+
+  void _toggleVerifiedOnly() {
+    setState(() {
+      _verifiedOnly = !_verifiedOnly;
       f = _load();
     });
   }
@@ -199,6 +246,55 @@ class _C extends State<CommunitiesScreen> {
         ],
       ),
       body: Column(children: [
+        if (_suggestedFuture != null)
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: _suggestedFuture,
+            builder: (context, snapshot) {
+              final suggestions = snapshot.data ?? const [];
+              if (suggestions.isEmpty) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(12, 10, 12, 4),
+                    child: Text('Suggested for you', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  SizedBox(
+                    height: 96,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      itemCount: suggestions.length,
+                      itemBuilder: (_, i) {
+                        final c = suggestions[i];
+                        final iconUrl = c['image_url'] as String?;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: InkWell(
+                            onTap: () => context.push('/community?id=${c['id']}'),
+                            child: SizedBox(
+                              width: 72,
+                              child: Column(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 28,
+                                    backgroundImage: (iconUrl != null && iconUrl.isNotEmpty) ? NetworkImage(iconUrl) : null,
+                                    child: (iconUrl == null || iconUrl.isEmpty) ? const Icon(Icons.groups) : null,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(c['name'] as String? ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         Padding(
           padding: const EdgeInsets.all(8),
           child: TextField(
@@ -208,6 +304,46 @@ class _C extends State<CommunitiesScreen> {
               suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _retry),
             ),
             onSubmitted: (_) => _retry(),
+          ),
+        ),
+        SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: ChoiceChip(label: const Text('Popular'), selected: _sort == _DiscoverySort.popular, onSelected: (_) => _selectSort(_DiscoverySort.popular)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: ChoiceChip(
+                  avatar: const Icon(Icons.local_fire_department_outlined, size: 16),
+                  label: const Text('Trending'),
+                  selected: _sort == _DiscoverySort.trending,
+                  onSelected: (_) => _selectSort(_DiscoverySort.trending),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: ChoiceChip(
+                  avatar: const Icon(Icons.bolt_outlined, size: 16),
+                  label: const Text('Recently active'),
+                  selected: _sort == _DiscoverySort.recentlyActive,
+                  onSelected: (_) => _selectSort(_DiscoverySort.recentlyActive),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: FilterChip(
+                  avatar: const Icon(Icons.verified, size: 16),
+                  label: const Text('Verified only'),
+                  selected: _verifiedOnly,
+                  onSelected: (_) => _toggleVerifiedOnly(),
+                ),
+              ),
+            ],
           ),
         ),
         if (_categoryOptions.isNotEmpty)

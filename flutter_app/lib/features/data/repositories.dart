@@ -383,7 +383,7 @@ class CommunityRepository {
 
   /// Communities list with optional category/tag filtering, for the
   /// discovery screen's filter chips.
-  Future<List<Map<String, dynamic>>> listCommunitiesFiltered({String query = '', String? categoryId, String? tagId}) async {
+  Future<List<Map<String, dynamic>>> listCommunitiesFiltered({String query = '', String? categoryId, String? tagId, bool verifiedOnly = false}) async {
     if (tagId != null) {
       // Filter via the join table, then hydrate full community rows.
       final tagged = await _c.from('community_tag_assignments').select('community_id').eq('tag_id', tagId);
@@ -392,14 +392,60 @@ class CommunityRepository {
       var req = _c.from('communities').select().inFilter('id', ids);
       if (query.isNotEmpty) req = req.ilike('name', '%$query%');
       if (categoryId != null) req = req.eq('category_id', categoryId);
+      if (verifiedOnly) req = req.eq('is_verified', true);
       final data = await req.order('member_count', ascending: false).order('name');
       return (data as List).cast<Map<String, dynamic>>();
     }
     var req = _c.from('communities').select();
     if (query.isNotEmpty) req = req.ilike('name', '%$query%');
     if (categoryId != null) req = req.eq('category_id', categoryId);
+    if (verifiedOnly) req = req.eq('is_verified', true);
     final data = await req.order('member_count', ascending: false).order('name');
     return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  // -- Discovery (Step 12, migration 063) --------------------------------
+
+  /// Typo-tolerant search across name + description (pg_trgm), falls back
+  /// to substring match. Prefer this over the plain ilike in
+  /// [listCommunitiesFiltered] when the user is typing a free-text query.
+  Future<List<Map<String, dynamic>>> searchCommunities(String query, {int limit = 20}) async {
+    final rows = await _c.rpc('search_communities', params: {'p_query': query, 'result_limit': limit});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Trending by recent post + join velocity (last [daysBack] days), not
+  /// just raw member_count.
+  Future<List<Map<String, dynamic>>> trendingCommunities({int daysBack = 7, int limit = 20}) async {
+    final rows = await _c.rpc('trending_communities', params: {'days_back': daysBack, 'result_limit': limit});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Personalized suggestions based on categories shared with communities
+  /// the user already belongs to. RLS-filtered automatically (SECURITY
+  /// INVOKER RPC) so private communities the caller can't see never appear.
+  Future<List<Map<String, dynamic>>> suggestedCommunities(String userId, {int limit = 10}) async {
+    final rows = await _c.rpc('suggested_communities_for_user', params: {'p_user_id': userId, 'result_limit': limit});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> recentlyActiveCommunities({int limit = 20}) async {
+    final rows = await _c.from('communities').select().order('last_activity_at', ascending: false).limit(limit);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Nearby communities within [radiusKm] of a point — future-ready; no
+  /// community currently has latitude/longitude set, so this returns an
+  /// empty list today, but the RPC and columns are in place for when
+  /// location-based discovery ships.
+  Future<List<Map<String, dynamic>>> nearbyCommunities(double lat, double lng, {double radiusKm = 50, int limit = 20}) async {
+    final rows = await _c.rpc('nearby_communities', params: {
+      'p_lat': lat,
+      'p_lng': lng,
+      'p_radius_km': radiusKm,
+      'result_limit': limit,
+    });
+    return (rows as List).map((r) => {...(r['community'] as Map<String, dynamic>), 'distance_km': r['distance_km']}).toList();
   }
 
   // -- Creation/type/home/moderation gap-fill (migration 057) -----------
