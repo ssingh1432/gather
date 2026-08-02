@@ -14,6 +14,7 @@ import '../features/beta/beta_gate.dart';
 import '../features/bookmarks/bookmarks_screen.dart';
 import '../features/communities/communities_screen.dart';
 import '../features/communities/community_chat_screen.dart';
+import '../features/communities/community_analytics_screen.dart';
 import '../features/communities/community_detail_screen.dart';
 import '../features/communities/community_events_screen.dart';
 import '../features/communities/community_members_screen.dart';
@@ -156,6 +157,13 @@ final appRouter = GoRouter(
       ),
     ),
     GoRoute(
+      path: '/community-analytics',
+      builder: (_, s) => CommunityAnalyticsScreen(
+        communityId: s.uri.queryParameters['id'] ?? '',
+        communityName: s.uri.queryParameters['name'],
+      ),
+    ),
+    GoRoute(
       path: '/community-events',
       builder: (_, s) => CommunityEventsScreen(
         communityId: s.uri.queryParameters['id'] ?? '',
@@ -285,6 +293,7 @@ const _protectedRoutes = {
   '/community-members',
   '/community-chat',
   '/community-events',
+  '/community-analytics',
   '/edit-community',
   '/post',
   '/media',

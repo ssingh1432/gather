@@ -31,6 +31,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   Map<String, dynamic>? _activitySummary;
   String? _announcementText;
   bool _canManagePosts = false;
+  bool _canViewAnalytics = false;
 
   Set<String> liked = <String>{};
   Set<String> bookmarked = <String>{};
@@ -80,6 +81,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
         _tags = await communityRepo.getCommunityTags(widget.communityId);
         _activitySummary = await communityRepo.getCommunityActivitySummary(widget.communityId);
         _canManagePosts = await communityRepo.hasPermission(widget.communityId, 'manage_posts');
+        _canViewAnalytics = await communityRepo.hasPermission(widget.communityId, 'view_analytics');
         final announcementPostId = community['pinned_announcement_post_id'] as String?;
         _announcementText = announcementPostId == null ? null : await communityRepo.getPostPreview(announcementPostId);
       }
@@ -274,6 +276,14 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
       appBar: AppBar(
         title: Text(c?['name'] as String? ?? 'Community'),
         actions: [
+          if (_canViewAnalytics)
+            IconButton(
+              icon: const Icon(Icons.insights_outlined),
+              tooltip: 'Insights',
+              onPressed: () => context.push(
+                '/community-analytics?id=${widget.communityId}&name=${Uri.encodeComponent(c?['name'] as String? ?? '')}',
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.event_outlined),
             tooltip: 'Events',

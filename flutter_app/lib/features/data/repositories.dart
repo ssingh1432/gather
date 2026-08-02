@@ -930,6 +930,41 @@ class CommunityRepository {
     final rows = await _c.from('event_occurrence_rsvps').select('id').eq('occurrence_id', occurrenceId).eq('status', 'going');
     return (rows as List).length;
   }
+
+  // -- Analytics (Step 13, migrations 064/065) ---------------------------
+  // All gated server-side by the view_analytics permission (or global
+  // admin/mod) — callers without it get a PostgrestException, which the
+  // screen surfaces as an access-denied state rather than empty data.
+
+  Future<List<Map<String, dynamic>>> communityMemberGrowth(String communityId, {int daysBack = 30}) async {
+    final rows = await _c.rpc('community_member_growth', params: {'p_community_id': communityId, 'days_back': daysBack});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> communityDailyActiveMembers(String communityId, {int daysBack = 30}) async {
+    final rows = await _c.rpc('community_daily_active_members', params: {'p_community_id': communityId, 'days_back': daysBack});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> communityRetention(String communityId) async {
+    final rows = await _c.rpc('community_retention', params: {'p_community_id': communityId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> communityPopularPosts(String communityId, {int daysBack = 30, int limit = 10}) async {
+    final rows = await _c.rpc('community_popular_posts', params: {'p_community_id': communityId, 'days_back': daysBack, 'result_limit': limit});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> communityModeratorActivity(String communityId, {int daysBack = 30}) async {
+    final rows = await _c.rpc('community_moderator_activity', params: {'p_community_id': communityId, 'days_back': daysBack});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> communityHealthScore(String communityId) async {
+    final rows = await _c.rpc('community_health_score', params: {'p_community_id': communityId});
+    return ((rows as List).first) as Map<String, dynamic>;
+  }
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration
