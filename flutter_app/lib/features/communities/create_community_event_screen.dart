@@ -204,11 +204,13 @@ class _CreateCommunityEventScreenState extends State<CreateCommunityEventScreen>
           const SizedBox(height: 16),
           TextField(
             controller: _titleCtrl,
+            maxLength: 200,
             decoration: const InputDecoration(labelText: 'Event title', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _descCtrl,
+            maxLength: 5000,
             decoration: const InputDecoration(labelText: 'Description (optional)', border: OutlineInputBorder()),
             maxLines: 3,
           ),
@@ -230,11 +232,13 @@ class _CreateCommunityEventScreenState extends State<CreateCommunityEventScreen>
           const SizedBox(height: 12),
           TextField(
             controller: _locationCtrl,
+            maxLength: 300,
             decoration: const InputDecoration(labelText: 'Location (optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.place_outlined)),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _onlineUrlCtrl,
+            maxLength: 500,
             decoration: const InputDecoration(labelText: 'Online link (optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.videocam_outlined)),
           ),
           const SizedBox(height: 20),

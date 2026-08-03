@@ -439,6 +439,8 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                       onChanged: _onComposerChanged,
                       minLines: 1,
                       maxLines: 5,
+                      maxLength: 4000,
+                      buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
                       decoration: InputDecoration(
                         hintText: _isAnnouncementMode ? 'Write an announcement…' : 'Message…',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
