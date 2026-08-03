@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/supabase_client.dart';
+import '../../core/theme/app_theme.dart';
 import '../data/repositories.dart';
 import '../../shared/widgets/reusables.dart';
 import '../../shared/utils/time_ago.dart';
 import 'community_audit_log_screen.dart';
 import 'community_keyword_filters_screen.dart';
 import 'community_report_queue_screen.dart';
+import 'community_theme.dart';
 
 /// Member roster + role management + (for private communities) pending
 /// join-request approval. All mutations go through the SECURITY DEFINER
@@ -184,7 +186,7 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Members'),
+        title: const Text('Members', style: TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           if (_canManageMembers)
             IconButton(
@@ -225,40 +227,33 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: CommunityTokens.spaceSm),
                     children: [
                       if (_requests.isNotEmpty) ...[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: Text('Pending requests (${_requests.length})', style: Theme.of(context).textTheme.titleSmall),
-                        ),
-                        for (final r in _requests) _RequestTile(request: r, onDecide: _decide),
-                        const Divider(height: 24),
+                        CommunitySectionHeader(title: 'Pending requests (${_requests.length})'),
+                        for (final r in _requests) CommunityRowCard(child: _RequestTile(request: r, onDecide: _decide)),
+                        const Divider(height: CommunityTokens.spaceXl),
                       ],
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: Text('${_members.length} member${_members.length == 1 ? '' : 's'}', style: Theme.of(context).textTheme.titleSmall),
-                      ),
+                      CommunitySectionHeader(title: '${_members.length} member${_members.length == 1 ? '' : 's'}'),
                       for (final m in _members)
-                        _MemberTile(
-                          member: m,
-                          canManage: _canManage,
-                          canManageBans: _canManageBans,
-                          canManageReports: _canManageReports,
-                          myRole: _myRole,
-                          communityId: widget.communityId,
-                          onSetRole: _setRole,
-                          onRemove: _remove,
-                          onWarn: _warn,
-                          onBan: _ban,
+                        CommunityRowCard(
+                          child: _MemberTile(
+                            member: m,
+                            canManage: _canManage,
+                            canManageBans: _canManageBans,
+                            canManageReports: _canManageReports,
+                            myRole: _myRole,
+                            communityId: widget.communityId,
+                            onSetRole: _setRole,
+                            onRemove: _remove,
+                            onWarn: _warn,
+                            onBan: _ban,
+                          ),
                         ),
                       if (_bans.isNotEmpty) ...[
-                        const Divider(height: 24),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: Text('Banned (${_bans.length})', style: Theme.of(context).textTheme.titleSmall),
-                        ),
-                        for (final b in _bans) _BannedUserTile(ban: b, onUnban: _unban),
+                        const Divider(height: CommunityTokens.spaceXl),
+                        CommunitySectionHeader(title: 'Banned (${_bans.length})'),
+                        for (final b in _bans) CommunityRowCard(child: _BannedUserTile(ban: b, onUnban: _unban)),
                       ],
                     ],
                   ),
@@ -353,14 +348,25 @@ class _InviteSheetState extends State<_InviteSheet> {
               Expanded(
                 child: TextField(
                   controller: _usernameController,
-                  decoration: const InputDecoration(hintText: '@username', border: OutlineInputBorder(), isDense: true),
+                  decoration: InputDecoration(
+                    hintText: '@username',
+                    filled: true,
+                    fillColor: CommunityColors.surfaceMuted(context),
+                    isDense: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusSm), borderSide: BorderSide.none),
+                  ),
                   onSubmitted: (_) => _sendUsernameInvite(),
                 ),
               ),
               const SizedBox(width: 8),
               FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.brandTeal,
+                  foregroundColor: AppColors.onBrandTeal,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                ),
                 onPressed: _sendingInvite ? null : _sendUsernameInvite,
-                child: _sendingInvite ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Send'),
+                child: _sendingInvite ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal)) : const Text('Send'),
               ),
             ],
           ),
@@ -394,7 +400,7 @@ class _InviteSheetState extends State<_InviteSheet> {
           ] else ...[
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(border: Border.all(color: Theme.of(context).dividerColor), borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(border: Border.all(color: CommunityColors.border(context)), borderRadius: BorderRadius.circular(CommunityTokens.radiusSm)),
               child: Row(
                 children: [
                   Expanded(
@@ -527,14 +533,25 @@ class _MemberNotesSheetState extends State<_MemberNotesSheet> {
               Expanded(
                 child: TextField(
                   controller: _controller,
-                  decoration: const InputDecoration(hintText: 'Add a note', border: OutlineInputBorder(), isDense: true),
+                  decoration: InputDecoration(
+                    hintText: 'Add a note',
+                    filled: true,
+                    fillColor: CommunityColors.surfaceMuted(context),
+                    isDense: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusSm), borderSide: BorderSide.none),
+                  ),
                   onSubmitted: (_) => _addNote(),
                 ),
               ),
               const SizedBox(width: 8),
               FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.brandTeal,
+                  foregroundColor: AppColors.onBrandTeal,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                ),
                 onPressed: _saving ? null : _addNote,
-                child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Add'),
+                child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal)) : const Text('Add'),
               ),
             ],
           ),
@@ -634,7 +651,7 @@ class _MemberTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _RoleBadge(role: role),
+          CommunityRoleChip(role: role),
           if (canManageThisRow || canDiscipline || canAddNotes)
             PopupMenuButton<String>(
               onSelected: (value) {
@@ -767,28 +784,4 @@ class _BanDialogState extends State<_BanDialog> {
   }
 }
 
-class _RoleBadge extends StatelessWidget {
-  const _RoleBadge({required this.role});
-  final String role;
 
-  @override
-  Widget build(BuildContext context) {
-    if (role == 'member') return const SizedBox.shrink();
-    final colors = {
-      'owner': Colors.amber,
-      'admin': Colors.deepPurple,
-      'moderator': Colors.teal,
-      'trusted_member': Colors.blueGrey,
-    };
-    return Padding(
-      padding: const EdgeInsets.only(right: 4),
-      child: Chip(
-        label: Text(role, style: const TextStyle(fontSize: 11)),
-        backgroundColor: (colors[role] ?? Colors.grey).withValues(alpha: 0.15),
-        visualDensity: VisualDensity.compact,
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-      ),
-    );
-  }
-}

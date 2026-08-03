@@ -116,6 +116,60 @@ class CommunityStatChip extends StatelessWidget {
 
 /// A consistent section header used across Community screens
 /// (e.g. "Suggested for you", "About", "Moderators").
+/// Wraps a ListTile-shaped row (member, join-request, banned user, etc.)
+/// in the same card treatment used elsewhere in the Community redesign,
+/// so rosters/queues look consistent with the rest of the feature.
+class CommunityRowCard extends StatelessWidget {
+  const CommunityRowCard({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: CommunityTokens.spaceLg, vertical: 3),
+        child: Container(
+          decoration: BoxDecoration(
+            color: CommunityColors.surfaceCard(context),
+            borderRadius: BorderRadius.circular(CommunityTokens.radiusMd),
+            border: Border.all(color: CommunityColors.border(context)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: child,
+        ),
+      );
+}
+
+/// Small colored role pill (owner/admin/moderator/trusted member) shared
+/// by the member roster.
+class CommunityRoleChip extends StatelessWidget {
+  const CommunityRoleChip({super.key, required this.role});
+  final String role;
+
+  static const _colors = {
+    'owner': Color(0xFFC79100),
+    'admin': Color(0xFF7C3AED),
+    'moderator': AppColors.brandTeal,
+    'trusted_member': Color(0xFF546E7A),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    if (role == 'member') return const SizedBox.shrink();
+    final color = _colors[role] ?? Theme.of(context).colorScheme.outline;
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(CommunityTokens.radiusPill),
+      ),
+      child: Text(
+        role.replaceAll('_', ' '),
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
 class CommunitySectionHeader extends StatelessWidget {
   const CommunitySectionHeader({super.key, required this.title, this.trailing});
 
