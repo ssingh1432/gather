@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase_client.dart';
+import '../../core/theme/app_theme.dart';
 import '../../features/data/repositories.dart';
 import '../../shared/models/models.dart';
 import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
+import 'community_theme.dart';
 
 class CommunityDetailScreen extends StatefulWidget {
   const CommunityDetailScreen({super.key, this.communityId = ''});
@@ -274,7 +276,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
     final c = _community;
     return Scaffold(
       appBar: AppBar(
-        title: Text(c?['name'] as String? ?? 'Community'),
+        title: Text(c?['name'] as String? ?? 'Community', style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           if (_canViewAnalytics)
             IconButton(
@@ -338,20 +340,58 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                           if (_isMember)
                             SliverToBoxAdapter(
                               child: Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: Column(children: [
-                                  TextField(controller: postCtrl, decoration: const InputDecoration(labelText: 'Create post text')),
-                                  const SizedBox(height: 8),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: ElevatedButton(
-                                      onPressed: _posting ? null : _publishCommunityPost,
-                                      child: _posting
-                                          ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                                          : const Text('Post'),
-                                    ),
+                                padding: const EdgeInsets.fromLTRB(
+                                  CommunityTokens.spaceLg,
+                                  CommunityTokens.spaceSm,
+                                  CommunityTokens.spaceLg,
+                                  CommunityTokens.spaceMd,
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.all(CommunityTokens.spaceMd),
+                                  decoration: BoxDecoration(
+                                    color: CommunityColors.surfaceCard(context),
+                                    borderRadius: BorderRadius.circular(CommunityTokens.radiusMd),
+                                    border: Border.all(color: CommunityColors.border(context)),
+                                    boxShadow: CommunityTokens.subtleShadow(context),
                                   ),
-                                ]),
+                                  child: Column(children: [
+                                    TextField(
+                                      controller: postCtrl,
+                                      minLines: 1,
+                                      maxLines: 5,
+                                      decoration: InputDecoration(
+                                        hintText: 'Share something with the community…',
+                                        filled: true,
+                                        fillColor: CommunityColors.surfaceMuted(context),
+                                        contentPadding: const EdgeInsets.all(CommunityTokens.spaceMd),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(CommunityTokens.radiusSm),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(CommunityTokens.radiusSm),
+                                          borderSide: const BorderSide(color: AppColors.brandTeal, width: 1.5),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: CommunityTokens.spaceSm),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: FilledButton(
+                                        onPressed: _posting ? null : _publishCommunityPost,
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: AppColors.brandTeal,
+                                          foregroundColor: AppColors.onBrandTeal,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                        ),
+                                        child: _posting
+                                            ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal))
+                                            : const Text('Post', style: TextStyle(fontWeight: FontWeight.w600)),
+                                      ),
+                                    ),
+                                  ]),
+                                ),
                               ),
                             ),
                           if (_isPrivate && !_isMember)
@@ -455,104 +495,161 @@ class _Header extends StatelessWidget {
     final isPrivate = visibility != 'public';
     final memberCount = (community['member_count'] as num?)?.toInt() ?? 0;
     final isMember = myRole != null;
+    final hasBanner = bannerUrl != null && bannerUrl.isNotEmpty;
+    final hasIcon = iconUrl != null && iconUrl.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AspectRatio(
-          aspectRatio: 3,
-          child: (bannerUrl != null && bannerUrl.isNotEmpty)
-              ? Image.network(bannerUrl, fit: BoxFit.cover)
-              : Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            AspectRatio(
+              aspectRatio: 3,
+              child: hasBanner
+                  ? Image.network(bannerUrl, fit: BoxFit.cover)
+                  : Container(decoration: BoxDecoration(gradient: CommunityColors.bannerFallbackGradient(context))),
+            ),
+            Positioned(
+              left: CommunityTokens.spaceLg,
+              bottom: -34,
+              child: Container(
+                width: 76,
+                height: 76,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: hasIcon ? null : CommunityColors.bannerFallbackGradient(context),
+                    image: hasIcon ? DecorationImage(image: NetworkImage(iconUrl), fit: BoxFit.cover) : null,
+                  ),
+                  child: hasIcon ? null : const Icon(Icons.groups, color: Colors.white, size: 28),
+                ),
+              ),
+            ),
+          ],
         ),
         if (announcementText != null && announcementText!.trim().isNotEmpty)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            color: Theme.of(context).colorScheme.primaryContainer,
+            margin: const EdgeInsets.fromLTRB(CommunityTokens.spaceLg, CommunityTokens.spaceLg, CommunityTokens.spaceLg, 0),
+            padding: const EdgeInsets.all(CommunityTokens.spaceMd),
+            decoration: BoxDecoration(
+              color: AppColors.brandTealLight.withValues(alpha: 0.28),
+              borderRadius: BorderRadius.circular(CommunityTokens.radiusSm),
+              border: Border.all(color: AppColors.brandTeal.withValues(alpha: 0.35)),
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.campaign, size: 18),
+                const Icon(Icons.campaign, size: 18, color: AppColors.brandTeal),
                 const SizedBox(width: 8),
                 Expanded(child: Text(announcementText!, maxLines: 3, overflow: TextOverflow.ellipsis)),
               ],
             ),
           ),
         Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+          padding: const EdgeInsets.fromLTRB(CommunityTokens.spaceLg, CommunityTokens.spaceLg, CommunityTokens.spaceLg, 0),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundImage: (iconUrl != null && iconUrl.isNotEmpty) ? NetworkImage(iconUrl) : null,
-                child: (iconUrl == null || iconUrl.isEmpty) ? const Icon(Icons.groups) : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      Flexible(
-                        child: Text(community['name'] ?? '', style: Theme.of(context).textTheme.titleLarge, overflow: TextOverflow.ellipsis),
-                      ),
-                      if (isPrivate) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.lock_outline, size: 16)),
-                      if (community['is_verified'] == true) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.verified, size: 16, color: Colors.blue)),
-                    ]),
-                    const SizedBox(height: 2),
-                    Text(
-                      [
-                        if ((community['category'] as String?)?.isNotEmpty ?? false) community['category'],
-                        '$memberCount member${memberCount == 1 ? '' : 's'}',
-                      ].join(' · '),
-                      style: Theme.of(context).textTheme.bodySmall,
+              Row(children: [
+                Flexible(
+                  child: Text(
+                    community['name'] ?? '',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isPrivate) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.lock_outline, size: 16)),
+                if (community['is_verified'] == true) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.verified, size: 16, color: AppColors.brandTeal)),
+              ]),
+              if ((community['category'] as String?)?.isNotEmpty ?? false) ...[
+                const SizedBox(height: 2),
+                Text(
+                  community['category'] as String,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ],
+              if ((community['description'] as String?)?.isNotEmpty ?? false) ...[
+                const SizedBox(height: CommunityTokens.spaceSm),
+                Text(community['description'], style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4)),
+              ],
+              const SizedBox(height: CommunityTokens.spaceMd),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  CommunityStatChip(icon: Icons.groups_outlined, label: '$memberCount member${memberCount == 1 ? '' : 's'}'),
+                  if (activitySummary != null)
+                    CommunityStatChip(
+                      icon: Icons.local_fire_department_outlined,
+                      label: '${activitySummary!['posts_last_24h'] ?? 0} posts today',
                     ),
-                    if ((community['description'] as String?)?.isNotEmpty ?? false) ...[
-                      const SizedBox(height: 8),
-                      Text(community['description']),
-                    ],
-                    if (tags.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [for (final t in tags) Chip(label: Text(t), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap)],
+                  if (activitySummary != null)
+                    CommunityStatChip(
+                      icon: Icons.person_add_alt_outlined,
+                      label: '${activitySummary!['new_members_last_7d'] ?? 0} new this week',
+                    ),
+                  if (myRole != null && myRole != 'member')
+                    CommunityStatChip(icon: Icons.shield_outlined, label: myRole!, color: AppColors.brandTeal),
+                ],
+              ),
+              if (tags.isNotEmpty) ...[
+                const SizedBox(height: CommunityTokens.spaceSm),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final t in tags)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: CommunityColors.border(context)),
+                          borderRadius: BorderRadius.circular(CommunityTokens.radiusPill),
+                        ),
+                        child: Text('#$t', style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600)),
                       ),
-                    ],
-                    if (myRole != null && myRole != 'member') ...[
-                      const SizedBox(height: 4),
-                      Chip(label: Text(myRole!), visualDensity: VisualDensity.compact),
-                    ],
-                    if (activitySummary != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        '${activitySummary!['posts_last_24h'] ?? 0} posts today · ${activitySummary!['new_members_last_7d'] ?? 0} new members this week',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline),
-                      ),
-                    ],
                   ],
                 ),
-              ),
+              ],
             ],
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.fromLTRB(
+            CommunityTokens.spaceLg,
+            CommunityTokens.spaceLg,
+            CommunityTokens.spaceLg,
+            CommunityTokens.spaceSm,
+          ),
           child: SizedBox(
             width: double.infinity,
             child: myRole == 'owner'
                 ? const SizedBox.shrink()
                 : OutlinedButton(
                     onPressed: joining || (!isMember && visibility != 'public' && visibility != 'private') ? null : onJoinLeave,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                      side: BorderSide(color: isMember ? CommunityColors.border(context) : AppColors.brandTeal),
+                      foregroundColor: isMember ? null : AppColors.brandTeal,
+                    ),
                     child: joining
                         ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Text(isMember ? 'Leave community' : (visibility == 'private' ? 'Request to join' : (isPrivate ? 'Ask for an invite' : 'Join community'))),
+                        : Text(
+                            isMember ? 'Leave community' : (visibility == 'private' ? 'Request to join' : (isPrivate ? 'Ask for an invite' : 'Join community')),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
                   ),
           ),
         ),
-        const Divider(height: 24),
+        const Divider(height: CommunityTokens.spaceLg),
       ],
     );
   }
