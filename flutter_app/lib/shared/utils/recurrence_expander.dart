@@ -53,8 +53,12 @@ class RecurrenceExpander {
         break;
 
       case 'WEEKLY':
+        // _dayCodes is SU-first (index 0) to match RRULE's BYDAY vocabulary,
+        // but Dart's DateTime.weekday is MO=1..SU=7 — convert with a
+        // 6-day rotation rather than a plain +1, or SU (and every other
+        // day) maps to the wrong weekday.
         final targetWeekdays = (byDay != null && byDay.isNotEmpty)
-            ? byDay.map((d) => _dayCodes.indexOf(d) + 1).toList() // DateTime.weekday: Mon=1..Sun=7
+            ? byDay.map((d) => ((_dayCodes.indexOf(d) + 6) % 7) + 1).toList()
             : [firstStart.weekday];
         var weekStart = firstStart.subtract(Duration(days: firstStart.weekday - 1));
         var weekIndex = 0;
@@ -64,7 +68,7 @@ class RecurrenceExpander {
               ..sort((a, b) => a.compareTo(b));
             for (final c in candidates) {
               if (results.length >= maxCount) break;
-              if (until != null && c.isAfter(until)) return _withTime(results, firstStart);
+              if (until != null && c.isAfter(until)) return results;
               results.add(DateTime(c.year, c.month, c.day, firstStart.hour, firstStart.minute));
             }
           }
@@ -93,6 +97,4 @@ class RecurrenceExpander {
 
     return results;
   }
-
-  static List<DateTime> _withTime(List<DateTime> dates, DateTime reference) => dates;
 }
