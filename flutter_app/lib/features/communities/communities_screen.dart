@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase_client.dart';
+import '../../core/theme/app_theme.dart';
 import '../../features/data/repositories.dart';
 import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
+import 'community_theme.dart';
+import 'widgets/community_card.dart';
 
 class CommunitiesScreen extends StatefulWidget {
   const CommunitiesScreen({super.key});
@@ -219,7 +222,7 @@ class _C extends State<CommunitiesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Communities'),
+        title: const Text('Communities', style: TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           IconButton(
             icon: const Icon(Icons.key_outlined),
@@ -255,34 +258,59 @@ class _C extends State<CommunitiesScreen> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(12, 10, 12, 4),
-                    child: Text('Suggested for you', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
+                  const CommunitySectionHeader(title: 'Suggested for you'),
                   SizedBox(
-                    height: 96,
+                    height: 106,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: CommunityTokens.spaceMd),
                       itemCount: suggestions.length,
                       itemBuilder: (_, i) {
                         final c = suggestions[i];
                         final iconUrl = c['image_url'] as String?;
+                        final hasImage = iconUrl != null && iconUrl.isNotEmpty;
                         return Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 6),
                           child: InkWell(
+                            borderRadius: BorderRadius.circular(CommunityTokens.radiusMd),
                             onTap: () => context.push('/community?id=${c['id']}'),
                             child: SizedBox(
-                              width: 72,
+                              width: 76,
                               child: Column(
                                 children: [
-                                  CircleAvatar(
-                                    radius: 28,
-                                    backgroundImage: (iconUrl != null && iconUrl.isNotEmpty) ? NetworkImage(iconUrl) : null,
-                                    child: (iconUrl == null || iconUrl.isEmpty) ? const Icon(Icons.groups) : null,
+                                  Container(
+                                    width: 60,
+                                    height: 60,
+                                    padding: const EdgeInsets.all(2.5),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: LinearGradient(
+                                        colors: [AppColors.brandTeal, AppColors.brandTealLight],
+                                      ),
+                                    ),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: CommunityColors.surfaceCard(context),
+                                      ),
+                                      padding: const EdgeInsets.all(2),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: hasImage ? null : CommunityColors.bannerFallbackGradient(context),
+                                          image: hasImage ? DecorationImage(image: NetworkImage(iconUrl), fit: BoxFit.cover) : null,
+                                        ),
+                                        child: hasImage ? null : const Icon(Icons.groups, color: Colors.white, size: 20),
+                                      ),
+                                    ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(c['name'] as String? ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    c['name'] as String? ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+                                  ),
                                 ],
                               ),
                             ),
@@ -296,12 +324,34 @@ class _C extends State<CommunitiesScreen> {
             },
           ),
         Padding(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.fromLTRB(
+            CommunityTokens.spaceLg,
+            CommunityTokens.spaceMd,
+            CommunityTokens.spaceLg,
+            CommunityTokens.spaceSm,
+          ),
           child: TextField(
             controller: q,
             decoration: InputDecoration(
               hintText: 'Search communities',
-              suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _retry),
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: IconButton(icon: const Icon(Icons.arrow_forward, size: 18), onPressed: _retry),
+              filled: true,
+              fillColor: CommunityColors.surfaceMuted(context),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(CommunityTokens.radiusPill),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(CommunityTokens.radiusPill),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(CommunityTokens.radiusPill),
+                borderSide: const BorderSide(color: AppColors.brandTeal, width: 1.5),
+              ),
             ),
             onSubmitted: (_) => _retry(),
           ),
@@ -310,11 +360,21 @@ class _C extends State<CommunitiesScreen> {
           height: 40,
           child: ListView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: CommunityTokens.spaceMd),
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: ChoiceChip(label: const Text('Popular'), selected: _sort == _DiscoverySort.popular, onSelected: (_) => _selectSort(_DiscoverySort.popular)),
+                child: ChoiceChip(
+                  label: const Text('Popular'),
+                  selected: _sort == _DiscoverySort.popular,
+                  onSelected: (_) => _selectSort(_DiscoverySort.popular),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                  selectedColor: AppColors.brandTealLight,
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: _sort == _DiscoverySort.popular ? AppColors.onBrandTeal : null,
+                  ),
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -323,6 +383,12 @@ class _C extends State<CommunitiesScreen> {
                   label: const Text('Trending'),
                   selected: _sort == _DiscoverySort.trending,
                   onSelected: (_) => _selectSort(_DiscoverySort.trending),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                  selectedColor: AppColors.brandTealLight,
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: _sort == _DiscoverySort.trending ? AppColors.onBrandTeal : null,
+                  ),
                 ),
               ),
               Padding(
@@ -332,6 +398,12 @@ class _C extends State<CommunitiesScreen> {
                   label: const Text('Recently active'),
                   selected: _sort == _DiscoverySort.recentlyActive,
                   onSelected: (_) => _selectSort(_DiscoverySort.recentlyActive),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                  selectedColor: AppColors.brandTealLight,
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: _sort == _DiscoverySort.recentlyActive ? AppColors.onBrandTeal : null,
+                  ),
                 ),
               ),
               Padding(
@@ -341,6 +413,9 @@ class _C extends State<CommunitiesScreen> {
                   label: const Text('Verified only'),
                   selected: _verifiedOnly,
                   onSelected: (_) => _toggleVerifiedOnly(),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                  selectedColor: AppColors.brandTealLight,
+                  labelStyle: TextStyle(fontWeight: FontWeight.w600, color: _verifiedOnly ? AppColors.onBrandTeal : null),
                 ),
               ),
             ],
@@ -351,11 +426,16 @@ class _C extends State<CommunitiesScreen> {
             height: 40,
             child: ListView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: CommunityTokens.spaceMd),
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: ChoiceChip(label: const Text('All'), selected: _selectedCategoryId == null, onSelected: (_) => _selectCategory(null)),
+                  child: ChoiceChip(
+                    label: const Text('All'),
+                    selected: _selectedCategoryId == null,
+                    onSelected: (_) => _selectCategory(null),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                  ),
                 ),
                 for (final cat in _categoryOptions)
                   Padding(
@@ -364,23 +444,36 @@ class _C extends State<CommunitiesScreen> {
                       label: Text(cat['name'] as String),
                       selected: _selectedCategoryId == cat['id'],
                       onSelected: (_) => _selectCategory(cat['id'] as String),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
                     ),
                   ),
               ],
             ),
           ),
-        const SizedBox(height: 4),
+        const SizedBox(height: CommunityTokens.spaceXs),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: CommunityTokens.spaceMd),
           child: Row(
             children: [
               if (_selectedTagId == null)
-                TextButton.icon(onPressed: _openTagFilterDialog, icon: const Icon(Icons.sell_outlined, size: 18), label: const Text('Filter by tag'))
+                TextButton.icon(
+                  onPressed: _openTagFilterDialog,
+                  icon: const Icon(Icons.sell_outlined, size: 18),
+                  label: const Text('Filter by tag'),
+                  style: TextButton.styleFrom(foregroundColor: AppColors.brandTeal),
+                )
               else
-                Chip(label: Text('#$_selectedTagName'), onDeleted: _clearTagFilter, visualDensity: VisualDensity.compact),
+                Chip(
+                  label: Text('#$_selectedTagName'),
+                  onDeleted: _clearTagFilter,
+                  visualDensity: VisualDensity.compact,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                  backgroundColor: AppColors.brandTealLight.withValues(alpha: 0.4),
+                ),
             ],
           ),
         ),
+        const Divider(height: CommunityTokens.spaceLg),
         Expanded(
           child: FutureBuilder(
             future: f,
@@ -413,6 +506,7 @@ class _C extends State<CommunitiesScreen> {
               return RefreshIndicator(
                 onRefresh: () async => _retry(),
                 child: ListView(
+                  padding: const EdgeInsets.only(top: CommunityTokens.spaceXs, bottom: CommunityTokens.spaceXl),
                   children: data
                       .map((e) => CommunityCard(
                             community: e,
