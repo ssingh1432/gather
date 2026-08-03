@@ -88,6 +88,31 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'community_invite':
         final communityName = (n['metadata'] as Map?)?['community_name']?.toString() ?? 'a community';
         return '$actorName invited you to join $communityName';
+      case 'community_join_request':
+        final requester = (n['metadata'] as Map?)?['requester_username']?.toString() ?? 'Someone';
+        final communityName = (n['metadata'] as Map?)?['community_name']?.toString() ?? 'your community';
+        return '@$requester wants to join $communityName';
+      case 'community_join_update':
+        final status = (n['metadata'] as Map?)?['status']?.toString() ?? 'updated';
+        final communityName = (n['metadata'] as Map?)?['community_name']?.toString() ?? 'the community';
+        return status == 'approved' ? 'Your request to join $communityName was approved' : 'Your request to join $communityName was declined';
+      case 'community_role_changed':
+        final newRole = (n['metadata'] as Map?)?['new_role']?.toString() ?? 'member';
+        final communityName = (n['metadata'] as Map?)?['community_name']?.toString() ?? 'a community';
+        return 'You are now $newRole in $communityName';
+      case 'community_warning':
+        final communityName = (n['metadata'] as Map?)?['community_name']?.toString() ?? 'a community';
+        return 'You received a warning in $communityName';
+      case 'community_ban':
+        final communityName = (n['metadata'] as Map?)?['community_name']?.toString() ?? 'a community';
+        return 'You were banned from $communityName';
+      case 'community_announcement':
+        final communityName = (n['metadata'] as Map?)?['community_name']?.toString() ?? 'a community';
+        return 'Announcement in $communityName';
+      case 'community_event_created':
+        final title = (n['metadata'] as Map?)?['title']?.toString() ?? 'a new event';
+        final communityName = (n['metadata'] as Map?)?['community_name']?.toString() ?? 'a community';
+        return '"$title" was scheduled in $communityName';
       case 'post_repost':
         return '$actorName reposted your post';
       case 'poll_vote':
@@ -133,6 +158,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.groups_outlined;
       case 'community_invite':
         return Icons.mail_outline;
+      case 'community_join_request':
+        return Icons.person_add_outlined;
+      case 'community_join_update':
+        return Icons.how_to_reg_outlined;
+      case 'community_role_changed':
+        return Icons.badge_outlined;
+      case 'community_warning':
+        return Icons.warning_amber_outlined;
+      case 'community_ban':
+        return Icons.block_outlined;
+      case 'community_announcement':
+        return Icons.campaign_outlined;
+      case 'community_event_created':
+        return Icons.event_outlined;
       case 'post_repost':
         return Icons.repeat_outlined;
       case 'poll_vote':
@@ -176,9 +215,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } else if (type == 'community_post') {
       final communityId = (n['metadata'] as Map?)?['community_id']?.toString();
       if (communityId != null) context.push('/community?id=$communityId');
+    } else if (type == 'community_role_changed' ||
+        type == 'community_join_update' ||
+        type == 'community_warning' ||
+        type == 'community_ban' ||
+        type == 'community_announcement') {
+      final communityId = (n['metadata'] as Map?)?['community_id']?.toString();
+      if (communityId != null) context.push('/community?id=$communityId');
+    } else if (type == 'community_event_created') {
+      final communityId = (n['metadata'] as Map?)?['community_id']?.toString();
+      final communityName = (n['metadata'] as Map?)?['community_name']?.toString();
+      if (communityId != null) {
+        context.push('/community-events?id=$communityId${communityName != null ? '&name=${Uri.encodeComponent(communityName)}' : ''}');
+      }
     }
-    // community_invite: handled entirely by the inline Accept/Decline
-    // buttons on its tile — tapping the row elsewhere just marks it read.
+    // community_invite, community_join_request: handled entirely by the
+    // inline Accept/Decline or Approve/Reject buttons on their own tile —
+    // tapping the row elsewhere just marks it read.
     // security_alert, login_alert, admin_broadcast: mark-as-read is enough,
     // there's no dedicated detail screen for these yet.
   }
@@ -187,7 +240,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     final uid = SupabaseConfig.maybeClient?.auth.currentUser?.id;
     return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
+      appBar: AppBar(
+        title: const Text('Notifications'),
+        actions: [
+          if (uid != null)
+            TextButton(
+              onPressed: () async {
+                await SupabaseConfig.client.from('notifications').update({'is_read': true}).eq('recipient_id', uid).eq('is_read', false);
+                if (mounted) _retry();
+              },
+              child: const Text('Mark all read'),
+            ),
+        ],
+      ),
       body: uid == null
           ? const EmptyState(icon: Icons.login, title: 'Login required', message: 'Log in to view notifications.')
           : FutureBuilder<List<dynamic>>(
@@ -217,6 +282,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
                       if (n['type'] == 'community_invite') {
                         return _InviteNotificationTile(notification: n, actorName: actorName, avatarUrl: avatarUrl, isRead: isRead);
+                      }
+                      if (n['type'] == 'community_join_request') {
+                        return _JoinRequestNotificationTile(notification: n, isRead: isRead);
                       }
 
                       return ListTile(
@@ -313,6 +381,66 @@ class _InviteNotificationTileState extends State<_InviteNotificationTile> {
                   children: [
                     TextButton(onPressed: () => _respond(true), child: const Text('Accept')),
                     TextButton(onPressed: () => _respond(false), child: const Text('Decline')),
+                  ],
+                ),
+            },
+    );
+  }
+}
+
+/// A community_join_request notification row with inline Approve/Reject —
+/// same rationale as [_InviteNotificationTile]: responding IS the point of
+/// this notification, so it shouldn't need a second screen.
+class _JoinRequestNotificationTile extends StatefulWidget {
+  const _JoinRequestNotificationTile({required this.notification, required this.isRead});
+  final Map<String, dynamic> notification;
+  final bool isRead;
+
+  @override
+  State<_JoinRequestNotificationTile> createState() => _JoinRequestNotificationTileState();
+}
+
+class _JoinRequestNotificationTileState extends State<_JoinRequestNotificationTile> {
+  final repo = CommunityRepository();
+  bool _busy = false;
+  String? _resolution; // 'approved' | 'rejected'
+
+  Future<void> _decide(bool approve) async {
+    final metadata = widget.notification['metadata'] as Map? ?? const {};
+    final requestId = metadata['request_id']?.toString();
+    if (requestId == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await repo.decideJoinRequest(requestId, approve);
+      await SupabaseConfig.client.from('notifications').update({'is_read': true}).eq('id', widget.notification['id']);
+      if (mounted) setState(() => _resolution = approve ? 'approved' : 'rejected');
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not respond to request: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final metadata = widget.notification['metadata'] as Map? ?? const {};
+    final requester = metadata['requester_username']?.toString() ?? 'Someone';
+    final communityName = metadata['community_name']?.toString() ?? 'your community';
+
+    return ListTile(
+      tileColor: widget.isRead ? null : Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.25),
+      leading: const CircleAvatar(child: Icon(Icons.person_add_outlined)),
+      title: Text('@$requester wants to join $communityName'),
+      subtitle: _busy
+          ? const LinearProgressIndicator()
+          : switch (_resolution) {
+              'approved' => const Text('Approved'),
+              'rejected' => const Text('Rejected'),
+              _ => Row(
+                  children: [
+                    TextButton(onPressed: () => _decide(true), child: const Text('Approve')),
+                    TextButton(onPressed: () => _decide(false), child: const Text('Reject')),
                   ],
                 ),
             },
