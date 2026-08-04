@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../data/repositories.dart';
+import '../../core/theme/app_theme.dart';
+import 'community_theme.dart';
 
 /// Community-scoped keyword filters (migration 057) — layered on top of
 /// the site-wide filters set by global admins. A match here only affects
@@ -62,8 +64,13 @@ class _CommunityKeywordFiltersScreenState extends State<CommunityKeywordFiltersS
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Keyword filters')),
-      floatingActionButton: FloatingActionButton(onPressed: _addFilter, child: const Icon(Icons.add)),
+      appBar: AppBar(title: const Text('Keyword filters', style: TextStyle(fontWeight: FontWeight.w700))),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: AppColors.brandTeal,
+        foregroundColor: AppColors.onBrandTeal,
+        onPressed: _addFilter,
+        child: const Icon(Icons.add),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -71,29 +78,59 @@ class _CommunityKeywordFiltersScreenState extends State<CommunityKeywordFiltersS
               : Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        'These apply only within this community, on top of any site-wide filters. '
-                        '"Block" prevents the post outright; "Flag" lets it through but files an automatic report for review.',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      padding: const EdgeInsets.all(CommunityTokens.spaceLg),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(CommunityTokens.spaceMd),
+                        decoration: BoxDecoration(
+                          color: CommunityColors.surfaceMuted(context),
+                          borderRadius: BorderRadius.circular(CommunityTokens.radiusSm),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.info_outline, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'These apply only within this community, on top of any site-wide filters. '
+                                '"Block" prevents the post outright; "Flag" lets it through but files an automatic report for review.',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     Expanded(
                       child: _filters.isEmpty
                           ? const Center(child: Text('No community-specific filters yet.'))
-                          : ListView.separated(
-                              itemCount: _filters.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (context, i) {
-                                final f = _filters[i];
-                                final severity = f['severity'] as String? ?? 'flag';
-                                return ListTile(
-                                  leading: Icon(severity == 'block' ? Icons.block : Icons.flag_outlined, color: severity == 'block' ? Colors.red : Colors.orange),
-                                  title: Text(f['keyword'] as String? ?? ''),
-                                  subtitle: Text('${f['category']} · $severity'),
-                                  trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _deleteFilter(f['id'] as String)),
-                                );
-                              },
+                          : ListView(
+                              padding: const EdgeInsets.symmetric(vertical: CommunityTokens.spaceXs),
+                              children: [
+                                for (final f in _filters)
+                                  CommunityRowCard(
+                                    child: Builder(builder: (context) {
+                                      final severity = f['severity'] as String? ?? 'flag';
+                                      final isBlock = severity == 'block';
+                                      return ListTile(
+                                        leading: Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color: (isBlock ? Colors.red : Colors.orange).withValues(alpha: 0.14),
+                                            borderRadius: BorderRadius.circular(CommunityTokens.radiusSm),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Icon(isBlock ? Icons.block : Icons.flag_outlined, color: isBlock ? Colors.red : Colors.orange, size: 19),
+                                        ),
+                                        title: Text(f['keyword'] as String? ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                        subtitle: Text('${f['category']} · $severity'),
+                                        trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _deleteFilter(f['id'] as String)),
+                                      );
+                                    }),
+                                  ),
+                              ],
                             ),
                     ),
                   ],
@@ -136,31 +173,46 @@ class _AddFilterDialogState extends State<_AddFilterDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Add keyword filter'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(controller: _controller, autofocus: true, decoration: const InputDecoration(labelText: 'Keyword or phrase', border: OutlineInputBorder())),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _category,
-            decoration: const InputDecoration(labelText: 'Category'),
-            items: [for (final c in _reportCategories) DropdownMenuItem(value: c, child: Text(c.replaceAll('_', ' ')))],
-            onChanged: (v) => setState(() => _category = v ?? 'other'),
-          ),
-          const SizedBox(height: 8),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'flag', label: Text('Flag')),
-              ButtonSegment(value: 'block', label: Text('Block')),
-            ],
-            selected: {_severity},
-            onSelectionChanged: (s) => setState(() => _severity = s.first),
-          ),
-        ],
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              decoration: communityFieldDecoration(context, labelText: 'Keyword or phrase'),
+            ),
+            const SizedBox(height: CommunityTokens.spaceMd),
+            DropdownButtonFormField<String>(
+              initialValue: _category,
+              decoration: communityFieldDecoration(context, labelText: 'Category'),
+              items: [for (final c in _reportCategories) DropdownMenuItem(value: c, child: Text(c.replaceAll('_', ' ')))],
+              onChanged: (v) => setState(() => _category = v ?? 'other'),
+            ),
+            const SizedBox(height: CommunityTokens.spaceMd),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'flag', label: Text('Flag')),
+                ButtonSegment(value: 'block', label: Text('Block')),
+              ],
+              selected: {_severity},
+              onSelectionChanged: (s) => setState(() => _severity = s.first),
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: AppColors.brandTealLight,
+                selectedForegroundColor: AppColors.onBrandTeal,
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.brandTeal,
+            foregroundColor: AppColors.onBrandTeal,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+          ),
           onPressed: () {
             if (_controller.text.trim().isEmpty) return;
             Navigator.pop(context, _NewFilter(_controller.text.trim(), _category, _severity));
