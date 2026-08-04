@@ -170,6 +170,33 @@ class CommunityRoleChip extends StatelessWidget {
   }
 }
 
+/// Consistent rounded, filled field styling for every Community form
+/// (create/edit community, tag input, invite/notes sheets, etc).
+InputDecoration communityFieldDecoration(
+  BuildContext context, {
+  required String labelText,
+  String? hintText,
+  String? helperText,
+  TextStyle? helperStyle,
+  Widget? suffixIcon,
+  Widget? prefixIcon,
+}) {
+  final radius = BorderRadius.circular(CommunityTokens.radiusSm);
+  return InputDecoration(
+    labelText: labelText,
+    hintText: hintText,
+    helperText: helperText,
+    helperStyle: helperStyle,
+    suffixIcon: suffixIcon,
+    prefixIcon: prefixIcon,
+    filled: true,
+    fillColor: CommunityColors.surfaceMuted(context),
+    border: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide.none),
+    enabledBorder: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide.none),
+    focusedBorder: OutlineInputBorder(borderRadius: radius, borderSide: const BorderSide(color: AppColors.brandTeal, width: 1.5)),
+  );
+}
+
 class CommunitySectionHeader extends StatelessWidget {
   const CommunitySectionHeader({super.key, required this.title, this.trailing});
 

@@ -5,9 +5,11 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
+import '../../core/theme/app_theme.dart';
 import '../../shared/services/media/web_safe_pick.dart';
 import '../../shared/widgets/profile_view.dart' show PickedImagePreview;
 import '../data/repositories.dart';
+import 'community_theme.dart';
 import 'tag_input.dart';
 
 /// Suggested categories — free-text is still allowed via the "Other" field
@@ -173,11 +175,16 @@ class _CC extends State<CreateCommunityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Community')),
+      appBar: AppBar(title: const Text('Create Community', style: TextStyle(fontWeight: FontWeight.w700))),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(
+            CommunityTokens.spaceLg,
+            CommunityTokens.spaceLg,
+            CommunityTokens.spaceLg,
+            CommunityTokens.spaceXxl,
+          ),
           children: [
             _ImagePickerTile(
               label: 'Banner (optional)',
@@ -185,7 +192,7 @@ class _CC extends State<CreateCommunityScreen> {
               image: bannerPick,
               onTap: () => _pickImage(banner: true),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: CommunityTokens.spaceMd),
             _ImagePickerTile(
               label: 'Icon (optional)',
               aspect: 1,
@@ -193,11 +200,12 @@ class _CC extends State<CreateCommunityScreen> {
               circular: true,
               onTap: () => _pickImage(banner: false),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: CommunityTokens.spaceXl),
             TextFormField(
               controller: name,
               maxLength: 60,
-              decoration: InputDecoration(
+              decoration: communityFieldDecoration(
+                context,
                 labelText: 'Name',
                 hintText: 'e.g. Kathmandu Photographers',
                 suffixIcon: _checkingName
@@ -212,50 +220,54 @@ class _CC extends State<CreateCommunityScreen> {
               ),
               validator: (v) => (v == null || v.trim().length < 3) ? 'Name must be at least 3 characters' : null,
             ),
+            const SizedBox(height: CommunityTokens.spaceSm),
             TextFormField(
               controller: desc,
               maxLength: 300,
               maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Description', hintText: 'What is this community about?'),
+              decoration: communityFieldDecoration(context, labelText: 'Description', hintText: 'What is this community about?'),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: CommunityTokens.spaceSm),
             DropdownButtonFormField<String>(
               initialValue: category,
-              decoration: const InputDecoration(labelText: 'Category'),
+              decoration: communityFieldDecoration(context, labelText: 'Category'),
               items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
               onChanged: (v) => setState(() => category = v ?? 'General'),
             ),
-            if (category == 'Other')
+            if (category == 'Other') ...[
+              const SizedBox(height: CommunityTokens.spaceSm),
               TextFormField(
                 controller: customCategory,
-                decoration: const InputDecoration(labelText: 'Custom category'),
+                decoration: communityFieldDecoration(context, labelText: 'Custom category'),
               ),
-            const SizedBox(height: 12),
+            ],
+            const SizedBox(height: CommunityTokens.spaceMd),
             TagInput(tags: tags, onChanged: (t) => setState(() => tags = t)),
-            const SizedBox(height: 8),
+            const SizedBox(height: CommunityTokens.spaceSm),
             TextFormField(
               controller: rules,
               maxLength: 1000,
               maxLines: 4,
-              decoration: const InputDecoration(labelText: 'Community rules (optional)', hintText: 'Shown to members before they post'),
+              decoration: communityFieldDecoration(context, labelText: 'Community rules (optional)', hintText: 'Shown to members before they post'),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: CommunityTokens.spaceSm),
             TextFormField(
               controller: location,
-              decoration: const InputDecoration(labelText: 'Location (optional)', hintText: 'e.g. Kathmandu, Nepal'),
+              decoration: communityFieldDecoration(context, labelText: 'Location (optional)', hintText: 'e.g. Kathmandu, Nepal'),
             ),
+            const SizedBox(height: CommunityTokens.spaceSm),
             TextFormField(
               controller: website,
               keyboardType: TextInputType.url,
-              decoration: const InputDecoration(labelText: 'Website (optional)', hintText: 'https://...'),
+              decoration: communityFieldDecoration(context, labelText: 'Website (optional)', hintText: 'https://...'),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: CommunityTokens.spaceMd),
             Row(
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: language,
-                    decoration: const InputDecoration(labelText: 'Language'),
+                    decoration: communityFieldDecoration(context, labelText: 'Language'),
                     items: const [
                       DropdownMenuItem(value: 'en', child: Text('English')),
                       DropdownMenuItem(value: 'ne', child: Text('नेपाली')),
@@ -263,11 +275,11 @@ class _CC extends State<CreateCommunityScreen> {
                     onChanged: (v) => setState(() => language = v ?? 'en'),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: CommunityTokens.spaceMd),
                 Expanded(
                   child: DropdownButtonFormField<int?>(
                     initialValue: minAge,
-                    decoration: const InputDecoration(labelText: 'Age restriction'),
+                    decoration: communityFieldDecoration(context, labelText: 'Age restriction'),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('None')),
                       DropdownMenuItem(value: 13, child: Text('13+')),
@@ -280,8 +292,15 @@ class _CC extends State<CreateCommunityScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Card(
+            const SizedBox(height: CommunityTokens.spaceMd),
+            const CommunitySectionHeader(title: 'Who can join'),
+            Container(
+              decoration: BoxDecoration(
+                color: CommunityColors.surfaceCard(context),
+                borderRadius: BorderRadius.circular(CommunityTokens.radiusMd),
+                border: Border.all(color: CommunityColors.border(context)),
+              ),
+              clipBehavior: Clip.antiAlias,
               child: RadioGroup<String>(
                 groupValue: visibility,
                 onChanged: (v) => setState(() => visibility = v ?? 'public'),
@@ -310,15 +329,24 @@ class _CC extends State<CreateCommunityScreen> {
               ),
             ),
             if (err != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: CommunityTokens.spaceMd),
               Text(err!, style: const TextStyle(color: Colors.red)),
             ],
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: loading ? null : _submit,
-              child: loading
-                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Create'),
+            const SizedBox(height: CommunityTokens.spaceLg),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: loading ? null : _submit,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.brandTeal,
+                  foregroundColor: AppColors.onBrandTeal,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                ),
+                child: loading
+                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal))
+                    : const Text('Create', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
             ),
           ],
         ),
