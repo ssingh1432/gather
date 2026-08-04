@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/repositories.dart';
 import '../../shared/widgets/reusables.dart';
 import '../../shared/utils/time_ago.dart';
+import 'community_theme.dart';
 
 /// Read-only moderation history for a community: role changes, removals,
 /// bans, unbans, warnings, permission overrides, settings changes.
@@ -48,7 +49,7 @@ class _CommunityAuditLogScreenState extends State<CommunityAuditLogScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Moderation log')),
+      appBar: AppBar(title: const Text('Moderation log', style: TextStyle(fontWeight: FontWeight.w700))),
       body: _loading
           ? const FeedSkeletonList()
           : _error != null
@@ -57,11 +58,9 @@ class _CommunityAuditLogScreenState extends State<CommunityAuditLogScreen> {
                   ? const Center(child: Text('No moderation actions yet.'))
                   : RefreshIndicator(
                       onRefresh: _load,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: _entries.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, i) => _AuditLogTile(entry: _entries[i]),
+                      child: ListView(
+                        padding: const EdgeInsets.symmetric(vertical: CommunityTokens.spaceSm),
+                        children: [for (final e in _entries) CommunityRowCard(child: _AuditLogTile(entry: e))],
                       ),
                     ),
     );
@@ -84,13 +83,27 @@ class _AuditLogTile extends StatelessWidget {
     final targetName = target['username'] != null ? '@${target['username']}' : null;
 
     return ListTile(
-      leading: CircleAvatar(backgroundColor: _iconColor(action).withValues(alpha: 0.15), child: Icon(_icon(action), color: _iconColor(action), size: 20)),
-      title: Text(_describe(action, actorName, targetName)),
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(color: _iconColor(action).withValues(alpha: 0.14), borderRadius: BorderRadius.circular(CommunityTokens.radiusSm)),
+        alignment: Alignment.center,
+        child: Icon(_icon(action), color: _iconColor(action), size: 19),
+      ),
+      title: Text(_describe(action, actorName, targetName), style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (metadata['reason'] != null && (metadata['reason'] as String).isNotEmpty) Text('Reason: ${metadata['reason']}'),
-          if (createdAt != null) Text(timeAgo(createdAt), style: Theme.of(context).textTheme.bodySmall),
+          if (metadata['reason'] != null && (metadata['reason'] as String).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text('Reason: ${metadata['reason']}', style: Theme.of(context).textTheme.bodySmall),
+            ),
+          if (createdAt != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(timeAgo(createdAt), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline)),
+            ),
         ],
       ),
       isThreeLine: metadata['reason'] != null,
