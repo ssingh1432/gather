@@ -62,6 +62,20 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
     }
   }
 
+  String get pageTypeLabel {
+    final type = page?['page_type'] as String?;
+    return kPageTypes[type] ?? type ?? 'Other';
+  }
+
+  String? get businessHoursNote {
+    final hours = page?['business_hours'];
+    if (hours is Map) {
+      final note = hours['note'];
+      if (note is String && note.isNotEmpty) return note;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -112,7 +126,7 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
                               Wrap(
                                 spacing: 8,
                                 children: [
-                                  PageStatChip(icon: Icons.category_outlined, label: kPageTypes[page!['page_type']] ?? page!['page_type'] as String),
+                                  PageStatChip(icon: Icons.category_outlined, label: pageTypeLabel),
                                   if (page!['location'] != null) PageStatChip(icon: Icons.place_outlined, label: page!['location'] as String),
                                 ],
                               ),
@@ -127,8 +141,7 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
                               if (page!['phone'] != null) _InfoRow(icon: Icons.phone_outlined, text: page!['phone'] as String),
                               if (page!['email'] != null) _InfoRow(icon: Icons.email_outlined, text: page!['email'] as String),
                               if (page!['country'] != null) _InfoRow(icon: Icons.public, text: page!['country'] as String),
-                              if ((page!['business_hours'] as Map?)?['note'] != null)
-                                _InfoRow(icon: Icons.schedule_outlined, text: (page!['business_hours'] as Map)['note'] as String),
+                              if (businessHoursNote != null) _InfoRow(icon: Icons.schedule_outlined, text: businessHoursNote!),
                             ],
                           ),
                         ),

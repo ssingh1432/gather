@@ -271,9 +271,9 @@ class _CreatePageScreenState extends State<CreatePageScreen> {
                 : DropdownButtonFormField<String?>(
                     initialValue: categoryId,
                     decoration: pageFieldDecoration(context, labelText: 'Category (optional)'),
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('None')),
-                      ...categories.map((c) => DropdownMenuItem(value: c['id'] as String, child: Text(c['name'] as String))),
+                    items: <DropdownMenuItem<String?>>[
+                      const DropdownMenuItem<String?>(value: null, child: Text('None')),
+                      for (final c in categories) DropdownMenuItem<String?>(value: c['id'] as String, child: Text(c['name'] as String)),
                     ],
                     onChanged: (v) => setState(() => categoryId = v),
                   ),
