@@ -19,6 +19,9 @@ import '../features/communities/community_detail_screen.dart';
 import '../features/communities/community_events_screen.dart';
 import '../features/communities/community_members_screen.dart';
 import '../features/communities/create_community_screen.dart';
+import '../features/pages/create_page_screen.dart';
+import '../features/pages/my_pages_screen.dart';
+import '../features/pages/page_preview_screen.dart';
 import '../features/communities/edit_community_screen.dart';
 import '../features/home/home_feed_screen.dart';
 import '../features/home/post_detail_screen.dart';
@@ -148,6 +151,9 @@ final appRouter = GoRouter(
     ),
     GoRoute(path: '/community', builder: (_, s) => CommunityDetailScreen(communityId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/create-community', builder: (_, __) => const CreateCommunityScreen()),
+    GoRoute(path: '/my-pages', builder: (_, __) => const MyPagesScreen()),
+    GoRoute(path: '/create-page', builder: (_, __) => const CreatePageScreen()),
+    GoRoute(path: '/page-preview', builder: (_, s) => PagePreviewScreen(pageId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/community-members', builder: (_, s) => CommunityMembersScreen(communityId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(
       path: '/community-chat',

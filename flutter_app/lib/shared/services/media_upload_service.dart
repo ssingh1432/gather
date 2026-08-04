@@ -40,6 +40,7 @@ class MediaUploadService {
   static const String evidenceBucket = 'moderation-evidence';
   static const String communityMediaBucket = 'community-media';
   static const String communityChatMediaBucket = 'community-chat-media';
+  static const String pageMediaBucket = 'page-media';
 
   // Mirrors the file_size_limit set on each Supabase Storage bucket, so we
   // can reject an oversized pick instantly instead of letting the user
@@ -50,6 +51,7 @@ class MediaUploadService {
   static const int maxPostMediaBytes = 100 * 1024 * 1024; // 100MB — post-media, story-media
   static const int maxAvatarBytes = 5 * 1024 * 1024; // 5MB — avatars
   static const int maxCommunityImageBytes = 5 * 1024 * 1024; // 5MB — community-media
+  static const int maxPageImageBytes = 10 * 1024 * 1024; // 10MB — page-media (matches bucket file_size_limit, migration 074)
   static const int maxEvidenceBytes = 20 * 1024 * 1024; // 20MB — moderation-evidence
   static const int maxAudioBytes = 20 * 1024 * 1024; // 20MB — matches story-audio bucket limit
   static const int maxDocumentBytes = 25 * 1024 * 1024; // 25MB
@@ -280,6 +282,30 @@ class MediaUploadService {
     });
   }
 
+  /// Uploads a Page's logo or cover image to `{pageId}/{kind}` in the
+  /// `page-media` bucket. Storage RLS (migration 074) only allows a page's
+  /// manage_content/manage_settings holders (or the owner) to write into
+  /// that page's folder — same convention as community-media (050).
+  Future<String> uploadPageImage({
+    required String pageId,
+    required XFile image,
+    required PageImageKind kind,
+  }) async {
+    await _assertWithinLimit(image, maxPageImageBytes, 'Page image');
+    final prepared = await preparer.preparePostImage(image);
+    return _withAuthRetry(() async {
+      final options = FileOptions(
+        contentType: prepared.contentType,
+        cacheControl: '31536000',
+        upsert: true,
+      );
+      final storage = _client.storage.from(pageMediaBucket);
+      final path = '$pageId/${kind.name}';
+      await prepared.original.uploadTo(storage, path, options);
+      return storage.getPublicUrl(path);
+    });
+  }
+
   /// Uploads a story's media to `{userId}/{storyId}` in the `story-media`
   /// bucket — user-scoped path (not post-scoped) so storage RLS can check
   /// folder == auth.uid(), same convention as the avatars bucket.
@@ -431,3 +457,5 @@ enum ProfileImageKind { avatar, cover }
 /// the community detail screen), matching `ProfileImageKind`'s avatar/cover
 /// split.
 enum CommunityImageKind { icon, banner }
+
+enum PageImageKind { logo, cover }

@@ -967,6 +967,86 @@ class CommunityRepository {
   }
 }
 
+/// Backs the Professional Page System (migrations 072-074). This is a thin,
+/// un-privileged client — every permission check (owner/manage_content/
+/// manage_settings/...) is enforced server-side via RLS and the
+/// current_user_page_role / current_user_has_page_permission functions, so
+/// this repository can't be used to bypass anything the database wouldn't
+/// already allow. Only Step 3 (Page Creation) methods live here for now;
+/// later steps (roles, followers, posts, reviews, analytics, messaging,
+/// reports) extend this same class.
+class PageRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
+
+  Future<List<Map<String, dynamic>>> listCategories() async {
+    final rows = await _c.from('page_categories').select().order('name');
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Debounced-callsite friendly: checks reserved words, collision with an
+  /// existing personal profile handle, and collision with another page's
+  /// username, all in one round trip (see is_page_username_available,
+  /// migration 072).
+  Future<bool> isUsernameAvailable(String username) async {
+    final result = await _c.rpc('is_page_username_available', params: {'p_username': username});
+    return result as bool? ?? false;
+  }
+
+  /// Creates the page. owner_id/created_by must be the current user (enforced
+  /// by RLS's `pages_insert` policy regardless of what's sent here).
+  Future<Map<String, dynamic>> createPage(Map<String, dynamic> payload) async =>
+      await _c.from('pages').insert(payload).select().single();
+
+  Future<Map<String, dynamic>?> getPage(String pageId) async =>
+      await _c.from('pages').select().eq('id', pageId).maybeSingle();
+
+  Future<Map<String, dynamic>?> getPageByUsername(String username) async =>
+      await _c.from('pages').select().eq('username', username).maybeSingle();
+
+  Future<void> updatePage(String pageId, Map<String, dynamic> patch) async {
+    await _c.from('pages').update(patch).eq('id', pageId);
+  }
+
+  /// Pages owned or staffed by the current user, most recent first — powers
+  /// a "Your Pages" list on the create/manage entry point.
+  Future<List<Map<String, dynamic>>> listMyPages(String userId) async {
+    final owned = await _c.from('pages').select().eq('owner_id', userId).isFilter('deleted_at', null);
+    final staffed = await _c
+        .from('page_roles')
+        .select('role, pages(*)')
+        .eq('user_id', userId)
+        .neq('role', 'owner');
+    final staffedPages = (staffed as List)
+        .map((e) => e['pages'])
+        .whereType<Map<String, dynamic>>()
+        .where((p) => p['deleted_at'] == null)
+        .toList();
+    final seen = <String>{};
+    final all = <Map<String, dynamic>>[];
+    for (final p in [...(owned as List).cast<Map<String, dynamic>>(), ...staffedPages]) {
+      if (seen.add(p['id'].toString())) all.add(p);
+    }
+    all.sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
+    return all;
+  }
+
+  Future<String> uploadLogo(String pageId, XFile image) async =>
+      MediaUploadService().uploadPageImage(pageId: pageId, image: image, kind: PageImageKind.logo);
+
+  Future<String> uploadCover(String pageId, XFile image) async =>
+      MediaUploadService().uploadPageImage(pageId: pageId, image: image, kind: PageImageKind.cover);
+
+  Future<String?> currentUserPageRole(String pageId) async {
+    final result = await _c.rpc('current_user_page_role', params: {'p_page_id': pageId});
+    return result as String?;
+  }
+
+  Future<bool> hasPagePermission(String pageId, String permissionKey) async {
+    final result = await _c.rpc('current_user_has_page_permission', params: {'p_page_id': pageId, 'p_permission_key': permissionKey});
+    return result as bool? ?? false;
+  }
+}
+
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration
 /// 037) — text/hashtag/mention/author/community/media-type/date filters
 /// plus sort, all enforced through normal RLS (the RPC is SECURITY
