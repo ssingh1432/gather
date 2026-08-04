@@ -382,33 +382,29 @@ class _ImageEditTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final placeholder = Container(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      alignment: Alignment.center,
-      child: Icon(circular ? Icons.groups : Icons.image_outlined, color: Theme.of(context).colorScheme.outline),
-    );
-    Widget preview = placeholder;
+    final hasExisting = existingUrl != null && existingUrl!.isNotEmpty;
+    Widget? preview;
     if (pick != null) {
       preview = PickedImagePreview(bytesFuture: pick!.readAsBytes());
-    } else if (existingUrl != null && existingUrl!.isNotEmpty) {
-      preview = Image.network(existingUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => placeholder);
+    } else if (hasExisting) {
+      preview = Image.network(
+        existingUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          decoration: BoxDecoration(gradient: CommunityColors.bannerFallbackGradient(context)),
+          alignment: Alignment.center,
+          child: Icon(circular ? Icons.groups : Icons.image_outlined, color: Colors.white.withValues(alpha: 0.9)),
+        ),
+      );
     }
-    return InkWell(
+    return CommunityImagePickerFrame(
+      label: label,
+      circular: circular,
+      aspect: 3,
       onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(circular ? 999 : 8),
-            child: AspectRatio(
-              aspectRatio: circular ? 1 : 3,
-              child: SizedBox(width: circular ? 88 : double.infinity, child: preview),
-            ),
-          ),
-        ],
-      ),
+      hasImage: pick != null || hasExisting,
+      preview: preview,
+      placeholderIcon: circular ? Icons.groups : Icons.image_outlined,
     );
   }
 }

@@ -366,31 +366,14 @@ class _ImagePickerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final placeholder = Container(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      alignment: Alignment.center,
-      child: Icon(circular ? Icons.groups : Icons.image_outlined, color: Theme.of(context).colorScheme.outline),
-    );
-    Widget preview = placeholder;
-    if (image != null) {
-      preview = PickedImagePreview(bytesFuture: image!.readAsBytes());
-    }
-    return InkWell(
+    return CommunityImagePickerFrame(
+      label: label,
+      circular: circular,
+      aspect: aspect,
       onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(circular ? 999 : 8),
-            child: AspectRatio(
-              aspectRatio: circular ? 1 : aspect,
-              child: SizedBox(width: circular ? 88 : double.infinity, child: preview),
-            ),
-          ),
-        ],
-      ),
+      hasImage: image != null,
+      preview: image != null ? PickedImagePreview(bytesFuture: image!.readAsBytes()) : null,
+      placeholderIcon: circular ? Icons.groups : Icons.image_outlined,
     );
   }
 }

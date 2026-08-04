@@ -227,3 +227,78 @@ class CommunitySectionHeader extends StatelessWidget {
         ),
       );
 }
+
+/// Shared banner/icon picker frame for the Create/Edit Community forms:
+/// bordered rounded frame, gradient placeholder when empty, and a small
+/// brand-teal edit/camera badge overlay so it reads as clearly tappable.
+class CommunityImagePickerFrame extends StatelessWidget {
+  const CommunityImagePickerFrame({
+    super.key,
+    required this.label,
+    required this.circular,
+    required this.aspect,
+    required this.onTap,
+    required this.hasImage,
+    required this.preview,
+    this.placeholderIcon = Icons.image_outlined,
+  });
+
+  final String label;
+  final bool circular;
+  final double aspect;
+  final VoidCallback onTap;
+  final bool hasImage;
+  final Widget? preview;
+  final IconData placeholderIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = circular ? CommunityTokens.radiusPill : CommunityTokens.radiusMd;
+    final content = hasImage && preview != null
+        ? preview!
+        : Container(
+            decoration: BoxDecoration(gradient: CommunityColors.bannerFallbackGradient(context)),
+            alignment: Alignment.center,
+            child: Icon(placeholderIcon, color: Colors.white.withValues(alpha: 0.9), size: circular ? 26 : 32),
+          );
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(radius),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(radius),
+                child: Container(
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(radius), border: Border.all(color: CommunityColors.border(context))),
+                  child: AspectRatio(
+                    aspectRatio: circular ? 1 : aspect,
+                    child: SizedBox(width: circular ? 88 : double.infinity, child: content),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: circular ? -2 : 8,
+                bottom: circular ? -2 : 8,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.brandTeal,
+                    border: Border.all(color: CommunityColors.surfaceCard(context), width: 2),
+                  ),
+                  child: Icon(hasImage ? Icons.edit : Icons.add_a_photo, size: 13, color: AppColors.onBrandTeal),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
