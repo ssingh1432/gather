@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../data/repositories.dart';
+import '../../core/theme/app_theme.dart';
+import 'community_theme.dart';
 
 /// Community-scoped report queue (migration 058). Only reports on posts
 /// within this community, visible/actionable to whoever holds
@@ -93,7 +95,17 @@ class _CommunityReportQueueScreenState extends State<CommunityReportQueueScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
-        content: TextField(controller: controller, autofocus: true, maxLines: 3, decoration: InputDecoration(hintText: hint, border: const OutlineInputBorder())),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          decoration: InputDecoration(
+            hintText: hint,
+            filled: true,
+            fillColor: CommunityColors.surfaceMuted(context),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusSm), borderSide: BorderSide.none),
+          ),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Confirm without a note')),
           FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim().isEmpty ? null : controller.text.trim()), child: const Text('Confirm')),
@@ -106,14 +118,14 @@ class _CommunityReportQueueScreenState extends State<CommunityReportQueueScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Report queue'),
+        title: const Text('Report queue', style: TextStyle(fontWeight: FontWeight.w700)),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: SizedBox(
             height: 48,
             child: ListView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: CommunityTokens.spaceMd),
               children: [
                 for (final entry in _statusOptions.entries)
                   Padding(
@@ -125,6 +137,9 @@ class _CommunityReportQueueScreenState extends State<CommunityReportQueueScreen>
                         setState(() => _statusFilter = entry.key);
                         _load();
                       },
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                      selectedColor: AppColors.brandTealLight,
+                      labelStyle: TextStyle(fontWeight: FontWeight.w600, color: _statusFilter == entry.key ? AppColors.onBrandTeal : null),
                     ),
                   ),
               ],
@@ -140,15 +155,19 @@ class _CommunityReportQueueScreenState extends State<CommunityReportQueueScreen>
                   ? Center(child: Text('No ${_statusOptions[_statusFilter]!.toLowerCase()} reports.'))
                   : RefreshIndicator(
                       onRefresh: _load,
-                      child: ListView.separated(
-                        itemCount: _reports.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, i) => _ReportTile(
-                          report: _reports[i],
-                          onResolve: _statusFilter == 'open' || _statusFilter == 'reviewing' ? () => _resolve(_reports[i]['id'] as String) : null,
-                          onDismiss: _statusFilter == 'open' || _statusFilter == 'reviewing' ? () => _dismiss(_reports[i]['id'] as String) : null,
-                          onRemovePost: _statusFilter == 'open' || _statusFilter == 'reviewing' ? () => _removePost(_reports[i]['id'] as String) : null,
-                        ),
+                      child: ListView(
+                        padding: const EdgeInsets.symmetric(vertical: CommunityTokens.spaceSm),
+                        children: [
+                          for (final r in _reports)
+                            CommunityRowCard(
+                              child: _ReportTile(
+                                report: r,
+                                onResolve: _statusFilter == 'open' || _statusFilter == 'reviewing' ? () => _resolve(r['id'] as String) : null,
+                                onDismiss: _statusFilter == 'open' || _statusFilter == 'reviewing' ? () => _dismiss(r['id'] as String) : null,
+                                onRemovePost: _statusFilter == 'open' || _statusFilter == 'reviewing' ? () => _removePost(r['id'] as String) : null,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
     );
@@ -171,37 +190,67 @@ class _ReportTile extends StatelessWidget {
     final isAutomated = report['is_automated'] == true;
 
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(CommunityTokens.spaceMd),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Chip(label: Text(category), visualDensity: VisualDensity.compact, backgroundColor: Colors.red.withValues(alpha: 0.1)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(CommunityTokens.radiusPill),
+                ),
+                child: Text(category, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w700, fontSize: 11)),
+              ),
               const SizedBox(width: 8),
               if (isAutomated)
-                const Chip(label: Text('Auto-flagged'), visualDensity: VisualDensity.compact)
+                CommunityStatChip(icon: Icons.smart_toy_outlined, label: 'Auto-flagged')
               else
-                Text('Reported by ${reporter != null ? '@$reporter' : 'a user'}', style: Theme.of(context).textTheme.bodySmall),
+                Expanded(
+                  child: Text(
+                    'Reported by ${reporter != null ? '@$reporter' : 'a user'}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(preview.isEmpty ? '(no text content)' : preview, maxLines: 3, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: CommunityTokens.spaceSm),
+          Text(preview.isEmpty ? '(no text content)' : preview, maxLines: 3, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium),
           if (reason != null && reason.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text('"$reason"', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic)),
+            Text('"$reason"', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
           if (onResolve != null || onDismiss != null || onRemovePost != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: CommunityTokens.spaceMd),
             Wrap(
               spacing: 8,
               children: [
-                if (onDismiss != null) OutlinedButton(onPressed: onDismiss, child: const Text('Dismiss')),
-                if (onResolve != null) OutlinedButton(onPressed: onResolve, child: const Text('Resolve')),
+                if (onDismiss != null)
+                  OutlinedButton(
+                    onPressed: onDismiss,
+                    style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill))),
+                    child: const Text('Dismiss'),
+                  ),
+                if (onResolve != null)
+                  OutlinedButton(
+                    onPressed: onResolve,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.brandTeal,
+                      side: const BorderSide(color: AppColors.brandTeal),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                    ),
+                    child: const Text('Resolve'),
+                  ),
                 if (onRemovePost != null)
                   OutlinedButton(
                     onPressed: onRemovePost,
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                    ),
                     child: const Text('Remove post'),
                   ),
               ],
