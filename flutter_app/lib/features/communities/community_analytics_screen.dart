@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../data/repositories.dart';
+import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/reusables.dart';
+import 'community_theme.dart';
 
 /// Community Analytics (Step 13): member growth, daily active members,
 /// retention, popular posts, moderator activity, and a composite health
@@ -72,7 +74,10 @@ class _CommunityAnalyticsScreenState extends State<CommunityAnalyticsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.communityName?.isNotEmpty == true ? '${widget.communityName} · Insights' : 'Community Insights'),
+        title: Text(
+          widget.communityName?.isNotEmpty == true ? '${widget.communityName} · Insights' : 'Community Insights',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         bottom: appBarBottomBorder(context),
       ),
       body: _loading
@@ -88,10 +93,10 @@ class _CommunityAnalyticsScreenState extends State<CommunityAnalyticsScreen> {
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(CommunityTokens.spaceLg),
                         children: [
                           _HealthScoreCard(health: _health ?? const {}),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: CommunityTokens.spaceLg),
                           _SectionCard(
                             title: 'Member growth (14 days)',
                             child: _MiniBarChart(
@@ -102,7 +107,7 @@ class _CommunityAnalyticsScreenState extends State<CommunityAnalyticsScreen> {
                               legendSecondary: 'Leaves',
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: CommunityTokens.spaceLg),
                           _SectionCard(
                             title: 'Daily active members (14 days)',
                             child: _MiniBarChart(
@@ -111,7 +116,7 @@ class _CommunityAnalyticsScreenState extends State<CommunityAnalyticsScreen> {
                               legendPrimary: 'Active members',
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: CommunityTokens.spaceLg),
                           _SectionCard(
                             title: 'Retention',
                             child: Column(
@@ -125,46 +130,74 @@ class _CommunityAnalyticsScreenState extends State<CommunityAnalyticsScreen> {
                                   .toList(),
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: CommunityTokens.spaceLg),
                           _SectionCard(
                             title: 'Popular posts (30 days)',
                             child: _popularPosts.isEmpty
-                                ? const Padding(padding: EdgeInsets.all(8), child: Text('No posts in this window yet.'))
+                                ? Padding(
+                                    padding: const EdgeInsets.all(CommunityTokens.spaceSm),
+                                    child: Text('No posts in this window yet.', style: Theme.of(context).textTheme.bodySmall),
+                                  )
                                 : Column(
-                                    children: _popularPosts
-                                        .map((p) => ListTile(
-                                              contentPadding: EdgeInsets.zero,
-                                              title: Text(
-                                                (p['text_content'] as String?)?.trim().isNotEmpty == true ? p['text_content'] as String : '(media post)',
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
+                                    children: [
+                                      for (final p in _popularPosts)
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 6),
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      (p['text_content'] as String?)?.trim().isNotEmpty == true ? p['text_content'] as String : '(media post)',
+                                                      maxLines: 2,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      '${p['like_count']} likes · ${p['reply_count']} replies · ${p['view_count']} views',
+                                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
-                                              subtitle: Text('${p['like_count']} likes · ${p['reply_count']} replies · ${p['view_count']} views'),
-                                              trailing: Text(
-                                                (p['engagement_score'] as num).toStringAsFixed(0),
-                                                style: const TextStyle(fontWeight: FontWeight.bold),
-                                              ),
-                                            ))
-                                        .toList(),
+                                              const SizedBox(width: 8),
+                                              CommunityStatChip(icon: Icons.trending_up, label: (p['engagement_score'] as num).toStringAsFixed(0), color: AppColors.brandTeal),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
                                   ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: CommunityTokens.spaceLg),
                           _SectionCard(
                             title: 'Moderator activity (30 days)',
                             child: _modActivity.isEmpty
-                                ? const Padding(padding: EdgeInsets.all(8), child: Text('No moderation actions in this window.'))
+                                ? Padding(
+                                    padding: const EdgeInsets.all(CommunityTokens.spaceSm),
+                                    child: Text('No moderation actions in this window.', style: Theme.of(context).textTheme.bodySmall),
+                                  )
                                 : Column(
-                                    children: _modActivity
-                                        .map((m) => ListTile(
-                                              contentPadding: EdgeInsets.zero,
-                                              leading: const Icon(Icons.shield_outlined),
-                                              title: Text('@${m['username'] ?? 'unknown'}'),
-                                              trailing: Text('${m['action_count']} actions', style: const TextStyle(fontWeight: FontWeight.w600)),
-                                            ))
-                                        .toList(),
+                                    children: [
+                                      for (final m in _modActivity)
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 5),
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.shield_outlined, size: 18, color: AppColors.brandTeal),
+                                              const SizedBox(width: 10),
+                                              Expanded(child: Text('@${m['username'] ?? 'unknown'}')),
+                                              CommunityStatChip(icon: Icons.bolt, label: '${m['action_count']} actions'),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
                                   ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: CommunityTokens.spaceXl),
                         ],
                       ),
                     ),
@@ -185,29 +218,44 @@ class _HealthScoreCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final score = (health['health_score'] as num?)?.toDouble() ?? 0;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 32,
-              backgroundColor: _scoreColor(score).withValues(alpha: 0.15),
-              child: Text(score.toStringAsFixed(0), style: TextStyle(color: _scoreColor(score), fontWeight: FontWeight.bold, fontSize: 20)),
+    final color = _scoreColor(score);
+    return Container(
+      decoration: BoxDecoration(
+        color: CommunityColors.surfaceCard(context),
+        borderRadius: BorderRadius.circular(CommunityTokens.radiusMd),
+        border: Border.all(color: CommunityColors.border(context)),
+        boxShadow: CommunityTokens.cardShadow(context),
+      ),
+      padding: const EdgeInsets.all(CommunityTokens.spaceLg),
+      child: Row(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color.withValues(alpha: 0.14)),
+            alignment: Alignment.center,
+            child: Text(score.toStringAsFixed(0), style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 20)),
+          ),
+          const SizedBox(width: CommunityTokens.spaceMd),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Community health', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: CommunityTokens.spaceSm),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    CommunityStatChip(icon: Icons.bolt, label: '${health['dau_today'] ?? 0} active today'),
+                    CommunityStatChip(icon: Icons.forum_outlined, label: '${health['posts_last_7d'] ?? 0} posts this week'),
+                    CommunityStatChip(icon: Icons.flag_outlined, label: '${health['open_reports'] ?? 0} open reports'),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Community health', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text('${health['dau_today'] ?? 0} active today · ${health['posts_last_7d'] ?? 0} posts this week · ${health['open_reports'] ?? 0} open reports'),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -219,17 +267,20 @@ class _SectionCard extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              child,
-            ],
-          ),
+  Widget build(BuildContext context) => Container(
+        decoration: BoxDecoration(
+          color: CommunityColors.surfaceCard(context),
+          borderRadius: BorderRadius.circular(CommunityTokens.radiusMd),
+          border: Border.all(color: CommunityColors.border(context)),
+        ),
+        padding: const EdgeInsets.all(CommunityTokens.spaceMd),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: CommunityTokens.spaceMd),
+            child,
+          ],
         ),
       );
 }
@@ -256,8 +307,13 @@ class _RetentionRow extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(value: (retentionPct / 100).clamp(0, 1), minHeight: 6),
+              borderRadius: BorderRadius.circular(CommunityTokens.radiusPill),
+              child: LinearProgressIndicator(
+                value: (retentionPct / 100).clamp(0, 1),
+                minHeight: 6,
+                backgroundColor: CommunityColors.surfaceMuted(context),
+                valueColor: const AlwaysStoppedAnimation(AppColors.brandTeal),
+              ),
             ),
           ],
         ),
@@ -277,10 +333,10 @@ class _MiniBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (values.isEmpty) return const Padding(padding: EdgeInsets.all(8), child: Text('No data yet.'));
+    if (values.isEmpty) return Padding(padding: const EdgeInsets.all(CommunityTokens.spaceSm), child: Text('No data yet.', style: Theme.of(context).textTheme.bodySmall));
     final maxVal = [...values, ...(secondaryValues ?? const [])].map((v) => v.abs()).fold<double>(1, (a, b) => a > b ? a : b);
-    final primaryColor = Theme.of(context).colorScheme.primary;
-    final secondaryColor = Theme.of(context).colorScheme.error;
+    const primaryColor = AppColors.brandTeal;
+    const secondaryColor = Color(0xFFE0714B);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
