@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
+import '../../core/theme/app_theme.dart';
 import '../../features/data/repositories.dart';
 import '../../shared/models/models.dart';
 import '../../shared/services/community_chat_realtime_service.dart';
 import '../../shared/services/media_upload_service.dart';
 import '../../shared/utils/time_ago.dart';
 import '../../shared/widgets/reusables.dart';
+import 'community_theme.dart';
 
 /// Step 10 — Community Chat: a single realtime group chat per community.
 /// Members can send text/media/replies; manage_chat holders can pin
@@ -308,7 +310,16 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
         expand: false,
         builder: (ctx, scrollCtrl) => Column(
           children: [
-            const Padding(padding: EdgeInsets.all(16), child: Text('Pinned messages', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+            Padding(
+              padding: const EdgeInsets.all(CommunityTokens.spaceLg),
+              child: Row(
+                children: [
+                  const Icon(Icons.push_pin, size: 18, color: AppColors.brandTeal),
+                  const SizedBox(width: 8),
+                  Text('Pinned messages', style: Theme.of(ctx).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
             Expanded(
               child: pinned.isEmpty
                   ? const EmptyState(icon: Icons.push_pin_outlined, title: 'No pinned messages', message: 'Pinned messages will show up here.')
@@ -337,7 +348,7 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
     final typingNames = _typingUsers.values.toList();
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.communityName != null ? '${widget.communityName} · Chat' : 'Community Chat'),
+        title: Text(widget.communityName != null ? '${widget.communityName} · Chat' : 'Community Chat', style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           IconButton(icon: const Icon(Icons.push_pin_outlined), tooltip: 'Pinned messages', onPressed: _showPinnedMessages),
         ],
@@ -389,8 +400,13 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
             ),
           if (_replyTo != null)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              margin: const EdgeInsets.fromLTRB(CommunityTokens.spaceMd, 0, CommunityTokens.spaceMd, CommunityTokens.spaceXs),
+              padding: const EdgeInsets.symmetric(horizontal: CommunityTokens.spaceMd, vertical: CommunityTokens.spaceSm),
+              decoration: BoxDecoration(
+                color: CommunityColors.surfaceMuted(context),
+                borderRadius: BorderRadius.circular(CommunityTokens.radiusSm),
+                border: Border(left: BorderSide(color: AppColors.brandTeal, width: 3)),
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -403,20 +419,20 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
             ),
           if (_canManageChat)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: CommunityTokens.spaceMd, vertical: 4),
               child: Row(
                 children: [
-                  const Icon(Icons.campaign_outlined, size: 18),
+                  const Icon(Icons.campaign_outlined, size: 18, color: AppColors.brandTeal),
                   const SizedBox(width: 6),
-                  const Text('Announcement', style: TextStyle(fontSize: 13)),
-                  Switch(value: _isAnnouncementMode, onChanged: (v) => setState(() => _isAnnouncementMode = v)),
+                  const Text('Announcement', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  Switch(value: _isAnnouncementMode, onChanged: (v) => setState(() => _isAnnouncementMode = v), activeThumbColor: AppColors.brandTeal),
                 ],
               ),
             ),
           SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: CommunityTokens.spaceSm, vertical: CommunityTokens.spaceSm),
               child: Row(
                 children: [
                   PopupMenuButton<String>(
@@ -443,7 +459,13 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                       buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
                       decoration: InputDecoration(
                         hintText: _isAnnouncementMode ? 'Write an announcement…' : 'Message…',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
+                        filled: true,
+                        fillColor: CommunityColors.surfaceMuted(context),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill), borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(CommunityTokens.radiusPill),
+                          borderSide: const BorderSide(color: AppColors.brandTeal, width: 1.5),
+                        ),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       ),
                       textInputAction: TextInputAction.send,
@@ -453,7 +475,10 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                   const SizedBox(width: 4),
                   _sending
                       ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                      : IconButton(icon: const Icon(Icons.send), onPressed: _send),
+                      : Container(
+                          decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.brandTeal),
+                          child: IconButton(icon: const Icon(Icons.send, color: AppColors.onBrandTeal, size: 20), onPressed: _send),
+                        ),
                 ],
               ),
             ),
@@ -502,12 +527,12 @@ class _MessageBubble extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: isAnnouncement
-                      ? theme.colorScheme.tertiaryContainer
+                      ? AppColors.brandTealLight.withValues(alpha: 0.28)
                       : isMine
-                          ? theme.colorScheme.primaryContainer
-                          : theme.colorScheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(14),
-                  border: isAnnouncement ? Border.all(color: theme.colorScheme.tertiary) : null,
+                          ? AppColors.brandTealLight.withValues(alpha: 0.55)
+                          : CommunityColors.surfaceMuted(context),
+                  borderRadius: BorderRadius.circular(CommunityTokens.radiusMd),
+                  border: isAnnouncement ? Border.all(color: AppColors.brandTeal.withValues(alpha: 0.4)) : null,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -516,16 +541,20 @@ class _MessageBubble extends StatelessWidget {
                     if (!isMine || isAnnouncement)
                       Row(
                         children: [
-                          if (isAnnouncement) const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.campaign, size: 14)),
+                          if (isAnnouncement) const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.campaign, size: 14, color: AppColors.brandTeal)),
                           Text(message.senderUsername, style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
-                          if (message.isPinned) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.push_pin, size: 12)),
+                          if (message.isPinned) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.push_pin, size: 12, color: AppColors.brandTeal)),
                         ],
                       ),
                     if (message.replyToId != null)
                       Container(
                         margin: const EdgeInsets.only(top: 2, bottom: 4),
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: theme.colorScheme.surface.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(8)),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(CommunityTokens.radiusSm),
+                          border: Border(left: BorderSide(color: AppColors.brandTeal.withValues(alpha: 0.5), width: 2)),
+                        ),
                         child: Text(
                           message.replyToRemoved
                               ? 'Original message removed'
