@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/repositories.dart';
+import '../../core/theme/app_theme.dart';
+import 'community_theme.dart';
 
 /// Chip-based tag input: type + submit to add, tap the x to remove.
 /// Suggests existing tags from the catalog as you type (debounced) so
@@ -69,33 +71,48 @@ class _TagInputState extends State<TagInput> {
             runSpacing: 6,
             children: [
               for (final tag in widget.tags)
-                Chip(label: Text(tag), onDeleted: () => _remove(tag), visualDensity: VisualDensity.compact),
+                Chip(
+                  label: Text('#$tag'),
+                  onDeleted: () => _remove(tag),
+                  visualDensity: VisualDensity.compact,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                  backgroundColor: AppColors.brandTealLight.withValues(alpha: 0.35),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                  side: BorderSide.none,
+                ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: CommunityTokens.spaceSm),
         ],
         if (widget.tags.length < widget.maxTags)
           TextField(
             controller: _controller,
-            decoration: InputDecoration(
+            decoration: communityFieldDecoration(
+              context,
               labelText: 'Tags',
               hintText: 'e.g. hiking, weekend, kathmandu',
-              border: const OutlineInputBorder(),
               helperText: '${widget.tags.length}/${widget.maxTags} — press enter to add',
               suffixIcon: IconButton(icon: const Icon(Icons.add), onPressed: () => _add(_controller.text)),
             ),
             onChanged: _onQueryChanged,
             onSubmitted: _add,
           ),
-        if (_suggestions.isNotEmpty)
+        if (_suggestions.isNotEmpty) ...[
+          const SizedBox(height: CommunityTokens.spaceSm),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
               for (final s in _suggestions.take(8))
-                ActionChip(label: Text(s), onPressed: () => _add(s)),
+                ActionChip(
+                  label: Text(s),
+                  onPressed: () => _add(s),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                  side: BorderSide(color: CommunityColors.border(context)),
+                ),
             ],
           ),
+        ],
       ],
     );
   }
