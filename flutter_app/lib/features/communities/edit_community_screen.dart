@@ -3,9 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
+import '../../core/theme/app_theme.dart';
 import '../../shared/services/media/web_safe_pick.dart';
 import '../../shared/widgets/profile_view.dart' show PickedImagePreview;
 import '../data/repositories.dart';
+import 'community_theme.dart';
 import 'tag_input.dart';
 
 const _categories = [
@@ -192,7 +194,7 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Community'),
+        title: const Text('Edit Community', style: TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           if (_isOwner)
             IconButton(
@@ -207,52 +209,61 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
           : Form(
               key: _formKey,
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(
+                  CommunityTokens.spaceLg,
+                  CommunityTokens.spaceLg,
+                  CommunityTokens.spaceLg,
+                  CommunityTokens.spaceXxl,
+                ),
                 children: [
                   _ImageEditTile(label: 'Banner', existingUrl: _existingBannerUrl, pick: bannerPick, onTap: () => _pickImage(banner: true)),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: CommunityTokens.spaceMd),
                   _ImageEditTile(label: 'Icon', existingUrl: _existingIconUrl, pick: iconPick, onTap: () => _pickImage(banner: false), circular: true),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: CommunityTokens.spaceXl),
                   TextFormField(
                     controller: name,
                     maxLength: 60,
-                    decoration: const InputDecoration(labelText: 'Name'),
+                    decoration: communityFieldDecoration(context, labelText: 'Name'),
                     validator: (v) => (v == null || v.trim().length < 3) ? 'Name must be at least 3 characters' : null,
                   ),
+                  const SizedBox(height: CommunityTokens.spaceSm),
                   TextFormField(
                     controller: desc,
                     maxLength: 300,
                     maxLines: 3,
-                    decoration: const InputDecoration(labelText: 'Description'),
+                    decoration: communityFieldDecoration(context, labelText: 'Description'),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: CommunityTokens.spaceSm),
                   DropdownButtonFormField<String>(
                     initialValue: category,
-                    decoration: const InputDecoration(labelText: 'Category'),
+                    decoration: communityFieldDecoration(context, labelText: 'Category'),
                     items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                     onChanged: (v) => setState(() => category = v ?? 'General'),
                   ),
-                  if (category == 'Other')
-                    TextFormField(controller: customCategory, decoration: const InputDecoration(labelText: 'Custom category')),
-                  const SizedBox(height: 12),
+                  if (category == 'Other') ...[
+                    const SizedBox(height: CommunityTokens.spaceSm),
+                    TextFormField(controller: customCategory, decoration: communityFieldDecoration(context, labelText: 'Custom category')),
+                  ],
+                  const SizedBox(height: CommunityTokens.spaceMd),
                   TagInput(tags: tags, onChanged: (t) => setState(() => tags = t)),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: CommunityTokens.spaceSm),
                   TextFormField(
                     controller: rules,
                     maxLength: 1000,
                     maxLines: 4,
-                    decoration: const InputDecoration(labelText: 'Community rules (optional)'),
+                    decoration: communityFieldDecoration(context, labelText: 'Community rules (optional)'),
                   ),
-                  const SizedBox(height: 8),
-                  TextFormField(controller: location, decoration: const InputDecoration(labelText: 'Location (optional)')),
-                  TextFormField(controller: website, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'Website (optional)')),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: CommunityTokens.spaceSm),
+                  TextFormField(controller: location, decoration: communityFieldDecoration(context, labelText: 'Location (optional)')),
+                  const SizedBox(height: CommunityTokens.spaceSm),
+                  TextFormField(controller: website, keyboardType: TextInputType.url, decoration: communityFieldDecoration(context, labelText: 'Website (optional)')),
+                  const SizedBox(height: CommunityTokens.spaceMd),
                   Row(
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           initialValue: language,
-                          decoration: const InputDecoration(labelText: 'Language'),
+                          decoration: communityFieldDecoration(context, labelText: 'Language'),
                           items: const [
                             DropdownMenuItem(value: 'en', child: Text('English')),
                             DropdownMenuItem(value: 'ne', child: Text('नेपाली')),
@@ -260,11 +271,11 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
                           onChanged: (v) => setState(() => language = v ?? 'en'),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: CommunityTokens.spaceMd),
                       Expanded(
                         child: DropdownButtonFormField<int?>(
                           initialValue: minAge,
-                          decoration: const InputDecoration(labelText: 'Age restriction'),
+                          decoration: communityFieldDecoration(context, labelText: 'Age restriction'),
                           items: const [
                             DropdownMenuItem(value: null, child: Text('None')),
                             DropdownMenuItem(value: 13, child: Text('13+')),
@@ -277,8 +288,15 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Card(
+                  const SizedBox(height: CommunityTokens.spaceMd),
+                  const CommunitySectionHeader(title: 'Who can join'),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: CommunityColors.surfaceCard(context),
+                      borderRadius: BorderRadius.circular(CommunityTokens.radiusMd),
+                      border: Border.all(color: CommunityColors.border(context)),
+                    ),
+                    clipBehavior: Clip.antiAlias,
                     child: RadioGroup<String>(
                       groupValue: visibility,
                       onChanged: (v) => setState(() => visibility = v ?? 'public'),
@@ -306,38 +324,45 @@ class _EditCommunityScreenState extends State<EditCommunityScreen> {
                       ]),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Who can post', style: Theme.of(context).textTheme.titleSmall),
-                          const SizedBox(height: 4),
-                          RadioGroup<String>(
-                            groupValue: postingPermission,
-                            onChanged: (v) => setState(() => postingPermission = v ?? 'all_members'),
-                            child: const Column(children: [
-                              RadioListTile<String>(value: 'all_members', title: Text('All members'), dense: true),
-                              RadioListTile<String>(value: 'trusted_and_above', title: Text('Trusted members and above'), dense: true),
-                              RadioListTile<String>(value: 'admins_only', title: Text('Admins only'), dense: true),
-                            ]),
-                          ),
-                        ],
-                      ),
+                  const SizedBox(height: CommunityTokens.spaceMd),
+                  const CommunitySectionHeader(title: 'Who can post'),
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: CommunityTokens.spaceXs),
+                    decoration: BoxDecoration(
+                      color: CommunityColors.surfaceCard(context),
+                      borderRadius: BorderRadius.circular(CommunityTokens.radiusMd),
+                      border: Border.all(color: CommunityColors.border(context)),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: RadioGroup<String>(
+                      groupValue: postingPermission,
+                      onChanged: (v) => setState(() => postingPermission = v ?? 'all_members'),
+                      child: const Column(children: [
+                        RadioListTile<String>(value: 'all_members', title: Text('All members'), dense: true),
+                        RadioListTile<String>(value: 'trusted_and_above', title: Text('Trusted members and above'), dense: true),
+                        RadioListTile<String>(value: 'admins_only', title: Text('Admins only'), dense: true),
+                      ]),
                     ),
                   ),
                   if (_error != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: CommunityTokens.spaceMd),
                     Text(_error!, style: const TextStyle(color: Colors.red)),
                   ],
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _saving ? null : _save,
-                    child: _saving
-                        ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Save changes'),
+                  const SizedBox(height: CommunityTokens.spaceLg),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _saving ? null : _save,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.brandTeal,
+                        foregroundColor: AppColors.onBrandTeal,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+                      ),
+                      child: _saving
+                          ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal))
+                          : const Text('Save changes', style: TextStyle(fontWeight: FontWeight.w700)),
+                    ),
                   ),
                 ],
               ),
