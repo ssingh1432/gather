@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/supabase_client.dart';
+import '../../core/theme/app_theme.dart';
 import '../data/repositories.dart';
 import '../../shared/widgets/reusables.dart';
 import '../../shared/utils/time_ago.dart';
+import 'community_theme.dart';
 import 'create_community_event_screen.dart';
 
 /// Community calendar/list of upcoming events (Step 11). Reads from
@@ -72,13 +74,18 @@ class _CommunityEventsScreenState extends State<CommunityEventsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.communityName?.isNotEmpty == true ? '${widget.communityName} · Events' : 'Community Events'),
+        title: Text(
+          widget.communityName?.isNotEmpty == true ? '${widget.communityName} · Events' : 'Community Events',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         bottom: appBarBottomBorder(context),
       ),
       floatingActionButton: _canManageEvents
           ? FloatingActionButton.extended(
+              backgroundColor: AppColors.brandTeal,
+              foregroundColor: AppColors.onBrandTeal,
               icon: const Icon(Icons.add),
-              label: const Text('New event'),
+              label: const Text('New event', style: TextStyle(fontWeight: FontWeight.w600)),
               onPressed: () async {
                 final created = await Navigator.of(context).push<bool>(
                   MaterialPageRoute(builder: (_) => CreateCommunityEventScreen(communityId: widget.communityId)),
@@ -105,9 +112,9 @@ class _CommunityEventsScreenState extends State<CommunityEventsScreen> {
                         ],
                       )
                     : ListView.separated(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(CommunityTokens.spaceLg),
                         itemCount: _occurrences.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        separatorBuilder: (_, __) => const SizedBox(height: CommunityTokens.spaceMd),
                         itemBuilder: (_, i) => _EventOccurrenceCard(
                           occurrence: _occurrences[i],
                           myRsvpStatus: _myRsvps[_occurrences[i]['id']]?['status'] as String?,
@@ -135,8 +142,15 @@ class _EventOccurrenceCard extends StatelessWidget {
     final isRecurring = event['is_recurring'] == true;
     final startsAt = DateTime.tryParse(occurrence['starts_at'] as String? ?? '');
     final coverUrl = event['cover_image_url'] as String?;
+    final scheme = Theme.of(context).colorScheme;
 
-    return Card(
+    return Container(
+      decoration: BoxDecoration(
+        color: CommunityColors.surfaceCard(context),
+        borderRadius: BorderRadius.circular(CommunityTokens.radiusMd),
+        border: Border.all(color: CommunityColors.border(context)),
+        boxShadow: CommunityTokens.subtleShadow(context),
+      ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -144,54 +158,63 @@ class _EventOccurrenceCard extends StatelessWidget {
           if (coverUrl != null && coverUrl.isNotEmpty)
             AspectRatio(aspectRatio: 16 / 9, child: Image.network(coverUrl, fit: BoxFit.cover)),
           Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
+            padding: const EdgeInsets.all(CommunityTokens.spaceMd),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold))),
-                    if (isRecurring) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.repeat, size: 18)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                if (startsAt != null)
-                  Text(
-                    formatEventDateTime(startsAt),
-                    style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600),
+                if (startsAt != null) _DateBadge(date: startsAt),
+                if (startsAt != null) const SizedBox(width: CommunityTokens.spaceMd),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+                          if (isRecurring) Padding(padding: const EdgeInsets.only(left: 6), child: Icon(Icons.repeat, size: 16, color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                      if (startsAt != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          formatEventDateTime(startsAt),
+                          style: const TextStyle(color: AppColors.brandTeal, fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                      ],
+                      if (location != null && location.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(children: [
+                            Icon(Icons.place_outlined, size: 15, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 4),
+                            Expanded(child: Text(location, style: Theme.of(context).textTheme.bodySmall)),
+                          ]),
+                        ),
+                      if (onlineUrl != null && onlineUrl.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(children: [
+                            Icon(Icons.videocam_outlined, size: 15, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 4),
+                            Text('Online event', style: Theme.of(context).textTheme.bodySmall),
+                          ]),
+                        ),
+                      if (description != null && description.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(description, maxLines: 3, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.3)),
+                        ),
+                      const SizedBox(height: CommunityTokens.spaceMd),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          _RsvpChip(label: 'Going', selected: myRsvpStatus == 'going', onTap: () => onRsvp('going')),
+                          _RsvpChip(label: 'Interested', selected: myRsvpStatus == 'interested', onTap: () => onRsvp('interested')),
+                          _RsvpChip(label: "Can't go", selected: myRsvpStatus == 'not_going', onTap: () => onRsvp('not_going')),
+                        ],
+                      ),
+                    ],
                   ),
-                if (location != null && location.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(children: [const Icon(Icons.place_outlined, size: 16), const SizedBox(width: 4), Expanded(child: Text(location))]),
-                  ),
-                if (onlineUrl != null && onlineUrl.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(children: const [Icon(Icons.videocam_outlined, size: 16), SizedBox(width: 4), Text('Online event')]),
-                  ),
-                if (description != null && description.isNotEmpty)
-                  Padding(padding: const EdgeInsets.only(top: 8), child: Text(description, maxLines: 3, overflow: TextOverflow.ellipsis)),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('Going'),
-                      selected: myRsvpStatus == 'going',
-                      onSelected: (_) => onRsvp('going'),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Interested'),
-                      selected: myRsvpStatus == 'interested',
-                      onSelected: (_) => onRsvp('interested'),
-                    ),
-                    ChoiceChip(
-                      label: const Text("Can't go"),
-                      selected: myRsvpStatus == 'not_going',
-                      onSelected: (_) => onRsvp('not_going'),
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -200,4 +223,45 @@ class _EventOccurrenceCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DateBadge extends StatelessWidget {
+  const _DateBadge({required this.date});
+  final DateTime date;
+
+  static const _months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 48,
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.brandTealLight.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(CommunityTokens.radiusSm),
+          border: Border.all(color: AppColors.brandTeal.withValues(alpha: 0.35)),
+        ),
+        child: Column(
+          children: [
+            Text(_months[date.month - 1], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.brandTeal)),
+            Text('${date.day}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.brandTeal)),
+          ],
+        ),
+      );
+}
+
+class _RsvpChip extends StatelessWidget {
+  const _RsvpChip({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onTap(),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
+        selectedColor: AppColors.brandTealLight,
+        labelStyle: TextStyle(fontWeight: FontWeight.w600, color: selected ? AppColors.onBrandTeal : null),
+      );
 }
