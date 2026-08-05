@@ -1008,23 +1008,34 @@ class PageRepository {
   }
 
   /// Pages owned or staffed by the current user, most recent first — powers
-  /// a "Your Pages" list on the create/manage entry point.
+  /// a "Your Pages" list on the create/manage entry point. Mirrors
+  /// CommunityRepository.listMyCommunities's proven pattern.
   Future<List<Map<String, dynamic>>> listMyPages(String userId) async {
-    final owned = await _c.from('pages').select().eq('owner_id', userId).isFilter('deleted_at', null);
-    final staffed = await _c
+    final ownedRows = await _c
+        .from('pages')
+        .select()
+        .eq('owner_id', userId)
+        .isFilter('deleted_at', null)
+        .order('created_at', ascending: false);
+    final staffRows = await _c
         .from('page_roles')
-        .select('role, pages(*)')
+        .select('created_at, pages(*)')
         .eq('user_id', userId)
-        .neq('role', 'owner');
-    final staffedPages = (staffed as List)
-        .map((e) => e['pages'])
+        .order('created_at', ascending: false);
+
+    final owned = (ownedRows as List).cast<Map<String, dynamic>>();
+    final staffed = (staffRows as List)
+        .map((e) => e['pages'] as Map<String, dynamic>?)
         .whereType<Map<String, dynamic>>()
         .where((p) => p['deleted_at'] == null)
         .toList();
+
     final seen = <String>{};
     final all = <Map<String, dynamic>>[];
-    for (final p in [...(owned as List).cast<Map<String, dynamic>>(), ...staffedPages]) {
-      if (seen.add(p['id'].toString())) all.add(p);
+    for (final p in [...owned, ...staffed]) {
+      if (seen.add(p['id'] as String)) {
+        all.add(p);
+      }
     }
     all.sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
     return all;

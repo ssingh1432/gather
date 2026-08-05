@@ -108,9 +108,15 @@ class _CreatePageScreenState extends State<CreatePageScreen> {
   void dispose() {
     username.removeListener(_onUsernameChanged);
     _usernameDebounce?.cancel();
-    for (final c in [name, username, description, website, phone, email, location, country, businessHoursNote]) {
-      c.dispose();
-    }
+    name.dispose();
+    username.dispose();
+    description.dispose();
+    website.dispose();
+    phone.dispose();
+    email.dispose();
+    location.dispose();
+    country.dispose();
+    businessHoursNote.dispose();
     super.dispose();
   }
 
@@ -146,6 +152,9 @@ class _CreatePageScreenState extends State<CreatePageScreen> {
     });
 
     try {
+      final Map<String, dynamic> businessHours = businessHoursNote.text.trim().isEmpty
+          ? <String, dynamic>{}
+          : <String, dynamic>{'note': businessHoursNote.text.trim()};
       final page = await _repo.createPage({
         'username': normalizedUsername,
         'name': name.text.trim(),
@@ -157,7 +166,7 @@ class _CreatePageScreenState extends State<CreatePageScreen> {
         'email': email.text.trim().isEmpty ? null : email.text.trim(),
         'location': location.text.trim().isEmpty ? null : location.text.trim(),
         'country': country.text.trim().isEmpty ? null : country.text.trim(),
-        'business_hours': businessHoursNote.text.trim().isEmpty ? {} : {'note': businessHoursNote.text.trim()},
+        'business_hours': businessHours,
         'language': language,
         'owner_id': uid,
         'created_by': uid,
