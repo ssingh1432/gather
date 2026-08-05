@@ -235,3 +235,26 @@ const kPageTypes = <String, String>{
   'technology': 'Technology',
   'other': 'Other',
 };
+
+/// Page team roles (Step 5 of the brief) — every role below (i.e. every
+/// role except 'owner', which is tracked on `pages.owner_id` and never
+/// appears in `page_roles`; see migration 072's `current_user_page_role`)
+/// is assignable from the Team Management screen.
+const kPageRoles = <String, String>{
+  'manager': 'Manager',
+  'editor': 'Editor',
+  'content_creator': 'Content Creator',
+  'moderator': 'Moderator',
+  'customer_support': 'Customer Support',
+  'analyst': 'Analyst',
+};
+
+const kPageRoleDescriptions = <String, String>{
+  'owner': 'Full control. Can manage the team, settings, and everything else.',
+  'manager': 'Full control except transferring or deleting the page.',
+  'editor': 'Creates and manages posts, events, and reviews.',
+  'content_creator': 'Creates and manages posts and events.',
+  'moderator': 'Handles reviews and reports.',
+  'customer_support': 'Replies to the page inbox and customer chat.',
+  'analyst': 'Read-only access to page analytics.',
+};

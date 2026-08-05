@@ -23,6 +23,7 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
   Map<String, dynamic>? page;
   bool loading = true;
   bool publishing = false;
+  bool canManageTeam = false;
   String? err;
 
   @override
@@ -34,9 +35,12 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
   Future<void> _load() async {
     try {
       final p = await _repo.getPage(widget.pageId);
+      final role = await _repo.currentUserPageRole(widget.pageId);
+      final canManage = role == 'owner' || await _repo.hasPagePermission(widget.pageId, 'manage_roles');
       if (mounted) {
         setState(() {
           page = p;
+          canManageTeam = canManage;
           loading = false;
         });
       }
@@ -86,6 +90,12 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
       appBar: AppBar(
         title: const Text('Preview', style: TextStyle(fontWeight: FontWeight.w700)),
         actions: [
+          if (canManageTeam)
+            IconButton(
+              icon: const Icon(Icons.group_outlined),
+              tooltip: 'Team',
+              onPressed: () => context.push('/page-team?id=${widget.pageId}'),
+            ),
           TextButton(
             onPressed: () => context.go('/my-pages'),
             child: const Text('Save as draft'),

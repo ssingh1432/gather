@@ -1056,6 +1056,52 @@ class PageRepository {
     final result = await _c.rpc('current_user_has_page_permission', params: {'p_page_id': pageId, 'p_permission_key': permissionKey});
     return result as bool? ?? false;
   }
+
+  // -- Team management (Step 5, migration 075) -----------------------------
+
+  /// Full permission catalog, for explaining what each role can do.
+  Future<List<Map<String, dynamic>>> listPagePermissions() async {
+    final rows = await _c.from('page_permissions').select().order('key');
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// role -> allowed permission keys, for rendering a capability matrix.
+  Future<Map<String, Set<String>>> listRolePermissionMatrix() async {
+    final rows = await _c.from('page_role_permissions').select('role, permission_key').eq('allowed', true);
+    final matrix = <String, Set<String>>{};
+    for (final row in (rows as List).cast<Map<String, dynamic>>()) {
+      matrix.putIfAbsent(row['role'] as String, () => {}).add(row['permission_key'] as String);
+    }
+    return matrix;
+  }
+
+  /// Team roster (excludes the owner, who lives on `pages.owner_id`, not
+  /// `page_roles` — see migration 072's `current_user_page_role`). RLS's
+  /// `page_roles_select` policy lets any team member view the full roster
+  /// once they're on it themselves.
+  Future<List<Map<String, dynamic>>> listTeamMembers(String pageId) async {
+    final rows = await _c
+        .from('page_roles')
+        .select('user_id, role, created_at, granted_by, users!page_roles_user_id_fkey(username, display_name, profile_photo_url)')
+        .eq('page_id', pageId)
+        .order('created_at');
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Adds a team member by username. No accept/decline step — unlike
+  /// community invites, `page_roles` has no pending state, so this takes
+  /// effect immediately for whoever has `manage_roles` (or is the owner).
+  Future<void> addTeamMember(String pageId, String username, String role) async {
+    await _c.rpc('add_page_team_member', params: {'p_page_id': pageId, 'p_username': username, 'p_role': role});
+  }
+
+  Future<void> updateTeamMemberRole(String pageId, String userId, String role) async {
+    await _c.rpc('update_page_team_member_role', params: {'p_page_id': pageId, 'p_user_id': userId, 'p_role': role});
+  }
+
+  Future<void> removeTeamMember(String pageId, String userId) async {
+    await _c.rpc('remove_page_team_member', params: {'p_page_id': pageId, 'p_user_id': userId});
+  }
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration

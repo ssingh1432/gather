@@ -22,6 +22,7 @@ import '../features/communities/create_community_screen.dart';
 import '../features/pages/create_page_screen.dart';
 import '../features/pages/my_pages_screen.dart';
 import '../features/pages/page_preview_screen.dart';
+import '../features/pages/page_team_screen.dart';
 import '../features/communities/edit_community_screen.dart';
 import '../features/home/home_feed_screen.dart';
 import '../features/home/post_detail_screen.dart';
@@ -154,6 +155,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/my-pages', builder: (_, __) => const MyPagesScreen()),
     GoRoute(path: '/create-page', builder: (_, __) => const CreatePageScreen()),
     GoRoute(path: '/page-preview', builder: (_, s) => PagePreviewScreen(pageId: s.uri.queryParameters['id'] ?? '')),
+    GoRoute(path: '/page-team', builder: (_, s) => PageTeamScreen(pageId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/community-members', builder: (_, s) => CommunityMembersScreen(communityId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(
       path: '/community-chat',
