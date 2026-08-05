@@ -6,18 +6,21 @@ import '../../core/supabase_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/utils/external_link.dart';
 import '../../shared/widgets/reusables.dart';
+import '../../shared/utils/time_ago.dart';
 import '../data/repositories.dart';
+import 'page_content_screen.dart';
 import 'page_preview_screen.dart' show PageInfoRow;
 import 'pages_theme.dart';
 
 /// The premium, public-facing Page profile (Step 6 of the brief) — what
 /// anyone visiting a *published* page sees, as opposed to [PagePreviewScreen]
 /// which is the owner/team-only draft view reused for "preview before
-/// publishing". Content (Step 7), reviews (Step 10), and full analytics
-/// (Step 11) are separate, later steps; this screen is the identity/contact
-/// layer: cover, logo, verified badge, category/location, description,
-/// contact info, business hours, social links (future-ready), and a
-/// Follow CTA backed by `page_followers` (migration 072).
+/// publishing". Reviews (Step 10) and full analytics (Step 11) are
+/// separate, later steps; this screen is the identity/contact layer
+/// (cover, logo, verified badge, category/location, description, contact
+/// info, business hours, social links, Follow CTA) plus a read-only
+/// preview of published content (Step 7: pinned/recent posts, upcoming
+/// events) so a visitor doesn't have to leave the profile to see them.
 class PageProfileScreen extends StatefulWidget {
   const PageProfileScreen({super.key, required this.pageId});
   final String pageId;
@@ -33,6 +36,9 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
   bool _following = false;
   bool _followBusy = false;
   bool _canManage = false;
+  bool _canManageContent = false;
+  List<Map<String, dynamic>> _posts = const [];
+  List<Map<String, dynamic>> _events = const [];
   String? _error;
 
   @override
@@ -51,11 +57,17 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       final uid = SupabaseConfig.currentUserId;
       final following = uid == null ? false : await _repo.isFollowingPage(widget.pageId);
       final role = uid == null ? null : await _repo.currentUserPageRole(widget.pageId);
+      final canManageContent = uid == null ? false : await _repo.hasPagePermission(widget.pageId, 'manage_content');
+      final posts = await _repo.listPagePosts(widget.pageId, status: 'published');
+      final events = await _repo.listPageEvents(widget.pageId);
       if (!mounted) return;
       setState(() {
         _page = page;
         _following = following;
         _canManage = role != null;
+        _canManageContent = canManageContent;
+        _posts = posts;
+        _events = events.where((e) => DateTime.parse(e['start_time'] as String).isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
         _loading = false;
       });
     } catch (e) {
@@ -142,6 +154,14 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       appBar: AppBar(
         title: Text(_page?['name'] as String? ?? 'Page', style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
+          if (_canManageContent)
+            IconButton(
+              icon: const Icon(Icons.dashboard_customize_outlined),
+              tooltip: 'Manage content',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => PageContentScreen(pageId: widget.pageId)),
+              ),
+            ),
           if (_canManage)
             IconButton(
               icon: const Icon(Icons.group_outlined),
@@ -253,6 +273,24 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                               ],
                             ),
                           ),
+                          if (_events.isNotEmpty) ...[
+                            const Divider(height: PageTokens.spaceXl),
+                            PageSectionHeader(title: 'Upcoming events'),
+                            for (final e in _events)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg, vertical: 4),
+                                child: _ProfileEventCard(event: e),
+                              ),
+                          ],
+                          if (_posts.isNotEmpty) ...[
+                            const Divider(height: PageTokens.spaceXl),
+                            PageSectionHeader(title: 'Posts'),
+                            for (final p in _posts)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg, vertical: 4),
+                                child: _ProfilePostCard(post: p),
+                              ),
+                          ],
                         ],
                       ),
                     ),
@@ -308,6 +346,96 @@ class _CtaRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ProfilePostCard extends StatelessWidget {
+  const _ProfilePostCard({required this.post});
+  final Map<String, dynamic> post;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = post['post_type'] as String;
+    final pinned = post['pinned'] as bool? ?? false;
+    final content = post['content'] as String? ?? '';
+    final media = post['media'];
+    final imageUrl = media is List && media.isNotEmpty && media.first is Map ? (media.first as Map)['url'] as String? : null;
+    final publishedAt = post['published_at'] as String? ?? post['created_at'] as String?;
+
+    return Container(
+      padding: const EdgeInsets.all(PageTokens.spaceMd),
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: PageColors.surfaceCard(context),
+        borderRadius: BorderRadius.circular(PageTokens.radiusMd),
+        border: Border.all(color: PageColors.border(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (pinned) const Padding(padding: EdgeInsets.only(right: 6), child: Icon(Icons.push_pin, size: 14, color: AppColors.brandTeal)),
+              PageStatChip(icon: kPagePostTypeIcons[type] ?? Icons.article_outlined, label: kPagePostTypes[type] ?? type),
+              const Spacer(),
+              if (publishedAt != null) Text(timeAgo(DateTime.parse(publishedAt)), style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ],
+          ),
+          if (content.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(content),
+          ],
+          if (imageUrl != null) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(PageTokens.radiusSm),
+              child: Image.network(imageUrl, width: double.infinity, height: 180, fit: BoxFit.cover),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileEventCard extends StatelessWidget {
+  const _ProfileEventCard({required this.event});
+  final Map<String, dynamic> event;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = DateTime.parse(event['start_time'] as String).toLocal();
+    return Container(
+      padding: const EdgeInsets.all(PageTokens.spaceMd),
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: PageColors.surfaceCard(context),
+        borderRadius: BorderRadius.circular(PageTokens.radiusMd),
+        border: Border.all(color: PageColors.border(context)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: AppColors.brandTeal.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(PageTokens.radiusSm)),
+            child: const Icon(Icons.event, color: AppColors.brandTeal, size: 20),
+          ),
+          const SizedBox(width: PageTokens.spaceMd),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(event['title'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text(
+                  '${start.day}/${start.month}/${start.year} · ${TimeOfDay.fromDateTime(start).format(context)}${event['location'] != null ? ' · ${event['location']}' : ''}',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

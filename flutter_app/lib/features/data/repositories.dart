@@ -1126,6 +1126,70 @@ class PageRepository {
     final row = await _c.from('page_followers').select('page_id').eq('page_id', pageId).eq('user_id', uid).maybeSingle();
     return row != null;
   }
+
+  // -- Page content: posts (Step 7, migration 073) -------------------------
+  // post_type in ('post','photo','video','poll','offer','job','article');
+  // status in ('draft','scheduled','published','archived'). Drafts/
+  // scheduled/archived are only visible to team (page_posts_select RLS),
+  // so listPagePosts naturally returns only what the caller is allowed to
+  // see without any extra client-side filtering.
+
+  Future<List<Map<String, dynamic>>> listPagePosts(String pageId, {String? status}) async {
+    var q = _c.from('page_posts').select().eq('page_id', pageId).isFilter('deleted_at', null);
+    final data = await (status == null ? q : q.eq('status', status)).order('pinned', ascending: false).order('created_at', ascending: false);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>?> getPagePost(String postId) async =>
+      await _c.from('page_posts').select().eq('id', postId).maybeSingle();
+
+  Future<Map<String, dynamic>> createPagePost(Map<String, dynamic> payload) async =>
+      await _c.from('page_posts').insert(payload).select().single();
+
+  Future<void> updatePagePost(String postId, Map<String, dynamic> patch) async {
+    await _c.from('page_posts').update(patch).eq('id', postId);
+  }
+
+  /// Soft delete, matching every other content table in this codebase
+  /// (posts, communities, ...) — keeps the row for audit/moderation
+  /// history instead of a hard delete.
+  Future<void> deletePagePost(String postId) async {
+    await _c.from('page_posts').update({'deleted_at': DateTime.now().toIso8601String()}).eq('id', postId);
+  }
+
+  /// A page shows at most one pinned post at a time — enforced here (not
+  /// in the DB, which allows it per-row) by unpinning any existing pin
+  /// before setting a new one.
+  Future<void> setPagePostPinned(String pageId, String postId, bool pinned) async {
+    if (pinned) {
+      await _c.from('page_posts').update({'pinned': false}).eq('page_id', pageId).eq('pinned', true);
+    }
+    await _c.from('page_posts').update({'pinned': pinned}).eq('id', postId);
+  }
+
+  Future<UploadedPostImage> uploadPagePostImage(String pageId, String postId, XFile image) async =>
+      MediaUploadService().uploadPagePostImage(pageId: pageId, postId: postId, image: image);
+
+  // -- Page content: events (Step 7, migration 073) -------------------------
+
+  Future<List<Map<String, dynamic>>> listPageEvents(String pageId) async {
+    final rows = await _c.from('page_events').select().eq('page_id', pageId).isFilter('deleted_at', null).order('start_time');
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> createPageEvent(Map<String, dynamic> payload) async =>
+      await _c.from('page_events').insert(payload).select().single();
+
+  Future<void> updatePageEvent(String eventId, Map<String, dynamic> patch) async {
+    await _c.from('page_events').update(patch).eq('id', eventId);
+  }
+
+  Future<void> deletePageEvent(String eventId) async {
+    await _c.from('page_events').update({'deleted_at': DateTime.now().toIso8601String()}).eq('id', eventId);
+  }
+
+  Future<String> uploadPageEventCover(String pageId, String eventId, XFile image) async =>
+      MediaUploadService().uploadPageEventCover(pageId: pageId, eventId: eventId, image: image);
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration

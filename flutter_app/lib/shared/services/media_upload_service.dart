@@ -306,6 +306,50 @@ class MediaUploadService {
     });
   }
 
+  /// Uploads a Page post's image to `{pageId}/posts/{postId}/{original,thumb}`
+  /// in the `page-media` bucket. Same storage RLS as [uploadPageImage]
+  /// (`can_manage_page_media`, migration 074) — it only checks path segment
+  /// [1] == pageId, so any subpath (logo/cover/posts/...) is covered without
+  /// a new storage policy.
+  Future<UploadedPostImage> uploadPagePostImage({
+    required String pageId,
+    required String postId,
+    required XFile image,
+  }) async {
+    await _assertWithinLimit(image, maxPageImageBytes, 'Post image');
+    final prepared = await preparer.preparePostImage(image);
+    return _withAuthRetry(() async {
+      final options = FileOptions(contentType: prepared.contentType, cacheControl: '31536000', upsert: true);
+      final storage = _client.storage.from(pageMediaBucket);
+      final originalPath = '$pageId/posts/$postId/original';
+      final thumbPath = '$pageId/posts/$postId/thumb';
+      await prepared.original.uploadTo(storage, originalPath, options);
+      await prepared.thumbnail.uploadTo(storage, thumbPath, options);
+      return UploadedPostImage(
+        originalUrl: storage.getPublicUrl(originalPath),
+        thumbnailUrl: storage.getPublicUrl(thumbPath),
+      );
+    });
+  }
+
+  /// Uploads a Page event's cover image to `{pageId}/events/{eventId}/cover`
+  /// in the `page-media` bucket — same storage RLS coverage as above.
+  Future<String> uploadPageEventCover({
+    required String pageId,
+    required String eventId,
+    required XFile image,
+  }) async {
+    await _assertWithinLimit(image, maxPageImageBytes, 'Event cover image');
+    final prepared = await preparer.preparePostImage(image);
+    return _withAuthRetry(() async {
+      final options = FileOptions(contentType: prepared.contentType, cacheControl: '31536000', upsert: true);
+      final storage = _client.storage.from(pageMediaBucket);
+      final path = '$pageId/events/$eventId/cover';
+      await prepared.original.uploadTo(storage, path, options);
+      return storage.getPublicUrl(path);
+    });
+  }
+
   /// Uploads a story's media to `{userId}/{storyId}` in the `story-media`
   /// bucket — user-scoped path (not post-scoped) so storage RLS can check
   /// folder == auth.uid(), same convention as the avatars bucket.

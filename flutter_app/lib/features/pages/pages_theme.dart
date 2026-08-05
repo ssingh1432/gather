@@ -259,6 +259,28 @@ const kPageRoleDescriptions = <String, String>{
   'analyst': 'Read-only access to page analytics.',
 };
 
+/// Page post types (Step 7 of the brief). "Stories" is explicitly listed
+/// as future-ready in the brief and has no table/type yet.
+const kPagePostTypes = <String, String>{
+  'post': 'Post',
+  'photo': 'Photo',
+  'video': 'Video',
+  'poll': 'Poll',
+  'offer': 'Offer',
+  'job': 'Job',
+  'article': 'Article',
+};
+
+const kPagePostTypeIcons = <String, IconData>{
+  'post': Icons.article_outlined,
+  'photo': Icons.image_outlined,
+  'video': Icons.videocam_outlined,
+  'poll': Icons.poll_outlined,
+  'offer': Icons.local_offer_outlined,
+  'job': Icons.work_outline,
+  'article': Icons.description_outlined,
+};
+
 /// Cover photo + overlapping circular logo — shared by the draft Preview
 /// screen and the public Profile screen (Step 6) so both stay visually
 /// identical without duplicating the layout math.
