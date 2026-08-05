@@ -1102,6 +1102,30 @@ class PageRepository {
   Future<void> removeTeamMember(String pageId, String userId) async {
     await _c.rpc('remove_page_team_member', params: {'p_page_id': pageId, 'p_user_id': userId});
   }
+
+  // -- Followers (Step 6 CTA / basic Step 8 primitive, migration 072) ------
+  // `follower_count` on `pages` is denormalized by trg_page_follower_count,
+  // so callers should re-fetch the page (or optimistically +-1 locally)
+  // after these rather than trusting a stale cached count.
+
+  Future<void> followPage(String pageId) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return;
+    await _c.from('page_followers').upsert({'page_id': pageId, 'user_id': uid});
+  }
+
+  Future<void> unfollowPage(String pageId) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return;
+    await _c.from('page_followers').delete().eq('page_id', pageId).eq('user_id', uid);
+  }
+
+  Future<bool> isFollowingPage(String pageId) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return false;
+    final row = await _c.from('page_followers').select('page_id').eq('page_id', pageId).eq('user_id', uid).maybeSingle();
+    return row != null;
+  }
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration

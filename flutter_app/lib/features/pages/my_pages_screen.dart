@@ -8,8 +8,8 @@ import 'pages_theme.dart';
 
 /// Entry point for the Page System: pages the current user owns or is on
 /// the team of, plus the "Create Page" action. Tapping a draft page reopens
-/// the preview screen; a published page also opens the preview for now
-/// (the full public Page Profile view is Step 6 of the brief).
+/// the preview screen (Step 3); a published page opens the full public
+/// Page Profile (Step 6).
 class MyPagesScreen extends StatefulWidget {
   const MyPagesScreen({super.key});
   @override
@@ -95,7 +95,7 @@ class _PageRow extends StatelessWidget {
       borderRadius: BorderRadius.circular(PageTokens.radiusMd),
       child: InkWell(
         borderRadius: BorderRadius.circular(PageTokens.radiusMd),
-        onTap: () => context.push('/page-preview?id=${page['id']}'),
+        onTap: () => context.push(status == 'published' ? '/page-profile?id=${page['id']}' : '/page-preview?id=${page['id']}'),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(PageTokens.radiusMd),

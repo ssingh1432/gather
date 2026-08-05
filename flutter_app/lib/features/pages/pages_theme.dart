@@ -258,3 +258,43 @@ const kPageRoleDescriptions = <String, String>{
   'customer_support': 'Replies to the page inbox and customer chat.',
   'analyst': 'Read-only access to page analytics.',
 };
+
+/// Cover photo + overlapping circular logo — shared by the draft Preview
+/// screen and the public Profile screen (Step 6) so both stay visually
+/// identical without duplicating the layout math.
+class PageCoverAndLogo extends StatelessWidget {
+  const PageCoverAndLogo({super.key, required this.page});
+  final Map<String, dynamic> page;
+
+  @override
+  Widget build(BuildContext context) {
+    final coverUrl = page['cover_url'] as String?;
+    final logoUrl = page['logo_url'] as String?;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        AspectRatio(
+          aspectRatio: 3,
+          child: coverUrl != null
+              ? Image.network(coverUrl, fit: BoxFit.cover)
+              : Container(decoration: BoxDecoration(gradient: PageColors.coverFallbackGradient(context))),
+        ),
+        Positioned(
+          left: PageTokens.spaceLg,
+          bottom: -32,
+          child: Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: PageColors.surfaceCard(context), width: 3),
+              color: PageColors.surfaceMuted(context),
+              image: logoUrl != null ? DecorationImage(image: NetworkImage(logoUrl), fit: BoxFit.cover) : null,
+            ),
+            child: logoUrl == null ? const Icon(Icons.storefront, size: 28) : null,
+          ),
+        ),
+      ],
+    );
+  }
+}

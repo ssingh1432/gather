@@ -127,7 +127,7 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
                             ],
                           ),
                         ),
-                        _CoverAndLogo(page: page!),
+                        PageCoverAndLogo(page: page!),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg),
                           child: Column(
@@ -151,11 +151,11 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
                               const SizedBox(height: PageTokens.spaceLg),
                               const Divider(),
                               const SizedBox(height: PageTokens.spaceSm),
-                              if (page!['website'] != null) _InfoRow(icon: Icons.link, text: page!['website'] as String),
-                              if (page!['phone'] != null) _InfoRow(icon: Icons.phone_outlined, text: page!['phone'] as String),
-                              if (page!['email'] != null) _InfoRow(icon: Icons.email_outlined, text: page!['email'] as String),
-                              if (page!['country'] != null) _InfoRow(icon: Icons.public, text: page!['country'] as String),
-                              if (businessHoursNote != null) _InfoRow(icon: Icons.schedule_outlined, text: businessHoursNote!),
+                              if (page!['website'] != null) PageInfoRow(icon: Icons.link, text: page!['website'] as String),
+                              if (page!['phone'] != null) PageInfoRow(icon: Icons.phone_outlined, text: page!['phone'] as String),
+                              if (page!['email'] != null) PageInfoRow(icon: Icons.email_outlined, text: page!['email'] as String),
+                              if (page!['country'] != null) PageInfoRow(icon: Icons.public, text: page!['country'] as String),
+                              if (businessHoursNote != null) PageInfoRow(icon: Icons.schedule_outlined, text: businessHoursNote!),
                             ],
                           ),
                         ),
@@ -184,45 +184,8 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
   }
 }
 
-class _CoverAndLogo extends StatelessWidget {
-  const _CoverAndLogo({required this.page});
-  final Map<String, dynamic> page;
-
-  @override
-  Widget build(BuildContext context) {
-    final coverUrl = page['cover_url'] as String?;
-    final logoUrl = page['logo_url'] as String?;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        AspectRatio(
-          aspectRatio: 3,
-          child: coverUrl != null
-              ? Image.network(coverUrl, fit: BoxFit.cover)
-              : Container(decoration: BoxDecoration(gradient: PageColors.coverFallbackGradient(context))),
-        ),
-        Positioned(
-          left: PageTokens.spaceLg,
-          bottom: -32,
-          child: Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: PageColors.surfaceCard(context), width: 3),
-              color: PageColors.surfaceMuted(context),
-              image: logoUrl != null ? DecorationImage(image: NetworkImage(logoUrl), fit: BoxFit.cover) : null,
-            ),
-            child: logoUrl == null ? const Icon(Icons.storefront, size: 28) : null,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.icon, required this.text});
+class PageInfoRow extends StatelessWidget {
+  const PageInfoRow({required this.icon, required this.text});
   final IconData icon;
   final String text;
 
