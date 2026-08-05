@@ -36,15 +36,19 @@ class _MyPagesScreenState extends State<MyPagesScreen> {
     }
     try {
       final rows = await _repo.listMyPages(uid);
-      if (mounted) setState(() {
-        pages = rows;
-        loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          pages = rows;
+          loading = false;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() {
-        err = 'Could not load your pages. $e';
-        loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          err = 'Could not load your pages. $e';
+          loading = false;
+        });
+      }
     }
   }
 

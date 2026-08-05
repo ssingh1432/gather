@@ -32,18 +32,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze Dart code
-        run: |
-          set +e
-          flutter analyze > /tmp/analyze_output.txt 2>&1
-          code=$?
-          cat /tmp/analyze_output.txt
-          if [ $code -ne 0 ]; then
-            while IFS= read -r line; do
-              esc=$(echo "$line" | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')
-              echo "::error::$esc"
-            done < /tmp/analyze_output.txt
-          fi
-          exit $code
+        run: flutter analyze
 
       - name: Run Flutter tests
         run: flutter test

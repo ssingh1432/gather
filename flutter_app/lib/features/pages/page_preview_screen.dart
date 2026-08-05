@@ -34,15 +34,19 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
   Future<void> _load() async {
     try {
       final p = await _repo.getPage(widget.pageId);
-      if (mounted) setState(() {
-        page = p;
-        loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          page = p;
+          loading = false;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() {
-        err = 'Could not load page. $e';
-        loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          err = 'Could not load page. $e';
+          loading = false;
+        });
+      }
     }
   }
 
