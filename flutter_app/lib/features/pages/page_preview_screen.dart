@@ -185,7 +185,7 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
 }
 
 class PageInfoRow extends StatelessWidget {
-  const PageInfoRow({required this.icon, required this.text});
+  const PageInfoRow({super.key, required this.icon, required this.text});
   final IconData icon;
   final String text;
 
