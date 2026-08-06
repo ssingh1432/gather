@@ -113,6 +113,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         final title = (n['metadata'] as Map?)?['title']?.toString() ?? 'a new event';
         final communityName = (n['metadata'] as Map?)?['community_name']?.toString() ?? 'a community';
         return '"$title" was scheduled in $communityName';
+      case 'page_new_follower':
+        final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'your page';
+        final follower = (n['metadata'] as Map?)?['follower_username']?.toString();
+        return follower != null ? '@$follower started following $pageName' : 'Someone started following $pageName';
+      case 'page_new_post':
+        final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'A page you follow';
+        return '$pageName shared a new post';
+      case 'page_follow_invite':
+        final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'a page';
+        return '$actorName invited you to follow $pageName';
       case 'post_repost':
         return '$actorName reposted your post';
       case 'poll_vote':
@@ -172,6 +182,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.campaign_outlined;
       case 'community_event_created':
         return Icons.event_outlined;
+      case 'page_new_follower':
+        return Icons.person_add_alt_1_outlined;
+      case 'page_new_post':
+        return Icons.storefront_outlined;
+      case 'page_follow_invite':
+        return Icons.mail_outline;
       case 'post_repost':
         return Icons.repeat_outlined;
       case 'poll_vote':
@@ -228,6 +244,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (communityId != null) {
         context.push('/community-events?id=$communityId${communityName != null ? '&name=${Uri.encodeComponent(communityName)}' : ''}');
       }
+    } else if (type == 'page_new_follower' || type == 'page_new_post' || type == 'page_follow_invite') {
+      final pageId = (n['metadata'] as Map?)?['page_id']?.toString();
+      if (pageId != null) context.push('/page-profile?id=$pageId');
     }
     // community_invite, community_join_request: handled entirely by the
     // inline Accept/Decline or Approve/Reject buttons on their own tile —

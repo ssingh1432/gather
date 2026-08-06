@@ -1127,6 +1127,71 @@ class PageRepository {
     return row != null;
   }
 
+  /// Follow row for the current user on this page (following/favorite/notify
+  /// in one round trip), or null if not following. Used by the profile
+  /// screen instead of separate `isFollowingPage` + favorite/notify fetches.
+  Future<Map<String, dynamic>?> getFollowState(String pageId) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return null;
+    return await _c.from('page_followers').select('favorite, notify').eq('page_id', pageId).eq('user_id', uid).maybeSingle();
+  }
+
+  // -- Followers (Step 8, migration 077/078) --------------------------------
+
+  /// Star/unstar a page the current user already follows, for quick access
+  /// from `listFollowedPages`. No-ops silently if not currently following
+  /// (there's no row to flip) — callers should only surface this once
+  /// `isFollowingPage`/`listFollowedPages` confirms the follow exists.
+  Future<void> setPageFavorite(String pageId, bool favorite) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return;
+    await _c.from('page_followers').update({'favorite': favorite}).eq('page_id', pageId).eq('user_id', uid);
+  }
+
+  /// Per-page notification preference for an existing follow (whether new
+  /// posts from this page should notify the current user).
+  Future<void> setPageFollowNotify(String pageId, bool notify) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return;
+    await _c.from('page_followers').update({'notify': notify}).eq('page_id', pageId).eq('user_id', uid);
+  }
+
+  /// Pages the current user follows, favorites first then most recently
+  /// followed — powers a "Followed Pages" list.
+  Future<List<Map<String, dynamic>>> listFollowedPages() async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return const [];
+    final rows = await _c
+        .from('page_followers')
+        .select('favorite, notify, created_at, pages(*)')
+        .eq('user_id', uid)
+        .order('favorite', ascending: false)
+        .order('created_at', ascending: false);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Team-only: invites users (by @username) to follow the page. Already-
+  /// following users, unknown usernames, and duplicate invites are skipped
+  /// server-side; returns how many new invites were actually created.
+  /// Requires `manage_content` (enforced by the RPC, not just the client).
+  Future<int> inviteUsersToFollowPage(String pageId, List<String> usernames) async {
+    final result = await _c.rpc('invite_users_to_follow_page', params: {'p_page_id': pageId, 'p_usernames': usernames});
+    return (result as int?) ?? 0;
+  }
+
+  /// Team-only (`view_analytics`): total followers plus 7/30-day growth.
+  Future<Map<String, dynamic>> getPageFollowerStats(String pageId) async {
+    final rows = await _c.rpc('get_page_follower_stats', params: {'p_page_id': pageId});
+    final list = rows as List;
+    return list.isEmpty ? const {'total_followers': 0, 'new_last_7d': 0, 'new_last_30d': 0} : (list.first as Map<String, dynamic>);
+  }
+
+  /// Team-only (`view_analytics`): paginated follower roster.
+  Future<List<Map<String, dynamic>>> listPageFollowers(String pageId, {int limit = 50, int offset = 0}) async {
+    final rows = await _c.rpc('list_page_followers', params: {'p_page_id': pageId, 'p_limit': limit, 'p_offset': offset});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   // -- Page content: posts (Step 7, migration 073) -------------------------
   // post_type in ('post','photo','video','poll','offer','job','article');
   // status in ('draft','scheduled','published','archived'). Drafts/

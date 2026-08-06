@@ -18,9 +18,11 @@ import 'pages_theme.dart';
 /// publishing". Reviews (Step 10) and full analytics (Step 11) are
 /// separate, later steps; this screen is the identity/contact layer
 /// (cover, logo, verified badge, category/location, description, contact
-/// info, business hours, social links, Follow CTA) plus a read-only
-/// preview of published content (Step 7: pinned/recent posts, upcoming
-/// events) so a visitor doesn't have to leave the profile to see them.
+/// info, business hours, social links, Follow/Favorite CTA) plus a
+/// read-only preview of published content (Step 7: pinned/recent posts,
+/// upcoming events) so a visitor doesn't have to leave the profile to see
+/// them. The follower-count chip and the appbar people icon deep-link into
+/// the Followers screen (Step 8) for anyone with `view_analytics`.
 class PageProfileScreen extends StatefulWidget {
   const PageProfileScreen({super.key, required this.pageId});
   final String pageId;
@@ -35,8 +37,10 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
   bool _loading = true;
   bool _following = false;
   bool _followBusy = false;
+  bool _favorite = false;
   bool _canManage = false;
   bool _canManageContent = false;
+  bool _canViewFollowers = false;
   List<Map<String, dynamic>> _posts = const [];
   List<Map<String, dynamic>> _events = const [];
   String? _error;
@@ -55,17 +59,20 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
     try {
       final page = await _repo.getPage(widget.pageId);
       final uid = SupabaseConfig.currentUserId;
-      final following = uid == null ? false : await _repo.isFollowingPage(widget.pageId);
+      final followState = uid == null ? null : await _repo.getFollowState(widget.pageId);
       final role = uid == null ? null : await _repo.currentUserPageRole(widget.pageId);
       final canManageContent = uid == null ? false : await _repo.hasPagePermission(widget.pageId, 'manage_content');
+      final canViewFollowers = uid == null ? false : await _repo.hasPagePermission(widget.pageId, 'view_analytics');
       final posts = await _repo.listPagePosts(widget.pageId, status: 'published');
       final events = await _repo.listPageEvents(widget.pageId);
       if (!mounted) return;
       setState(() {
         _page = page;
-        _following = following;
+        _following = followState != null;
+        _favorite = followState?['favorite'] as bool? ?? false;
         _canManage = role != null;
         _canManageContent = canManageContent;
+        _canViewFollowers = canViewFollowers;
         _posts = posts;
         _events = events.where((e) => DateTime.parse(e['start_time'] as String).isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
         _loading = false;
@@ -110,7 +117,26 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update follow status: $e')));
       }
     } finally {
-      if (mounted) setState(() => _followBusy = false);
+      if (mounted) {
+        setState(() {
+          _followBusy = false;
+          if (!_following) _favorite = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (!_following) return;
+    final wasFavorite = _favorite;
+    setState(() => _favorite = !wasFavorite);
+    try {
+      await _repo.setPageFavorite(widget.pageId, !wasFavorite);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _favorite = wasFavorite);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update favorite: $e')));
+      }
     }
   }
 
@@ -154,6 +180,12 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       appBar: AppBar(
         title: Text(_page?['name'] as String? ?? 'Page', style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
+          if (_canViewFollowers)
+            IconButton(
+              icon: const Icon(Icons.people_alt_outlined),
+              tooltip: 'Followers',
+              onPressed: () => context.push('/page-followers?id=${widget.pageId}'),
+            ),
           if (_canManageContent)
             IconButton(
               icon: const Icon(Icons.dashboard_customize_outlined),
@@ -212,9 +244,13 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                   runSpacing: 8,
                                   children: [
                                     PageStatChip(icon: Icons.category_outlined, label: _pageTypeLabel),
-                                    PageStatChip(
-                                      icon: Icons.people_alt_outlined,
-                                      label: '${_page!['follower_count'] ?? 0} follower${(_page!['follower_count'] ?? 0) == 1 ? '' : 's'}',
+                                    InkWell(
+                                      borderRadius: BorderRadius.circular(PageTokens.radiusPill),
+                                      onTap: _canViewFollowers ? () => context.push('/page-followers?id=${widget.pageId}') : null,
+                                      child: PageStatChip(
+                                        icon: Icons.people_alt_outlined,
+                                        label: '${_page!['follower_count'] ?? 0} follower${(_page!['follower_count'] ?? 0) == 1 ? '' : 's'}',
+                                      ),
                                     ),
                                     if (_page!['location'] != null) PageStatChip(icon: Icons.place_outlined, label: _page!['location'] as String),
                                   ],
@@ -222,8 +258,10 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                 const SizedBox(height: PageTokens.spaceLg),
                                 _CtaRow(
                                   following: _following,
+                                  favorite: _favorite,
                                   busy: _followBusy,
                                   onFollow: _toggleFollow,
+                                  onFavorite: _following ? _toggleFavorite : null,
                                   onMessage: () => ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(content: Text('Page messaging is coming soon.')),
                                   ),
@@ -299,10 +337,20 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
 }
 
 class _CtaRow extends StatelessWidget {
-  const _CtaRow({required this.following, required this.busy, required this.onFollow, required this.onMessage, required this.page});
+  const _CtaRow({
+    required this.following,
+    required this.favorite,
+    required this.busy,
+    required this.onFollow,
+    required this.onFavorite,
+    required this.onMessage,
+    required this.page,
+  });
   final bool following;
+  final bool favorite;
   final bool busy;
   final VoidCallback onFollow;
+  final VoidCallback? onFavorite;
   final VoidCallback onMessage;
   final Map<String, dynamic> page;
 
@@ -333,6 +381,21 @@ class _CtaRow extends StatelessWidget {
                   ),
                 ),
         ),
+        if (following) ...[
+          const SizedBox(width: 8),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: PageColors.border(context)),
+              borderRadius: BorderRadius.circular(PageTokens.radiusPill),
+            ),
+            child: IconButton(
+              onPressed: onFavorite,
+              icon: Icon(favorite ? Icons.star : Icons.star_border),
+              color: favorite ? Colors.amber[700] : Theme.of(context).colorScheme.onSurfaceVariant,
+              tooltip: favorite ? 'Unfavorite' : 'Favorite',
+            ),
+          ),
+        ],
         const SizedBox(width: 8),
         Expanded(
           child: OutlinedButton.icon(

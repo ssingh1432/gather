@@ -55,7 +55,16 @@ class _MyPagesScreenState extends State<MyPagesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My Pages', style: TextStyle(fontWeight: FontWeight.w700))),
+      appBar: AppBar(
+        title: const Text('My Pages', style: TextStyle(fontWeight: FontWeight.w700)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.storefront_outlined),
+            tooltip: 'Pages you follow',
+            onPressed: () => context.push('/followed-pages'),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/create-page'),
         backgroundColor: AppColors.brandTeal,
