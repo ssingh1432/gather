@@ -1192,6 +1192,84 @@ class PageRepository {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  // -- Messaging (Step 9, migration 080) ------------------------------------
+  // page_messages itself dates to migration 074 (Step 2); this block is the
+  // client-side surface for the automation/inbox layer added in 080.
+
+  /// Messages for a single thread: the current user's own conversation with
+  /// the page (customer mode) when [otherUserId] is null, or a specific
+  /// customer's thread (team mode, requires manage_messages/owner — RLS
+  /// enforces this regardless) when it's provided. Oldest first.
+  Future<List<Map<String, dynamic>>> listPageMessages(String pageId, {String? otherUserId}) async {
+    final uid = otherUserId ?? SupabaseConfig.currentUserId;
+    if (uid == null) return const [];
+    final rows = await _c.from('page_messages').select().eq('page_id', pageId).eq('user_id', uid).order('created_at');
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Sends a message in a thread. Customer mode ([otherUserId] null): sent
+  /// as the current user. Team mode: sent as the page, on behalf of
+  /// [otherUserId]'s thread, with `sent_by` recording which team member
+  /// actually sent it (shown in the inbox, distinct from automated replies
+  /// which leave `sent_by` null).
+  Future<void> sendPageMessage(String pageId, {String? otherUserId, String? content}) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return;
+    if (otherUserId == null) {
+      await _c.from('page_messages').insert({'page_id': pageId, 'user_id': uid, 'sender_type': 'user', 'content': content});
+    } else {
+      await _c.from('page_messages').insert({'page_id': pageId, 'user_id': otherUserId, 'sender_type': 'page', 'sent_by': uid, 'content': content});
+    }
+  }
+
+  /// Team-only (`manage_messages`/owner): one row per customer thread, most
+  /// recently active first, with an unread count for the inbox badge.
+  Future<List<Map<String, dynamic>>> listPageMessageThreads(String pageId) async {
+    final rows = await _c.rpc('list_page_message_threads', params: {'p_page_id': pageId});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> markPageThreadRead(String pageId, String otherUserId) async {
+    await _c.rpc('mark_page_thread_read', params: {'p_page_id': pageId, 'p_user_id': otherUserId});
+  }
+
+  Future<List<Map<String, dynamic>>> listQuickReplies(String pageId) async {
+    final rows = await _c.from('page_quick_replies').select().eq('page_id', pageId).order('sort_order').order('created_at');
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> addQuickReply(String pageId, String title, String content) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return;
+    await _c.from('page_quick_replies').insert({'page_id': pageId, 'title': title, 'content': content, 'created_by': uid});
+  }
+
+  Future<void> deleteQuickReply(String id) async {
+    await _c.from('page_quick_replies').delete().eq('id', id);
+  }
+
+  /// Auto-reply / away-message / business-hours-schedule settings, read
+  /// straight off the `pages` row (see migration 080) rather than a
+  /// dedicated RPC — same fields `getPage` already returns.
+  Future<void> updateMessagingSettings(
+    String pageId, {
+    bool? autoReplyEnabled,
+    String? autoReplyMessage,
+    bool? awayMessageEnabled,
+    String? awayMessage,
+    Map<String, dynamic>? businessHoursSchedule,
+  }) async {
+    final patch = <String, dynamic>{
+      if (autoReplyEnabled != null) 'auto_reply_enabled': autoReplyEnabled,
+      if (autoReplyMessage != null) 'auto_reply_message': autoReplyMessage,
+      if (awayMessageEnabled != null) 'away_message_enabled': awayMessageEnabled,
+      if (awayMessage != null) 'away_message': awayMessage,
+      if (businessHoursSchedule != null) 'business_hours_schedule': businessHoursSchedule,
+    };
+    if (patch.isEmpty) return;
+    await _c.from('pages').update(patch).eq('id', pageId);
+  }
+
   // -- Page content: posts (Step 7, migration 073) -------------------------
   // post_type in ('post','photo','video','poll','offer','job','article');
   // status in ('draft','scheduled','published','archived'). Drafts/

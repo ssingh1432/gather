@@ -9,6 +9,8 @@ import '../../shared/widgets/reusables.dart';
 import '../../shared/utils/time_ago.dart';
 import '../data/repositories.dart';
 import 'page_content_screen.dart';
+import 'page_inbox_screen.dart';
+import 'page_chat_screen.dart';
 import 'page_preview_screen.dart' show PageInfoRow;
 import 'pages_theme.dart';
 
@@ -40,6 +42,7 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
   bool _favorite = false;
   bool _canManage = false;
   bool _canManageContent = false;
+  bool _canManageMessages = false;
   bool _canViewFollowers = false;
   List<Map<String, dynamic>> _posts = const [];
   List<Map<String, dynamic>> _events = const [];
@@ -62,6 +65,9 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       final followState = uid == null ? null : await _repo.getFollowState(widget.pageId);
       final role = uid == null ? null : await _repo.currentUserPageRole(widget.pageId);
       final canManageContent = uid == null ? false : await _repo.hasPagePermission(widget.pageId, 'manage_content');
+      final canManageMessages = uid == null
+          ? false
+          : (role == 'owner' || await _repo.hasPagePermission(widget.pageId, 'manage_messages'));
       final canViewFollowers = uid == null ? false : await _repo.hasPagePermission(widget.pageId, 'view_analytics');
       final posts = await _repo.listPagePosts(widget.pageId, status: 'published');
       final events = await _repo.listPageEvents(widget.pageId);
@@ -72,6 +78,7 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
         _favorite = followState?['favorite'] as bool? ?? false;
         _canManage = role != null;
         _canManageContent = canManageContent;
+        _canManageMessages = canManageMessages;
         _canViewFollowers = canViewFollowers;
         _posts = posts;
         _events = events.where((e) => DateTime.parse(e['start_time'] as String).isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
@@ -194,6 +201,14 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                 MaterialPageRoute(builder: (_) => PageContentScreen(pageId: widget.pageId)),
               ),
             ),
+          if (_canManageMessages)
+            IconButton(
+              icon: const Icon(Icons.inbox_outlined),
+              tooltip: 'Inbox',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => PageInboxScreen(pageId: widget.pageId, pageName: _page?['name'] as String? ?? 'Page')),
+              ),
+            ),
           if (_canManage)
             IconButton(
               icon: const Icon(Icons.group_outlined),
@@ -262,8 +277,8 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                   busy: _followBusy,
                                   onFollow: _toggleFollow,
                                   onFavorite: _following ? _toggleFavorite : null,
-                                  onMessage: () => ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Page messaging is coming soon.')),
+                                  onMessage: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => PageChatScreen(pageId: widget.pageId, pageName: _page!['name'] as String? ?? 'Page')),
                                   ),
                                   page: _page!,
                                 ),

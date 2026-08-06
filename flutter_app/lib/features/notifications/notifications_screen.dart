@@ -123,6 +123,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'page_follow_invite':
         final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'a page';
         return '$actorName invited you to follow $pageName';
+      case 'page_message_received':
+        final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'your page';
+        return 'New message for $pageName';
+      case 'page_message_reply':
+        final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'A page';
+        return '$pageName replied to your message';
       case 'post_repost':
         return '$actorName reposted your post';
       case 'poll_vote':
@@ -188,6 +194,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.storefront_outlined;
       case 'page_follow_invite':
         return Icons.mail_outline;
+      case 'page_message_received':
+      case 'page_message_reply':
+        return Icons.chat_bubble_outline;
       case 'post_repost':
         return Icons.repeat_outlined;
       case 'poll_vote':
@@ -247,6 +256,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } else if (type == 'page_new_follower' || type == 'page_new_post' || type == 'page_follow_invite') {
       final pageId = (n['metadata'] as Map?)?['page_id']?.toString();
       if (pageId != null) context.push('/page-profile?id=$pageId');
+    } else if (type == 'page_message_received') {
+      final pageId = (n['metadata'] as Map?)?['page_id']?.toString();
+      if (pageId != null) context.push('/page-inbox?id=$pageId');
+    } else if (type == 'page_message_reply') {
+      final pageId = (n['metadata'] as Map?)?['page_id']?.toString();
+      if (pageId != null) context.push('/page-chat?id=$pageId');
     }
     // community_invite, community_join_request: handled entirely by the
     // inline Accept/Decline or Approve/Reject buttons on their own tile —
