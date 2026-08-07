@@ -22,9 +22,11 @@ import 'pages_theme.dart';
 /// (cover, logo, verified badge, category/location, description, contact
 /// info, business hours, social links, Follow/Favorite CTA) plus a
 /// read-only preview of published content (Step 7: pinned/recent posts,
-/// upcoming events) so a visitor doesn't have to leave the profile to see
-/// them. The follower-count chip and the appbar people icon deep-link into
-/// the Followers screen (Step 8) for anyone with `view_analytics`.
+/// upcoming events) and a rating chip linking into Reviews (Step 10) so a
+/// visitor doesn't have to leave the profile to see them. Full analytics
+/// (Step 11) is a separate, later step. The follower-count chip and the
+/// appbar people icon deep-link into the Followers screen (Step 8) for
+/// anyone with `view_analytics`.
 class PageProfileScreen extends StatefulWidget {
   const PageProfileScreen({super.key, required this.pageId});
   final String pageId;
@@ -268,6 +270,17 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                       ),
                                     ),
                                     if (_page!['location'] != null) PageStatChip(icon: Icons.place_outlined, label: _page!['location'] as String),
+                                    InkWell(
+                                      borderRadius: BorderRadius.circular(PageTokens.radiusPill),
+                                      onTap: () => context.push('/page-reviews?id=${widget.pageId}'),
+                                      child: PageStatChip(
+                                        icon: Icons.star_outline,
+                                        color: (_page!['rating_count'] ?? 0) > 0 ? AppColors.brandTeal : null,
+                                        label: (_page!['rating_count'] ?? 0) > 0
+                                            ? '${((_page!['rating_avg'] as num?) ?? 0).toStringAsFixed(1)} (${_page!['rating_count']})'
+                                            : 'No reviews yet',
+                                      ),
+                                    ),
                                   ],
                                 ),
                                 const SizedBox(height: PageTokens.spaceLg),

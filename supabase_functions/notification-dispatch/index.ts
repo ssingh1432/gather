@@ -149,6 +149,15 @@ function pushCopy(type: string, actorName: string, metadata: Record<string, unkn
       return { title: "Report update", body: "A report you filed has been reviewed" };
     case "admin_broadcast":
       return { title: String(metadata?.title ?? "Announcement"), body: String(metadata?.body ?? "") };
+    case "page_review_received": {
+      const pageName = String(metadata?.page_name ?? "your page");
+      const rating = metadata?.rating ?? "";
+      return { title: "New review", body: `${rating}-star review on ${pageName}` };
+    }
+    case "page_review_response": {
+      const pageName = String(metadata?.page_name ?? "A page");
+      return { title: "Review response", body: `${pageName} responded to your review` };
+    }
     default:
       return { title: "Gather", body: `${name} interacted with your content` };
   }

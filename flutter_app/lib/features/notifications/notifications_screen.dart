@@ -129,6 +129,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'page_message_reply':
         final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'A page';
         return '$pageName replied to your message';
+      case 'page_review_received':
+        final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'your page';
+        final rating = (n['metadata'] as Map?)?['rating'];
+        final reviewer = (n['metadata'] as Map?)?['reviewer_username']?.toString();
+        final who = reviewer != null ? '@$reviewer' : 'Someone';
+        return '$who left a $rating-star review on $pageName';
+      case 'page_review_response':
+        final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'A page';
+        return '$pageName responded to your review';
       case 'post_repost':
         return '$actorName reposted your post';
       case 'poll_vote':
@@ -197,6 +206,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'page_message_received':
       case 'page_message_reply':
         return Icons.chat_bubble_outline;
+      case 'page_review_received':
+      case 'page_review_response':
+        return Icons.star_outline;
       case 'post_repost':
         return Icons.repeat_outlined;
       case 'poll_vote':
@@ -262,6 +274,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } else if (type == 'page_message_reply') {
       final pageId = (n['metadata'] as Map?)?['page_id']?.toString();
       if (pageId != null) context.push('/page-chat?id=$pageId');
+    } else if (type == 'page_review_received' || type == 'page_review_response') {
+      final pageId = (n['metadata'] as Map?)?['page_id']?.toString();
+      if (pageId != null) context.push('/page-reviews?id=$pageId');
     }
     // community_invite, community_join_request: handled entirely by the
     // inline Accept/Decline or Approve/Reject buttons on their own tile —

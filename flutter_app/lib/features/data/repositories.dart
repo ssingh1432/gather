@@ -1333,6 +1333,96 @@ class PageRepository {
 
   Future<String> uploadPageEventCover(String pageId, String eventId, XFile image) async =>
       MediaUploadService().uploadPageEventCover(pageId: pageId, eventId: eventId, image: image);
+
+  // -- Page content: reviews (Step 10, migration 082) ------------------------
+
+  /// Paginated reviews via `get_page_reviews`, includes each row's
+  /// `voted_helpful` flag for the current caller so the UI doesn't need a
+  /// second round-trip to know whether to show a filled or outline thumb.
+  Future<List<Map<String, dynamic>>> listPageReviews(
+    String pageId, {
+    int limit = 20,
+    int offset = 0,
+    String sort = 'recent', // 'recent' | 'helpful' | 'highest' | 'lowest'
+  }) async {
+    final rows = await _c.rpc('get_page_reviews', params: {
+      'p_page_id': pageId,
+      'p_limit': limit,
+      'p_offset': offset,
+      'p_sort': sort,
+    });
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Star-count histogram (5..1) for the rating summary bar.
+  Future<Map<int, int>> pageRatingBreakdown(String pageId) async {
+    final rows = await _c.rpc('get_page_rating_breakdown', params: {'p_page_id': pageId});
+    return {for (final r in (rows as List).cast<Map<String, dynamic>>()) (r['rating'] as num).toInt(): (r['count'] as num).toInt()};
+  }
+
+  /// The caller's own review for this page, if any — used to switch the
+  /// "Write a review" CTA into "Edit your review".
+  Future<Map<String, dynamic>?> myPageReview(String pageId) async {
+    final uid = _c.auth.currentUser?.id;
+    if (uid == null) return null;
+    final rows = await _c.from('page_reviews').select().eq('page_id', pageId).eq('user_id', uid).limit(1);
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty ? null : list.first;
+  }
+
+  /// Creates or updates the caller's review for this page (unique on
+  /// page_id + user_id, so an upsert is the natural "write or edit" verb).
+  Future<void> upsertPageReview(String pageId, {required int rating, String? title, required String body}) async {
+    final uid = _c.auth.currentUser?.id;
+    if (uid == null) throw StateError('Must be signed in to review.');
+    await _c.from('page_reviews').upsert({
+      'page_id': pageId,
+      'user_id': uid,
+      'rating': rating,
+      'title': title,
+      'body': body,
+    }, onConflict: 'page_id,user_id');
+  }
+
+  Future<void> deletePageReview(String reviewId) async {
+    await _c.from('page_reviews').delete().eq('id', reviewId);
+  }
+
+  Future<void> toggleReviewHelpful(String reviewId, bool helpful) async {
+    final uid = _c.auth.currentUser?.id;
+    if (uid == null) throw StateError('Must be signed in.');
+    if (helpful) {
+      await _c.from('page_review_helpful_votes').upsert({'review_id': reviewId, 'user_id': uid});
+    } else {
+      await _c.from('page_review_helpful_votes').delete().eq('review_id', reviewId).eq('user_id', uid);
+    }
+  }
+
+  /// Owner/`manage_reviews` team member replies to a review.
+  Future<void> respondToPageReview(String reviewId, String response) async {
+    await _c.from('page_reviews').update({'owner_response': response}).eq('id', reviewId);
+  }
+
+  /// Owner/`manage_reviews` team member hides a review directly (spam,
+  /// off-topic) without going through the formal site-moderator report
+  /// flow. `restore` sets it back to published.
+  Future<void> setPageReviewVisibility(String reviewId, {required bool hidden}) async {
+    await _c.from('page_reviews').update({'status': hidden ? 'hidden' : 'published'}).eq('id', reviewId);
+  }
+
+  /// Formal abuse report on a review — goes to site-level moderators only,
+  /// never to the page's own team (same reasoning as `page_reports`, 074).
+  Future<void> reportPageReview(String reviewId, String pageId, String reason, {String? details}) async {
+    final uid = _c.auth.currentUser?.id;
+    if (uid == null) throw StateError('Must be signed in to report.');
+    await _c.from('page_review_reports').insert({
+      'review_id': reviewId,
+      'page_id': pageId,
+      'reporter_id': uid,
+      'reason': reason,
+      'details': details,
+    });
+  }
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration
