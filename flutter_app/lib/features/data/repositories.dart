@@ -2334,6 +2334,32 @@ class ModerationRepository {
         ? {'open_reports': 0, 'pending_appeals': 0, 'flagged_media': 0, 'suspended_users': 0, 'banned_users': 0}
         : list.first;
   }
+
+  // -- Page review reports (Step 10, migration 082) --------------------------
+  //
+  // Deliberately separate from [openReports]/the `reports` table: reviews
+  // are reported through `page_review_reports`, which is site-moderator-only
+  // by RLS (074's page_reports precedent — a page's own team can never see
+  // or resolve a report against its own reviews). Pulls the review body and
+  // page name inline so a moderator doesn't have to jump screens to see
+  // what's actually being reported.
+
+  Future<List<Map<String, dynamic>>> pageReviewReportQueue({String status = 'pending'}) async {
+    final rows = await _c
+        .from('page_review_reports')
+        .select('*, review:page_reviews(id, rating, title, body, status, user_id), page:pages(id, name, username), '
+            'reporter:users!page_review_reports_reporter_id_fkey(id, username)')
+        .eq('status', status)
+        .order('created_at', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> resolvePageReviewReport(String reportId, {required String resolution, bool removeReview = false}) =>
+      _c.rpc('resolve_page_review_report', params: {
+        'p_report_id': reportId,
+        'p_resolution': resolution,
+        'p_remove_review': removeReview,
+      });
 }
 
 class BetaOpsRepository {

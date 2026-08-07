@@ -24,6 +24,7 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
   List<Map<String, dynamic>> _keywordFilters = const [];
   List<Map<String, dynamic>> _mediaQueue = const [];
   List<Map<String, dynamic>> _pendingMediaQueue = const [];
+  List<Map<String, dynamic>> _pageReviewReports = const [];
   Map<String, dynamic> _summary = const {};
 
   @override
@@ -54,6 +55,7 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
           _keywordFilters = await repo.keywordFilters();
           _mediaQueue = await repo.flaggedMedia();
           _pendingMediaQueue = await repo.pendingMediaQueue();
+          _pageReviewReports = await repo.pageReviewReportQueue();
           _summary = await repo.dashboardSummary();
         } else {
           _reports = const [];
@@ -63,6 +65,7 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
           _keywordFilters = const [];
           _mediaQueue = const [];
           _pendingMediaQueue = const [];
+          _pageReviewReports = const [];
           _summary = const {};
         }
       }
@@ -202,6 +205,20 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
     }
   }
 
+  Future<void> _resolvePageReviewReport(String reportId, {required String resolution, bool removeReview = false}) async {
+    try {
+      await repo.resolvePageReviewReport(reportId, resolution: resolution, removeReview: removeReview);
+      await _loadAdminData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(resolution == 'dismissed' ? 'Report dismissed' : removeReview ? 'Report upheld — review removed' : 'Report upheld'),
+        ));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Action failed: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -209,7 +226,7 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
     if (!_allowed) return const Scaffold(body: Center(child: Text('Access denied')));
 
     return DefaultTabController(
-      length: 7,
+      length: 8,
       child: Scaffold(
         appBar: AppBar(
           title: Text(_summary.isEmpty
@@ -221,6 +238,7 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
               Tab(text: _reports.isEmpty ? 'Reports' : 'Reports (${_reports.length})'),
               Tab(text: _appeals.isEmpty ? 'Appeals' : 'Appeals (${_appeals.length})'),
               Tab(text: _mediaQueue.isEmpty ? 'Media queue' : 'Media queue (${_mediaQueue.length})'),
+              Tab(text: _pageReviewReports.isEmpty ? 'Page reviews' : 'Page reviews (${_pageReviewReports.length})'),
               const Tab(text: 'Keyword filters'),
               const Tab(text: 'Beta feedback'),
               Tab(text: _pendingPayouts.isEmpty ? 'Payouts' : 'Payouts (${_pendingPayouts.length})'),
@@ -233,6 +251,7 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
             _ReportsList(reports: _reports, repo: repo, onRefresh: _loadAdminData, onActOnReport: _actOnReport, promptDuration: _promptDurationDays),
             _AppealsList(appeals: _appeals, onReview: _reviewAppeal, onRefresh: _loadAdminData),
             _MediaQueueList(flagged: _mediaQueue, pending: _pendingMediaQueue, onReview: _reviewMedia, onRefresh: _loadAdminData),
+            _PageReviewReportsList(reports: _pageReviewReports, onResolve: _resolvePageReviewReport, onRefresh: _loadAdminData),
             _KeywordFilterList(filters: _keywordFilters, onAdd: _addKeywordFilter, onRemove: _removeKeywordFilter, onRefresh: _loadAdminData),
             _BetaFeedbackList(feedback: _feedback, onRefresh: _loadAdminData, onReview: _reviewFeedback),
             _PayoutReviewList(payouts: _pendingPayouts, onRefresh: _loadAdminData, onReview: _reviewPayout),
@@ -870,6 +889,135 @@ class _MediaQueueListState extends State<_MediaQueueList> {
       ],
     );
   }
+}
+
+class _PageReviewReportsList extends StatelessWidget {
+  const _PageReviewReportsList({required this.reports, required this.onResolve, required this.onRefresh});
+
+  final List<Map<String, dynamic>> reports;
+  final Future<void> Function(String reportId, {required String resolution, bool removeReview}) onResolve;
+  final Future<void> Function() onRefresh;
+
+  Future<void> _dismiss(BuildContext context, String reportId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Dismiss report?'),
+        content: const Text('The review stays published and no action is taken against it.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Dismiss')),
+        ],
+      ),
+    );
+    if (confirmed == true) await onResolve(reportId, resolution: 'dismissed');
+  }
+
+  Future<void> _upholdKeepVisible(String reportId) => onResolve(reportId, resolution: 'resolved');
+
+  Future<void> _upholdAndRemove(BuildContext context, String reportId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove this review?'),
+        content: const Text('The review will be hidden from everyone (marked removed) and the report resolved.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove review', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirmed == true) await onResolve(reportId, resolution: 'resolved', removeReview: true);
+  }
+
+  @override
+  Widget build(BuildContext context) => reports.isEmpty
+      ? const Center(child: Text('No pending review reports'))
+      : RefreshIndicator(
+          onRefresh: onRefresh,
+          child: ListView.separated(
+            itemCount: reports.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final r = reports[index];
+              final review = (r['review'] as Map?)?.cast<String, dynamic>();
+              final page = (r['page'] as Map?)?.cast<String, dynamic>();
+              final reporter = (r['reporter'] as Map?)?.cast<String, dynamic>();
+              final category = r['reason']?.toString();
+              final alreadyRemoved = review?['status'] == 'removed';
+              return ExpansionTile(
+                title: Text(category != null ? (ModerationRepository.reportCategoryLabels[category] ?? category) : 'Unknown reason'),
+                subtitle: Text('Review on ${page?['name'] ?? 'a page'} • reported by @${reporter?['username'] ?? 'user'}'),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                children: [
+                  if (review != null) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              Icon(Icons.star, size: 14, color: Colors.amber.shade700),
+                              const SizedBox(width: 4),
+                              Text('${review['rating']}/5', style: Theme.of(context).textTheme.labelMedium),
+                              if (alreadyRemoved) ...[
+                                const SizedBox(width: 8),
+                                const Text('(already removed)', style: TextStyle(fontStyle: FontStyle.italic)),
+                              ],
+                            ]),
+                            if ((review['title'] as String?)?.isNotEmpty == true) ...[
+                              const SizedBox(height: 4),
+                              Text(review['title'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            ],
+                            const SizedBox(height: 4),
+                            Text(review['body']?.toString() ?? ''),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if ((r['details'] as String?)?.isNotEmpty == true) ...[
+                    Text('Reporter note: ${r['details']}', style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 12),
+                  ],
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ActionChip(
+                          avatar: const Icon(Icons.close, size: 18),
+                          label: const Text('Dismiss'),
+                          onPressed: () => _dismiss(context, r['id'].toString()),
+                        ),
+                        if (!alreadyRemoved) ...[
+                          ActionChip(
+                            avatar: const Icon(Icons.check, size: 18),
+                            label: const Text('Uphold, keep visible'),
+                            onPressed: () => _upholdKeepVisible(r['id'].toString()),
+                          ),
+                          ActionChip(
+                            avatar: const Icon(Icons.delete, size: 18),
+                            label: const Text('Uphold, remove review'),
+                            onPressed: () => _upholdAndRemove(context, r['id'].toString()),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
 }
 
 class _KeywordFilterList extends StatelessWidget {
