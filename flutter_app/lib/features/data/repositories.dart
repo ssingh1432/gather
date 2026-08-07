@@ -1468,6 +1468,66 @@ class PageRepository {
       'details': details,
     });
   }
+
+  // ---------------------------------------------------------------------
+  // Discovery (Step 12) — backed by 085_pages_discovery_step12.sql.
+  // Every RPC below re-checks pages.status = 'published' server-side, so
+  // results never leak drafts/suspended pages regardless of caller role.
+  // ---------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> searchPages({
+    String? query,
+    String? categoryId,
+    String? pageType,
+    bool verifiedOnly = false,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final rows = await _c.rpc('page_search', params: {
+      'p_query': query,
+      'p_category_id': categoryId,
+      'p_page_type': pageType,
+      'p_verified_only': verifiedOnly,
+      'result_limit': limit,
+      'result_offset': offset,
+    });
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Categories with live page counts, for the Discovery browse grid.
+  /// Distinct from [listCategories] above (which is the plain lookup used
+  /// by the Create/Edit Page form's category picker).
+  Future<List<Map<String, dynamic>>> discoverCategories() async {
+    final rows = await _c.rpc('page_categories_list');
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> nearbyPagesByText({String? country, String? location, int limit = 20}) async {
+    final rows = await _c.rpc('page_nearby', params: {'p_country': country, 'p_location': location, 'result_limit': limit});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// True geo nearby, once a page has latitude/longitude set (no UI
+  /// captures these yet — see migration 085's note on `page_nearby_geo`).
+  Future<List<Map<String, dynamic>>> nearbyPagesByGeo(double lat, double lng, {double radiusKm = 50, int limit = 20}) async {
+    final rows = await _c.rpc('page_nearby_geo', params: {'p_lat': lat, 'p_lng': lng, 'p_radius_km': radiusKm, 'result_limit': limit});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> suggestedPages({int limit = 10}) async {
+    final rows = await _c.rpc('page_suggested', params: {'result_limit': limit});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> trendingPages({int daysBack = 7, int limit = 10}) async {
+    final rows = await _c.rpc('page_trending', params: {'days_back': daysBack, 'result_limit': limit});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> verifiedPages({int limit = 20, int offset = 0}) async {
+    final rows = await _c.rpc('page_verified_list', params: {'result_limit': limit, 'result_offset': offset});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration

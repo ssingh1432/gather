@@ -72,7 +72,16 @@ class _FollowedPagesScreenState extends State<FollowedPagesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Followed Pages', style: TextStyle(fontWeight: FontWeight.w700))),
+      appBar: AppBar(
+        title: const Text('Followed Pages', style: TextStyle(fontWeight: FontWeight.w700)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.explore_outlined),
+            tooltip: 'Discover pages',
+            onPressed: () => context.push('/discover-pages'),
+          ),
+        ],
+      ),
       body: _loading
           ? const FeedSkeletonList()
           : _error != null

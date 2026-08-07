@@ -25,6 +25,7 @@ import '../features/pages/my_pages_screen.dart';
 import '../features/pages/page_analytics_screen.dart';
 import '../features/pages/page_chat_screen.dart';
 import '../features/pages/page_content_screen.dart';
+import '../features/pages/page_discovery_screen.dart';
 import '../features/pages/page_followers_screen.dart';
 import '../features/pages/page_inbox_screen.dart';
 import '../features/pages/page_messaging_settings_screen.dart';
@@ -163,6 +164,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/create-community', builder: (_, __) => const CreateCommunityScreen()),
     GoRoute(path: '/my-pages', builder: (_, __) => const MyPagesScreen()),
     GoRoute(path: '/create-page', builder: (_, __) => const CreatePageScreen()),
+    GoRoute(path: '/discover-pages', builder: (_, __) => const PageDiscoveryScreen()),
     GoRoute(path: '/page-preview', builder: (_, s) => PagePreviewScreen(pageId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/page-profile', builder: (_, s) => PageProfileScreen(pageId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/page-content', builder: (_, s) => PageContentScreen(pageId: s.uri.queryParameters['id'] ?? '')),

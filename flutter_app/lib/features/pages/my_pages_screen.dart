@@ -59,6 +59,11 @@ class _MyPagesScreenState extends State<MyPagesScreen> {
         title: const Text('My Pages', style: TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           IconButton(
+            icon: const Icon(Icons.explore_outlined),
+            tooltip: 'Discover pages',
+            onPressed: () => context.push('/discover-pages'),
+          ),
+          IconButton(
             icon: const Icon(Icons.storefront_outlined),
             tooltip: 'Pages you follow',
             onPressed: () => context.push('/followed-pages'),
