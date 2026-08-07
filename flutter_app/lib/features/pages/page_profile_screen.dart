@@ -211,6 +211,12 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                 MaterialPageRoute(builder: (_) => PageInboxScreen(pageId: widget.pageId, pageName: _page?['name'] as String? ?? 'Page')),
               ),
             ),
+          if (_canViewFollowers)
+            IconButton(
+              icon: const Icon(Icons.insights_outlined),
+              tooltip: 'Insights',
+              onPressed: () => context.push('/page-analytics?id=${widget.pageId}&name=${Uri.encodeComponent(_page?['name'] as String? ?? 'Page')}'),
+            ),
           if (_canManage)
             IconButton(
               icon: const Icon(Icons.group_outlined),
@@ -441,9 +447,28 @@ class _CtaRow extends StatelessWidget {
   }
 }
 
-class _ProfilePostCard extends StatelessWidget {
+class _ProfilePostCard extends StatefulWidget {
   const _ProfilePostCard({required this.post});
   final Map<String, dynamic> post;
+
+  @override
+  State<_ProfilePostCard> createState() => _ProfilePostCardState();
+}
+
+class _ProfilePostCardState extends State<_ProfilePostCard> {
+  final _analytics = PageAnalyticsRepository();
+  Map<String, dynamic> get post => widget.post;
+
+  @override
+  void initState() {
+    super.initState();
+    // Best-effort, fire-and-forget impression recording (Step 11 analytics)
+    // — the profile feed isn't lazily built, so this fires when the post
+    // card is composed into the tree, which is a reasonable proxy for "the
+    // post rendered on screen" for this list size.
+    final id = post['id'] as String?;
+    if (id != null) _analytics.recordImpression(id);
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -967,6 +967,51 @@ class CommunityRepository {
   }
 }
 
+/// Page Analytics (Step 11): daily summary, audience growth, and top posts,
+/// backed by migration 084_pages_analytics_step11.sql. Mirrors
+/// [CommunityRepository]'s analytics methods above. All RPCs are gated
+/// server-side by the `view_analytics` page permission (or owner role) —
+/// a caller without it gets an empty/denied result, not raw data.
+class PageAnalyticsRepository {
+  SupabaseClient get _c => SupabaseConfig.client;
+
+  Future<List<Map<String, dynamic>>> summary(String pageId, {int daysBack = 30}) async {
+    final rows = await _c.rpc('page_analytics_summary', params: {'p_page_id': pageId, 'days_back': daysBack});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> audienceGrowth(String pageId, {int daysBack = 30}) async {
+    final rows = await _c.rpc('page_audience_growth', params: {'p_page_id': pageId, 'days_back': daysBack});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> topPosts(String pageId, {int daysBack = 30, int limit = 10}) async {
+    final rows = await _c.rpc('page_top_posts', params: {'p_page_id': pageId, 'days_back': daysBack, 'result_limit': limit});
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Fire-and-forget: called once per post render in the feed/detail view.
+  /// Never throws into the caller — analytics recording must not break the
+  /// content it's measuring.
+  Future<void> recordImpression(String postId) async {
+    try {
+      await _c.rpc('record_page_impression', params: {'p_post_id': postId});
+    } catch (_) {
+      // Silently ignore — impressions are best-effort telemetry.
+    }
+  }
+
+  /// Called when a post is opened/scrolled into sustained view. Deduped
+  /// server-side to once per viewer per 12h.
+  Future<void> recordView(String postId) async {
+    try {
+      await _c.rpc('record_page_post_view', params: {'p_post_id': postId});
+    } catch (_) {
+      // Silently ignore — view tracking is best-effort telemetry.
+    }
+  }
+}
+
 /// Backs the Professional Page System (migrations 072-074). This is a thin,
 /// un-privileged client — every permission check (owner/manage_content/
 /// manage_settings/...) is enforced server-side via RLS and the

@@ -22,6 +22,7 @@ import '../features/communities/create_community_screen.dart';
 import '../features/pages/create_page_screen.dart';
 import '../features/pages/followed_pages_screen.dart';
 import '../features/pages/my_pages_screen.dart';
+import '../features/pages/page_analytics_screen.dart';
 import '../features/pages/page_chat_screen.dart';
 import '../features/pages/page_content_screen.dart';
 import '../features/pages/page_followers_screen.dart';
@@ -168,6 +169,10 @@ final appRouter = GoRouter(
     GoRoute(path: '/page-team', builder: (_, s) => PageTeamScreen(pageId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/page-followers', builder: (_, s) => PageFollowersScreen(pageId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/page-reviews', builder: (_, s) => PageReviewsScreen(pageId: s.uri.queryParameters['id'] ?? '')),
+    GoRoute(
+      path: '/page-analytics',
+      builder: (_, s) => PageAnalyticsScreen(pageId: s.uri.queryParameters['id'] ?? '', pageName: s.uri.queryParameters['name']),
+    ),
     GoRoute(path: '/followed-pages', builder: (_, __) => const FollowedPagesScreen()),
     GoRoute(path: '/page-inbox', builder: (_, s) => PageInboxScreen(pageId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/page-chat', builder: (_, s) => PageChatScreen(pageId: s.uri.queryParameters['id'] ?? '')),
