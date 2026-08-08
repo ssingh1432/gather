@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/env.dart';
 import '../../core/supabase_client.dart';
 import '../../shared/models/models.dart';
 import '../../shared/services/analytics_service.dart';
@@ -1527,6 +1528,69 @@ class PageRepository {
   Future<List<Map<String, dynamic>>> verifiedPages({int limit = 20, int offset = 0}) async {
     final rows = await _c.rpc('page_verified_list', params: {'result_limit': limit, 'result_offset': offset});
     return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  // ---------------------------------------------------------------------
+  // Real-money payments via eSewa (Step 15b) — backed by
+  // 090_pages_payments_esewa.sql + the esewa-payment edge function.
+  // initiate_page_payment() is the only DB entry point (SECURITY DEFINER,
+  // no secrets); the actual eSewa handoff happens by opening the edge
+  // function's /pay/<id> URL in an external browser, since eSewa v2
+  // requires a signed POST form the client can't safely build itself.
+  // ---------------------------------------------------------------------
+
+  /// Creates a pending payment + its purpose-specific row (donation/
+  /// subscriber/order) and returns the transaction id used to build the
+  /// eSewa redirect URL.
+  Future<String> initiatePagePayment({
+    required String pageId,
+    required String purpose, // 'donation' | 'subscription' | 'marketplace_order'
+    required int amountCents,
+    String? message,
+    String? tierId,
+    String? itemId,
+    int quantity = 1,
+  }) async {
+    final txnId = await _c.rpc('initiate_page_payment', params: {
+      'p_page_id': pageId,
+      'p_purpose': purpose,
+      'p_amount_cents': amountCents,
+      'p_message': message,
+      'p_tier_id': tierId,
+      'p_item_id': itemId,
+      'p_quantity': quantity,
+    });
+    return txnId as String;
+  }
+
+  /// The URL to open (externally — it auto-submits a form to eSewa) to
+  /// actually pay for [transactionId].
+  String esewaPaymentUrl(String transactionId) => '${AppEnv.supabaseUrl}/functions/v1/esewa-payment/pay/$transactionId';
+
+  Future<Map<String, dynamic>> checkPageMonetizationEligibility(String pageId) async {
+    final result = await _c.rpc('check_page_monetization_eligibility', params: {'p_page_id': pageId});
+    return result as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>?> getPaymentTransaction(String transactionId) async =>
+      await _c.from('page_payment_transactions').select().eq('id', transactionId).maybeSingle();
+
+  /// Live status updates for [transactionId] while the person is off in
+  /// the eSewa browser flow — resolves once the edge function's callback
+  /// has flipped the row to 'completed'/'failed'. Mirrors the channel-
+  /// based postgres_changes pattern already used for page_messages,
+  /// rather than the higher-level .stream() builder.
+  RealtimeChannel watchPaymentTransaction(String transactionId, void Function(Map<String, dynamic> row) onChange) {
+    return _c
+        .channel('public:page_payment_transactions-$transactionId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'page_payment_transactions',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: transactionId),
+          callback: (payload) => onChange(payload.newRecord),
+        )
+        .subscribe();
   }
 }
 

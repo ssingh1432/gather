@@ -11,6 +11,7 @@ import '../data/repositories.dart';
 import 'page_content_screen.dart';
 import 'page_inbox_screen.dart';
 import 'page_chat_screen.dart';
+import 'donate_sheet.dart';
 import 'page_preview_screen.dart' show PageInfoRow;
 import 'pages_theme.dart';
 
@@ -146,6 +147,35 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
         setState(() => _favorite = wasFavorite);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update favorite: $e')));
       }
+    }
+  }
+
+  /// Owner-only: flips on the "Support this page" donate button (Step 15b),
+  /// after checking the same eligibility bar check_page_monetization_
+  /// eligibility enforces server-side (published, 100+ followers, 30+ days
+  /// old) — checked here too so the person gets a clear reason instead of
+  /// a raw RLS/constraint failure.
+  Future<void> _enableMonetization() async {
+    try {
+      final eligibility = await _repo.checkPageMonetizationEligibility(widget.pageId);
+      if (eligibility['eligible'] != true) {
+        final reasons = (eligibility['reasons'] as List?)?.cast<String>() ?? const ['Not eligible yet'];
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Not eligible yet'),
+              content: Text(reasons.join('\n')),
+              actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
+            ),
+          );
+        }
+        return;
+      }
+      await _repo.updatePage(widget.pageId, {'monetization_enabled': true, 'monetization_status': 'approved'});
+      if (mounted) setState(() => _page = {..._page!, 'monetization_enabled': true, 'monetization_status': 'approved'});
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not enable donations: $e')));
     }
   }
 
@@ -301,6 +331,28 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                   ),
                                   page: _page!,
                                 ),
+                                if (_page!['monetization_enabled'] == true) ...[
+                                  const SizedBox(height: PageTokens.spaceMd),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => showDonateSheet(context, pageId: widget.pageId, pageName: _page!['name'] as String? ?? 'this page'),
+                                      icon: const Icon(Icons.volunteer_activism_outlined, size: 18),
+                                      label: const Text('Support this page'),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PageTokens.radiusPill)),
+                                      ),
+                                    ),
+                                  ),
+                                ] else if (_page!['owner_id'] == SupabaseConfig.currentUserId) ...[
+                                  const SizedBox(height: PageTokens.spaceMd),
+                                  TextButton.icon(
+                                    onPressed: _enableMonetization,
+                                    icon: const Icon(Icons.volunteer_activism_outlined, size: 16),
+                                    label: const Text('Enable donations for this page'),
+                                  ),
+                                ],
                                 if ((_page!['description'] as String?)?.isNotEmpty ?? false) ...[
                                   const SizedBox(height: PageTokens.spaceLg),
                                   Text(_page!['description'] as String),
