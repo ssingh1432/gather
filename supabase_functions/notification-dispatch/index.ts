@@ -121,8 +121,10 @@ function pushCopy(type: string, actorName: string, metadata: Record<string, unkn
       return { title: "New comment", body: `${name} commented on your post` };
     case "post_reply":
       return { title: "New reply", body: `${name} replied to your post` };
-    case "mention":
-      return { title: "You were mentioned", body: `${name} tagged you in a post` };
+    case "mention": {
+      const pageName = metadata?.page_name ? String(metadata.page_name) : null;
+      return { title: "You were mentioned", body: pageName ? `${name} tagged you in a post on ${pageName}` : `${name} tagged you in a post` };
+    }
     case "community_post":
       return { title: "Community activity", body: `${name} posted in a community you're in` };
     case "post_repost":
@@ -157,6 +159,42 @@ function pushCopy(type: string, actorName: string, metadata: Record<string, unkn
     case "page_review_response": {
       const pageName = String(metadata?.page_name ?? "A page");
       return { title: "Review response", body: `${pageName} responded to your review` };
+    }
+    case "page_new_follower": {
+      const pageName = String(metadata?.page_name ?? "your page");
+      const follower = metadata?.follower_username ? `@${metadata.follower_username}` : "Someone";
+      return { title: "New follower", body: `${follower} started following ${pageName}` };
+    }
+    case "page_new_post": {
+      const pageName = String(metadata?.page_name ?? "A page you follow");
+      return { title: pageName, body: "shared a new post" };
+    }
+    case "page_follow_invite": {
+      const pageName = String(metadata?.page_name ?? "a page");
+      return { title: "Page invite", body: `${name} invited you to follow ${pageName}` };
+    }
+    case "page_message_received": {
+      const pageName = String(metadata?.page_name ?? "your page");
+      return { title: "New message", body: `New message for ${pageName}` };
+    }
+    case "page_message_reply": {
+      const pageName = String(metadata?.page_name ?? "A page");
+      return { title: pageName, body: "replied to your message" };
+    }
+    case "page_new_event": {
+      const pageName = String(metadata?.page_name ?? "A page you follow");
+      const title = String(metadata?.title ?? "a new event");
+      return { title: pageName, body: `scheduled "${title}"` };
+    }
+    case "page_event_reminder": {
+      const title = String(metadata?.title ?? "An event");
+      const pageName = metadata?.page_name ? String(metadata.page_name) : null;
+      return { title: "Event reminder", body: pageName ? `"${title}" on ${pageName} starts soon` : `"${title}" starts soon` };
+    }
+    case "page_verification_updated": {
+      const pageName = String(metadata?.page_name ?? "Your page");
+      const status = String(metadata?.verification_status ?? "updated");
+      return { title: "Verification update", body: status === "verified" ? `${pageName} is now verified` : `${pageName}'s verification status is now "${status}"` };
     }
     default:
       return { title: "Gather", body: `${name} interacted with your content` };

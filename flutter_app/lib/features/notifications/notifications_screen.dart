@@ -82,7 +82,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'post_reply':
         return '$actorName replied to your post';
       case 'mention':
-        return '$actorName tagged you in a post';
+        final pageName = (n['metadata'] as Map?)?['page_name']?.toString();
+        return pageName != null ? '$actorName tagged you in a post on $pageName' : '$actorName tagged you in a post';
       case 'community_post':
         return '$actorName posted in a community you\'re in';
       case 'community_invite':
@@ -138,6 +139,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'page_review_response':
         final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'A page';
         return '$pageName responded to your review';
+      case 'page_new_event':
+        final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'A page you follow';
+        final title = (n['metadata'] as Map?)?['title']?.toString() ?? 'a new event';
+        return '$pageName scheduled "$title"';
+      case 'page_event_reminder':
+        final title = (n['metadata'] as Map?)?['title']?.toString() ?? 'An event';
+        final pageName = (n['metadata'] as Map?)?['page_name']?.toString();
+        return pageName != null ? '"$title" on $pageName starts soon' : '"$title" starts soon';
+      case 'page_verification_updated':
+        final pageName = (n['metadata'] as Map?)?['page_name']?.toString() ?? 'Your page';
+        final status = (n['metadata'] as Map?)?['verification_status']?.toString() ?? 'updated';
+        return status == 'verified' ? '$pageName is now verified ✓' : '$pageName\'s verification status is now "$status"';
       case 'post_repost':
         return '$actorName reposted your post';
       case 'poll_vote':
@@ -209,6 +222,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'page_review_received':
       case 'page_review_response':
         return Icons.star_outline;
+      case 'page_new_event':
+        return Icons.event_outlined;
+      case 'page_event_reminder':
+        return Icons.event_available_outlined;
+      case 'page_verification_updated':
+        return Icons.verified_outlined;
       case 'post_repost':
         return Icons.repeat_outlined;
       case 'poll_vote':
@@ -243,6 +262,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final type = n['type'] as String?;
     if (postId != null) {
       context.push('/post?id=$postId');
+    } else if (type == 'mention' && (n['metadata'] as Map?)?['page_id'] != null) {
+      context.push('/page-profile?id=${(n['metadata'] as Map)['page_id']}');
     } else if (type == 'new_follower' && actorId != null) {
       context.push('/user?id=$actorId');
     } else if (type == 'moderation_alert' || type == 'appeal_update') {
@@ -277,6 +298,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } else if (type == 'page_review_received' || type == 'page_review_response') {
       final pageId = (n['metadata'] as Map?)?['page_id']?.toString();
       if (pageId != null) context.push('/page-reviews?id=$pageId');
+    } else if (type == 'page_new_event' || type == 'page_event_reminder' || type == 'page_verification_updated') {
+      final pageId = (n['metadata'] as Map?)?['page_id']?.toString();
+      if (pageId != null) context.push('/page-profile?id=$pageId');
+    } else if (type == 'scheduled_post_published' && (n['metadata'] as Map?)?['page_id'] != null) {
+      context.push('/page-profile?id=${(n['metadata'] as Map)['page_id']}');
     }
     // community_invite, community_join_request: handled entirely by the
     // inline Accept/Decline or Approve/Reject buttons on their own tile —
