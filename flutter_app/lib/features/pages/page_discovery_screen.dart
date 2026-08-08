@@ -29,7 +29,7 @@ class _PageDiscoveryScreenState extends State<PageDiscoveryScreen> {
   List<Map<String, dynamic>> _categories = const [];
   String? _selectedCategoryId;
   _DiscoverySort _sort = _DiscoverySort.popular;
-  Map<String, bool> _following = {};
+  final Map<String, bool> _following = {};
 
   @override
   void initState() {
