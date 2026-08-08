@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/supabase_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/profile_view.dart' show PickedImagePreview;
+import '../../shared/widgets/reusables.dart' show ProfileAvatar;
 import '../data/repositories.dart';
 import 'pages_theme.dart';
 
@@ -28,12 +29,18 @@ class PageContentComposerScreen extends StatefulWidget {
 
 class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
   final _repo = PageRepository();
+  final _profileRepo = ProfileRepository();
   final _contentController = TextEditingController();
   String _postType = 'post';
   XFile? _pickedImage;
   String? _existingImageUrl;
   DateTime? _scheduledAt;
   bool _saving = false;
+  /// username -> user id, mirrors create_post_screen.dart's _taggedFriends
+  /// picker. Populates page_posts.mention_ids on save, which
+  /// trg_notify_page_post_mentions (migration 087) turns into 'mention'
+  /// notifications once the post publishes.
+  final Map<String, String> _mentionedUsers = {};
 
   bool get _isEditing => widget.existingPost != null;
 
@@ -50,6 +57,18 @@ class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
       }
       final scheduledAt = post['scheduled_at'] as String?;
       if (scheduledAt != null) _scheduledAt = DateTime.parse(scheduledAt);
+
+      final mentionIds = post['mention_ids'];
+      if (mentionIds is List && mentionIds.isNotEmpty) {
+        _profileRepo.usersByIds(mentionIds.cast<String>()).then((users) {
+          if (!mounted) return;
+          setState(() {
+            for (final u in users) {
+              _mentionedUsers[u['username'] as String? ?? 'unknown'] = u['id'] as String;
+            }
+          });
+        }).catchError((_) {});
+      }
     }
   }
 
@@ -79,6 +98,116 @@ class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
     );
     if (time == null) return;
     setState(() => _scheduledAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));
+  }
+
+  Future<void> _pickMentions() async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return;
+    final selected = Map<String, String>.from(_mentionedUsers);
+    var results = <Map<String, dynamic>>[];
+    var loading = true;
+    var loadedDefault = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          if (!loadedDefault) {
+            loadedDefault = true;
+            _profileRepo.followingUsers(uid).then((people) {
+              results = people;
+              loading = false;
+              setSheetState(() {});
+            });
+          }
+          return DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.4,
+            maxChildSize: 0.9,
+            expand: false,
+            builder: (context, scrollController) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Tag people', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  TextField(
+                    autofocus: false,
+                    decoration: const InputDecoration(
+                      hintText: 'Search by username',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (q) async {
+                      loading = true;
+                      setSheetState(() {});
+                      final found = q.trim().isEmpty ? await _profileRepo.followingUsers(uid) : await _profileRepo.searchUsersByUsername(q);
+                      results = found;
+                      loading = false;
+                      setSheetState(() {});
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : results.isEmpty
+                            ? const Center(child: Text('No one found'))
+                            : ListView.builder(
+                                controller: scrollController,
+                                itemCount: results.length,
+                                itemBuilder: (context, i) {
+                                  final person = results[i];
+                                  final id = person['id'] as String;
+                                  final name = person['username'] as String? ?? 'Unknown';
+                                  final isSelected = selected.containsKey(name);
+                                  return CheckboxListTile(
+                                    value: isSelected,
+                                    secondary: ProfileAvatar(url: person['profile_photo_url'] as String?, radius: 16),
+                                    title: Text(name),
+                                    onChanged: (checked) {
+                                      setSheetState(() {
+                                        if (checked == true) {
+                                          selected[name] = id;
+                                        } else {
+                                          selected.remove(name);
+                                        }
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
+                  ),
+                  SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: () => Navigator.pop(sheetContext),
+                          child: Text(selected.isEmpty ? 'Done' : 'Tag ${selected.length}'),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    if (mounted) {
+      setState(() {
+        _mentionedUsers
+          ..clear()
+          ..addAll(selected);
+      });
+    }
   }
 
   Future<void> _save(String status) async {
@@ -118,6 +247,7 @@ class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
         'media': mediaUrl != null ? [{'type': 'image', 'url': mediaUrl}] : [],
         'status': status,
         'scheduled_at': status == 'scheduled' ? _scheduledAt!.toIso8601String() : null,
+        'mention_ids': _mentionedUsers.values.toList(),
       });
 
       if (mounted) Navigator.of(context).pop(true);
@@ -200,6 +330,24 @@ class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
                 : null,
             onTap: _pickScheduleTime,
           ),
+          const SizedBox(height: PageTokens.spaceMd),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.alternate_email),
+            title: Text(_mentionedUsers.isEmpty ? 'Tag people' : 'Tagged ${_mentionedUsers.length}'),
+            onTap: _pickMentions,
+          ),
+          if (_mentionedUsers.isNotEmpty)
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _mentionedUsers.keys
+                  .map((name) => Chip(
+                        label: Text('@$name'),
+                        onDeleted: () => setState(() => _mentionedUsers.remove(name)),
+                      ))
+                  .toList(),
+            ),
           const SizedBox(height: PageTokens.spaceXl),
           Row(
             children: [

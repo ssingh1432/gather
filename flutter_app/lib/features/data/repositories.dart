@@ -1607,6 +1607,15 @@ class ProfileRepository {
     return List<Map<String, dynamic>>.from(rows as List);
   }
 
+  /// Batch profile lookup by id — used to resolve a stored id list (e.g.
+  /// page_posts.mention_ids) back into displayable username/avatar chips
+  /// when re-opening something for editing.
+  Future<List<Map<String, dynamic>>> usersByIds(List<String> ids) async {
+    if (ids.isEmpty) return const [];
+    final rows = await _c.from('users').select('id, username, profile_photo_url').inFilter('id', ids);
+    return List<Map<String, dynamic>>.from(rows as List);
+  }
+
   /// Published (non-removed) post count — the "Posts" stat on a profile.
   Future<int> postCount(String userId) async =>
       await _c.from('posts').count(CountOption.exact).eq('author_id', userId).eq('is_removed', false);
