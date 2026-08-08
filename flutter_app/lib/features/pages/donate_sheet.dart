@@ -39,7 +39,6 @@ class _DonateSheetBodyState extends State<_DonateSheetBody> {
   final _messageController = TextEditingController();
   _DonateStage _stage = _DonateStage.amount;
   String? _error;
-  String? _txnId;
   RealtimeChannel? _channel;
 
   static const _quickAmounts = [50, 100, 500, 1000];
@@ -69,7 +68,6 @@ class _DonateSheetBodyState extends State<_DonateSheetBody> {
         amountCents: rupees * 100,
         message: _messageController.text.trim().isEmpty ? null : _messageController.text.trim(),
       );
-      _txnId = txnId;
 
       _channel = _repo.watchPaymentTransaction(txnId, (row) {
         final status = row['status'] as String?;
