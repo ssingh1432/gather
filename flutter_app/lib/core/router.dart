@@ -28,10 +28,12 @@ import '../features/pages/page_content_screen.dart';
 import '../features/pages/page_discovery_screen.dart';
 import '../features/pages/page_followers_screen.dart';
 import '../features/pages/page_inbox_screen.dart';
+import '../features/pages/page_marketplace_screen.dart';
 import '../features/pages/page_messaging_settings_screen.dart';
 import '../features/pages/page_preview_screen.dart';
 import '../features/pages/page_profile_screen.dart';
 import '../features/pages/page_reviews_screen.dart';
+import '../features/pages/page_subscriptions_screen.dart';
 import '../features/pages/page_team_screen.dart';
 import '../features/communities/edit_community_screen.dart';
 import '../features/home/home_feed_screen.dart';
@@ -171,6 +173,14 @@ final appRouter = GoRouter(
     GoRoute(path: '/page-team', builder: (_, s) => PageTeamScreen(pageId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/page-followers', builder: (_, s) => PageFollowersScreen(pageId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/page-reviews', builder: (_, s) => PageReviewsScreen(pageId: s.uri.queryParameters['id'] ?? '')),
+    GoRoute(
+      path: '/page-subscriptions',
+      builder: (_, s) => PageSubscriptionsScreen(pageId: s.uri.queryParameters['id'] ?? '', pageName: s.uri.queryParameters['name']),
+    ),
+    GoRoute(
+      path: '/page-marketplace',
+      builder: (_, s) => PageMarketplaceScreen(pageId: s.uri.queryParameters['id'] ?? '', pageName: s.uri.queryParameters['name']),
+    ),
     GoRoute(
       path: '/page-analytics',
       builder: (_, s) => PageAnalyticsScreen(pageId: s.uri.queryParameters['id'] ?? '', pageName: s.uri.queryParameters['name']),

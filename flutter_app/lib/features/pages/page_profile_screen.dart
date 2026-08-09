@@ -331,6 +331,22 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                   ),
                                   page: _page!,
                                 ),
+                                const SizedBox(height: PageTokens.spaceSm),
+                                Wrap(
+                                  spacing: 8,
+                                  children: [
+                                    TextButton.icon(
+                                      onPressed: () => context.push('/page-subscriptions?id=${widget.pageId}&name=${Uri.encodeComponent(_page!['name'] as String? ?? 'Page')}'),
+                                      icon: const Icon(Icons.workspace_premium_outlined, size: 16),
+                                      label: const Text('Subscriptions'),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () => context.push('/page-marketplace?id=${widget.pageId}&name=${Uri.encodeComponent(_page!['name'] as String? ?? 'Page')}'),
+                                      icon: const Icon(Icons.storefront_outlined, size: 16),
+                                      label: const Text('Shop'),
+                                    ),
+                                  ],
+                                ),
                                 if (_page!['monetization_enabled'] == true) ...[
                                   const SizedBox(height: PageTokens.spaceMd),
                                   SizedBox(

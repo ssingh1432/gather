@@ -1592,6 +1592,69 @@ class PageRepository {
         )
         .subscribe();
   }
+
+  // ---------------------------------------------------------------------
+  // Subscription tiers (Step 15/15b) — RLS: active tiers on a published
+  // page are public; full list + write access needs manage_monetization.
+  // ---------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> listSubscriptionTiers(String pageId) async {
+    final rows = await _c.from('page_subscription_tiers').select().eq('page_id', pageId).order('sort_order');
+    return List<Map<String, dynamic>>.from(rows as List);
+  }
+
+  Future<void> upsertSubscriptionTier(String pageId, Map<String, dynamic> tier) async {
+    final payload = {...tier, 'page_id': pageId};
+    if (tier['id'] != null) {
+      final id = payload.remove('id');
+      await _c.from('page_subscription_tiers').update(payload).eq('id', id as String);
+    } else {
+      await _c.from('page_subscription_tiers').insert(payload);
+    }
+  }
+
+  Future<void> deleteSubscriptionTier(String tierId) async {
+    await _c.from('page_subscription_tiers').delete().eq('id', tierId);
+  }
+
+  /// The caller's own subscription row for this page, if any — null means
+  /// never subscribed; status may be 'inactive' (payment never completed)
+  /// or 'cancelled'/'past_due' from an earlier lapsed subscription.
+  Future<Map<String, dynamic>?> mySubscription(String pageId) async {
+    final uid = _c.auth.currentUser?.id;
+    if (uid == null) return null;
+    return await _c.from('page_subscribers').select().eq('page_id', pageId).eq('user_id', uid).maybeSingle();
+  }
+
+  // ---------------------------------------------------------------------
+  // Marketplace items + orders (Step 15/15b)
+  // ---------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> listMarketplaceItems(String pageId) async {
+    final rows = await _c.from('page_marketplace_items').select().eq('page_id', pageId).order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(rows as List);
+  }
+
+  Future<void> upsertMarketplaceItem(String pageId, Map<String, dynamic> item) async {
+    final payload = {...item, 'page_id': pageId};
+    if (item['id'] != null) {
+      final id = payload.remove('id');
+      await _c.from('page_marketplace_items').update(payload).eq('id', id as String);
+    } else {
+      await _c.from('page_marketplace_items').insert(payload);
+    }
+  }
+
+  Future<void> deleteMarketplaceItem(String itemId) async {
+    await _c.from('page_marketplace_items').delete().eq('id', itemId);
+  }
+
+  Future<List<Map<String, dynamic>>> myMarketplaceOrders(String pageId) async {
+    final uid = _c.auth.currentUser?.id;
+    if (uid == null) return const [];
+    final rows = await _c.from('page_marketplace_orders').select().eq('page_id', pageId).eq('buyer_id', uid).order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(rows as List);
+  }
 }
 
 /// Backs Step 17 (Search Integration) via the search_posts RPC (migration

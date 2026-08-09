@@ -1,0 +1,205 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../core/theme/app_theme.dart';
+import '../data/repositories.dart';
+import 'pages_theme.dart';
+
+/// Real-money marketplace checkout (Step 15b continuation): item price x
+/// quantity -> initiate_page_payment(purpose: 'marketplace_order') ->
+/// open eSewa externally -> watch the transaction over Realtime. On
+/// success, the esewa-payment edge function marks the
+/// page_marketplace_orders row 'paid'; the page manager fulfills it
+/// separately from their order list.
+Future<void> showMarketplaceCheckoutSheet(
+  BuildContext context, {
+  required String pageId,
+  required String pageName,
+  required Map<String, dynamic> item,
+}) {
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: _CheckoutSheetBody(pageId: pageId, pageName: pageName, item: item),
+    ),
+  );
+}
+
+class _CheckoutSheetBody extends StatefulWidget {
+  const _CheckoutSheetBody({required this.pageId, required this.pageName, required this.item});
+  final String pageId;
+  final String pageName;
+  final Map<String, dynamic> item;
+
+  @override
+  State<_CheckoutSheetBody> createState() => _CheckoutSheetBodyState();
+}
+
+enum _Stage { confirm, waiting, success, failed }
+
+class _CheckoutSheetBodyState extends State<_CheckoutSheetBody> {
+  final _repo = PageRepository();
+  _Stage _stage = _Stage.confirm;
+  String? _error;
+  int _quantity = 1;
+  RealtimeChannel? _channel;
+
+  @override
+  void dispose() {
+    _channel?.unsubscribe();
+    super.dispose();
+  }
+
+  int get _unitPriceCents => widget.item['price_cents'] as int? ?? 0;
+  int get _totalCents => _unitPriceCents * _quantity;
+  String get _title => widget.item['title'] as String? ?? 'Item';
+
+  Future<void> _startPayment() async {
+    setState(() {
+      _error = null;
+      _stage = _Stage.waiting;
+    });
+    try {
+      final txnId = await _repo.initiatePagePayment(
+        pageId: widget.pageId,
+        purpose: 'marketplace_order',
+        amountCents: _totalCents,
+        itemId: widget.item['id'] as String,
+        quantity: _quantity,
+      );
+
+      _channel = _repo.watchPaymentTransaction(txnId, (row) {
+        final status = row['status'] as String?;
+        if (!mounted) return;
+        if (status == 'completed') {
+          setState(() => _stage = _Stage.success);
+        } else if (status == 'failed' || status == 'cancelled') {
+          setState(() => _stage = _Stage.failed);
+        }
+      });
+
+      final url = _repo.esewaPaymentUrl(txnId);
+      final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        setState(() {
+          _error = 'Could not open eSewa. Please try again.';
+          _stage = _Stage.confirm;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Could not start payment: $e';
+          _stage = _Stage.confirm;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(PageTokens.spaceLg),
+      child: switch (_stage) {
+        _Stage.confirm => _buildConfirm(context),
+        _Stage.waiting => _buildWaiting(context),
+        _Stage.success => _buildResult(context, success: true),
+        _Stage.failed => _buildResult(context, success: false),
+      },
+    );
+  }
+
+  Widget _buildConfirm(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(_title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        Text('from ${widget.pageName}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        const SizedBox(height: PageTokens.spaceMd),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Rs. ${(_unitPriceCents / 100).toStringAsFixed(0)} each'),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null,
+                  icon: const Icon(Icons.remove_circle_outline),
+                ),
+                Text('$_quantity', style: const TextStyle(fontWeight: FontWeight.w700)),
+                IconButton(
+                  onPressed: () => setState(() => _quantity++),
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const Divider(),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Total', style: TextStyle(fontWeight: FontWeight.w700)),
+            Text('Rs. ${(_totalCents / 100).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+          ],
+        ),
+        const SizedBox(height: PageTokens.spaceMd),
+        Text(
+          'Pay securely via eSewa — this opens eSewa in your browser.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+        if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+        const SizedBox(height: PageTokens.spaceMd),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _startPayment,
+            icon: const Icon(Icons.shopping_bag_outlined),
+            label: const Text('Continue to eSewa'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWaiting(BuildContext context) {
+    return SizedBox(
+      height: 220,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: PageTokens.spaceLg),
+          Text('Waiting for payment confirmation…', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Text(
+            'Complete the payment in eSewa, then return here — this updates automatically.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResult(BuildContext context, {required bool success}) {
+    return SizedBox(
+      height: 220,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(success ? Icons.check_circle_outline : Icons.error_outline, size: 48, color: success ? AppColors.brandTeal : Theme.of(context).colorScheme.error),
+          const SizedBox(height: PageTokens.spaceMd),
+          Text(success ? 'Order placed!' : 'Payment did not complete', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: PageTokens.spaceMd),
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+}
