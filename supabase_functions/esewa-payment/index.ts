@@ -35,10 +35,15 @@
 //
 // IMPORTANT — not yet live-tested against eSewa: this implementation
 // follows eSewa's publicly documented v2 ePay integration (form fields,
-// signed_field_names/signature scheme, and status-check endpoint shape) as
-// closely as current docs allow, but this sandbox has no network path to
-// esewa.com.np to exercise it end-to-end. Once ESEWA_* secrets are set,
-// run one real test payment before relying on this for production
+// signed_field_names/signature scheme, and status-check endpoint shape).
+// The exact URLs/scheme were re-verified via multiple independent public
+// sources (eSewa's own developer docs, Drupal/Laravel/PHP eSewa
+// integration packages) after this sandbox's initial guess had the
+// production status-check host wrong (was epay.esewa.com.np, corrected
+// to esewa.com.np — no "epay." prefix on that one host, unlike every
+// other eSewa URL). Still genuinely untested end-to-end since this
+// sandbox has no network path to esewa.com.np. Once ESEWA_* secrets are
+// set, run one real test payment before relying on this for production
 // donations/subscriptions/orders — if eSewa's exact field names or status
 // endpoint path have moved since, only the two small functions
 // `buildEsewaForm` and `checkEsewaStatus` below need adjusting.
@@ -57,7 +62,7 @@ const ESEWA_FORM_URL = IS_LIVE
   ? "https://epay.esewa.com.np/api/epay/main/v2/form"
   : "https://rc-epay.esewa.com.np/api/epay/main/v2/form";
 const ESEWA_STATUS_URL = IS_LIVE
-  ? "https://epay.esewa.com.np/api/epay/transaction/status/"
+  ? "https://esewa.com.np/api/epay/transaction/status/"
   : "https://rc.esewa.com.np/api/epay/transaction/status/";
 
 const FUNCTION_BASE = `${SUPABASE_URL}/functions/v1/esewa-payment`;
