@@ -104,9 +104,16 @@ async function handlePay(txnId: string): Promise<Response> {
   if (!PRODUCT_CODE || !SECRET_KEY) {
     return htmlPage("Payments unavailable", "eSewa isn't configured on this server yet. Please try again later.");
   }
+  if (!SERVICE_ROLE_KEY) {
+    console.log("DEBUG: no service role key available at all (neither MANUAL_SERVICE_ROLE_KEY nor SUPABASE_SERVICE_ROLE_KEY set)");
+  }
 
   const { data: txn, error } = await admin.from("page_payment_transactions").select("*").eq("id", txnId).single();
-  if (error || !txn) return htmlPage("Payment not found", "This payment link is invalid or has expired.");
+  if (error) {
+    console.log("DEBUG: transaction lookup error for", txnId, JSON.stringify(error));
+    return htmlPage("Payment not found", "This payment link is invalid or has expired.");
+  }
+  if (!txn) return htmlPage("Payment not found", "This payment link is invalid or has expired.");
   const t = txn as Transaction;
   if (t.status !== "pending") return htmlPage("Already processed", `This payment has already been marked as "${t.status}".`);
 
