@@ -142,10 +142,21 @@ async function handlePay(txnId: string): Promise<Response> {
     .join("\n");
 
   return new Response(
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Redirecting to eSewa…</title></head>
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Redirecting to eSewa…</title>
+    <style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#F4F6F5;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px;text-align:center;}
+    .card{background:#fff;border-radius:12px;padding:32px;max-width:420px;box-shadow:0 1px 3px rgba(0,0,0,0.1);}
+    p{color:#4B5563;font-size:15px;line-height:1.5;margin:0 0 20px;}
+    button{background:#0F766E;color:#fff;border:none;border-radius:8px;padding:14px 28px;font-size:16px;font-weight:600;}</style>
+    </head>
     <body onload="document.forms[0].submit()">
-      <p style="font-family:sans-serif;text-align:center;margin-top:40px;">Redirecting to eSewa…</p>
-      <form method="POST" action="${ESEWA_FORM_URL}">${inputs}</form>
+      <div class="card">
+        <p>Redirecting to eSewa…</p>
+        <form method="POST" action="${ESEWA_FORM_URL}">
+          ${inputs}
+          <button type="submit">Continue to eSewa</button>
+        </form>
+        <p style="margin-top:16px;font-size:13px;">If nothing happens automatically, tap the button above.</p>
+      </div>
     </body></html>`,
     { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
   );
