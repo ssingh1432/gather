@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../shared/utils/web_popup.dart';
 import '../data/repositories.dart';
 import 'pages_theme.dart';
 
@@ -57,6 +59,11 @@ class _DonateSheetBodyState extends State<_DonateSheetBody> {
       setState(() => _error = 'Enter a valid amount');
       return;
     }
+    // Must happen synchronously, before any await, or Chrome's popup
+    // blocker silently swallows the window.open() call later — found via
+    // a live test where "Continue to eSewa" appeared to do nothing on
+    // Flutter Web (the RPC below breaks the direct-user-gesture chain).
+    final popup = kIsWeb ? openBlankPopup() : null;
     setState(() {
       _error = null;
       _stage = _DonateStage.waiting;
@@ -80,12 +87,16 @@ class _DonateSheetBodyState extends State<_DonateSheetBody> {
       });
 
       final url = _repo.esewaPaymentUrl(txnId);
-      final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      if (!opened && mounted) {
-        setState(() {
-          _error = 'Could not open eSewa. Please try again.';
-          _stage = _DonateStage.amount;
-        });
+      if (kIsWeb) {
+        navigatePopup(popup, url);
+      } else {
+        final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        if (!opened && mounted) {
+          setState(() {
+            _error = 'Could not open eSewa. Please try again.';
+            _stage = _DonateStage.amount;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {

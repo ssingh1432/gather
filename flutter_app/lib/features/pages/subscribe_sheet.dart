@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../shared/utils/web_popup.dart';
 import '../data/repositories.dart';
 import 'pages_theme.dart';
 
@@ -57,6 +59,7 @@ class _SubscribeSheetBodyState extends State<_SubscribeSheetBody> {
   String get _tierName => widget.tier['name'] as String? ?? 'Subscription';
 
   Future<void> _startPayment() async {
+    final popup = kIsWeb ? openBlankPopup() : null;
     setState(() {
       _error = null;
       _stage = _Stage.waiting;
@@ -80,12 +83,16 @@ class _SubscribeSheetBodyState extends State<_SubscribeSheetBody> {
       });
 
       final url = _repo.esewaPaymentUrl(txnId);
-      final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      if (!opened && mounted) {
-        setState(() {
-          _error = 'Could not open eSewa. Please try again.';
-          _stage = _Stage.confirm;
-        });
+      if (kIsWeb) {
+        navigatePopup(popup, url);
+      } else {
+        final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        if (!opened && mounted) {
+          setState(() {
+            _error = 'Could not open eSewa. Please try again.';
+            _stage = _Stage.confirm;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {

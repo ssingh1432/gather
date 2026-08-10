@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../shared/utils/web_popup.dart';
 import '../data/repositories.dart';
 import 'pages_theme.dart';
 
@@ -59,6 +61,7 @@ class _CheckoutSheetBodyState extends State<_CheckoutSheetBody> {
   String get _title => widget.item['title'] as String? ?? 'Item';
 
   Future<void> _startPayment() async {
+    final popup = kIsWeb ? openBlankPopup() : null;
     setState(() {
       _error = null;
       _stage = _Stage.waiting;
@@ -83,12 +86,16 @@ class _CheckoutSheetBodyState extends State<_CheckoutSheetBody> {
       });
 
       final url = _repo.esewaPaymentUrl(txnId);
-      final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      if (!opened && mounted) {
-        setState(() {
-          _error = 'Could not open eSewa. Please try again.';
-          _stage = _Stage.confirm;
-        });
+      if (kIsWeb) {
+        navigatePopup(popup, url);
+      } else {
+        final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        if (!opened && mounted) {
+          setState(() {
+            _error = 'Could not open eSewa. Please try again.';
+            _stage = _Stage.confirm;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
