@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../data/repositories.dart';
+import 'esewa_launcher.dart';
 import 'pages_theme.dart';
 
 /// Real-money donation flow (Step 15b): amount entry -> initiate_page_payment
@@ -18,9 +18,10 @@ import 'pages_theme.dart';
 /// only allow window.open() to bypass the popup blocker when it happens
 /// synchronously within a user gesture, and the `await` on the RPC breaks
 /// that chain with no error surfaced anywhere. Making "Open eSewa" its
-/// own fresh button tap — launchUrl called with no `await` before it —
-/// keeps it a trusted gesture on every platform, with no web-specific
-/// workaround code needed at all.
+/// own fresh button tap keeps it a trusted gesture on every platform —
+/// esewa_launcher.dart's Web implementation still calls window.open() as
+/// the very first (synchronous) statement of that tap handler, before any
+/// `await`, for the same reason.
 Future<void> showDonateSheet(BuildContext context, {required String pageId, required String pageName}) {
   return showModalBottomSheet(
     context: context,
@@ -90,7 +91,7 @@ class _DonateSheetBodyState extends State<_DonateSheetBody> {
 
       if (mounted) {
         setState(() {
-          _pendingUrl = _repo.esewaPaymentUrl(txnId);
+          _pendingUrl = _repo.esewaInitUrl(txnId);
           _stage = _DonateStage.ready;
         });
       }
@@ -99,20 +100,19 @@ class _DonateSheetBodyState extends State<_DonateSheetBody> {
     }
   }
 
-  /// Deliberately synchronous up to the launchUrl call — see the class-doc
-  /// note above on why this can't be folded into _prepare().
-  void _openEsewa() {
+  /// See the class-doc note above on why this stays its own fresh tap,
+  /// separate from _prepare().
+  Future<void> _openEsewa() async {
     final url = _pendingUrl;
     if (url == null) return;
     setState(() => _stage = _DonateStage.waiting);
-    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication).then((opened) {
-      if (!opened && mounted) {
-        setState(() {
-          _error = 'Could not open eSewa. Please try again.';
-          _stage = _DonateStage.ready;
-        });
-      }
-    });
+    final opened = await openEsewaPayment(context, url);
+    if (!opened && mounted) {
+      setState(() {
+        _error = 'Could not open eSewa. Please try again.';
+        _stage = _DonateStage.ready;
+      });
+    }
   }
 
   @override

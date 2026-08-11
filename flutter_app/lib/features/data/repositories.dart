@@ -1534,9 +1534,13 @@ class PageRepository {
   // Real-money payments via eSewa (Step 15b) — backed by
   // 090_pages_payments_esewa.sql + the esewa-payment edge function.
   // initiate_page_payment() is the only DB entry point (SECURITY DEFINER,
-  // no secrets); the actual eSewa handoff happens by opening the edge
-  // function's /pay/<id> URL in an external browser, since eSewa v2
-  // requires a signed POST form the client can't safely build itself.
+  // no secrets); the actual eSewa handoff needs a signed POST form the
+  // client can't safely build itself (the secret key must stay
+  // server-side), so the edge function's /init/<id> endpoint returns the
+  // signed fields as JSON (see esewa_launcher.dart for why: Supabase Edge
+  // Functions rewrite any HTML response on GET to text/plain, so the
+  // function can never serve a renderable page directly — the app builds
+  // the tiny auto-submit form itself from these fields).
   // ---------------------------------------------------------------------
 
   /// Creates a pending payment + its purpose-specific row (donation/
@@ -1563,9 +1567,11 @@ class PageRepository {
     return txnId as String;
   }
 
-  /// The URL to open (externally — it auto-submits a form to eSewa) to
-  /// actually pay for [transactionId].
-  String esewaPaymentUrl(String transactionId) => '${AppEnv.supabaseUrl}/functions/v1/esewa-payment/pay/$transactionId';
+  /// JSON endpoint returning the signed eSewa form fields for
+  /// [transactionId] — fetch this, then hand the result to
+  /// `openEsewaPayment()` in esewa_launcher.dart. Do NOT open this URL
+  /// directly in a browser; see the class-doc note above.
+  String esewaInitUrl(String transactionId) => '${AppEnv.supabaseUrl}/functions/v1/esewa-payment/init/$transactionId';
 
   Future<Map<String, dynamic>> checkPageMonetizationEligibility(String pageId) async {
     final result = await _c.rpc('check_page_monetization_eligibility', params: {'p_page_id': pageId});

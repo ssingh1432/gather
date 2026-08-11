@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../data/repositories.dart';
+import 'esewa_launcher.dart';
 import 'pages_theme.dart';
 
 /// Real-money subscription checkout (Step 15b continuation): fixed tier
@@ -85,7 +85,7 @@ class _SubscribeSheetBodyState extends State<_SubscribeSheetBody> {
 
       if (mounted) {
         setState(() {
-          _pendingUrl = _repo.esewaPaymentUrl(txnId);
+          _pendingUrl = _repo.esewaInitUrl(txnId);
           _stage = _Stage.ready;
         });
       }
@@ -94,18 +94,17 @@ class _SubscribeSheetBodyState extends State<_SubscribeSheetBody> {
     }
   }
 
-  void _openEsewa() {
+  Future<void> _openEsewa() async {
     final url = _pendingUrl;
     if (url == null) return;
     setState(() => _stage = _Stage.waiting);
-    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication).then((opened) {
-      if (!opened && mounted) {
-        setState(() {
-          _error = 'Could not open eSewa. Please try again.';
-          _stage = _Stage.ready;
-        });
-      }
-    });
+    final opened = await openEsewaPayment(context, url);
+    if (!opened && mounted) {
+      setState(() {
+        _error = 'Could not open eSewa. Please try again.';
+        _stage = _Stage.ready;
+      });
+    }
   }
 
   @override

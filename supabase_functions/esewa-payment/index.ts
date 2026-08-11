@@ -4,11 +4,22 @@
 // Flow (see 090_pages_payments_esewa.sql for the DB side):
 //   1. Client calls the initiate_page_payment(...) RPC directly (no secrets
 //      involved) -> gets back a page_payment_transactions.id.
-//   2. Client opens, in an external browser, GET /esewa-payment/pay/<id>.
-//      This handler looks up the pending transaction (service role),
-//      builds the HMAC-SHA256-signed eSewa form fields SERVER-SIDE (the
-//      secret key never reaches the client), and returns a tiny
-//      auto-submitting HTML page that POSTs straight to eSewa.
+//   2. Client calls GET /esewa-payment/init/<id>, which looks up the
+//      pending transaction (service role), builds the HMAC-SHA256-signed
+//      eSewa form fields SERVER-SIDE (the secret key never reaches the
+//      client), and returns them as JSON. The client then builds the
+//      tiny auto-submitting HTML form ITSELF and loads it in an in-app
+//      WebView (mobile) or a same-origin popup window (web) — see
+//      esewa_launcher_io.dart / esewa_launcher_web.dart in the Flutter
+//      app. This two-step split exists because Supabase Edge Functions
+//      silently rewrite any text/html response on a GET request to
+//      text/plain (a platform-level anti-phishing measure, confirmed via
+//      Supabase's own docs: "GET requests that return text/html will be
+//      rewritten to text/plain") — so this function can never itself
+//      serve a renderable HTML page. /pay/<id> below is kept ONLY as a
+//      deprecated fallback (its HTML response will still be downgraded
+//      to plain text by Supabase and is NOT reliable — do not build new
+//      call sites against it).
 //   3. eSewa redirects the browser to this function's own
 //      /esewa-payment/success or /esewa-payment/failure, both of which:
 //        - decode + verify eSewa's response signature,
@@ -91,6 +102,22 @@ async function hmacSha256Base64(message: string, secret: string): Promise<string
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
 }
 
+// Only ever loaded into a WebView/popup that this function's own
+// success/failure URLs point back into — not a public API — so a
+// wildcard origin is fine here (no cookies/credentials are read).
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+};
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+  });
+}
+
 function htmlPage(title: string, message: string): Response {
   return new Response(
     `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -103,11 +130,15 @@ function htmlPage(title: string, message: string): Response {
   );
 }
 
-// ---- Step 2: build + serve the auto-submitting eSewa form -----------------
+// ---- Step 2: look up the transaction + build the signed eSewa fields ------
 
-async function handlePay(txnId: string): Promise<Response> {
+type FieldsResult =
+  | { ok: true; formUrl: string; fields: Record<string, string> }
+  | { ok: false; status: number; title: string; message: string };
+
+async function buildEsewaFields(txnId: string): Promise<FieldsResult> {
   if (!PRODUCT_CODE || !SECRET_KEY) {
-    return htmlPage("Payments unavailable", "eSewa isn't configured on this server yet. Please try again later.");
+    return { ok: false, status: 503, title: "Payments unavailable", message: "eSewa isn't configured on this server yet. Please try again later." };
   }
   if (!SERVICE_ROLE_KEY) {
     console.log("DEBUG: no service role key available at all (neither MANUAL_SERVICE_ROLE_KEY nor SUPABASE_SERVICE_ROLE_KEY set)");
@@ -116,11 +147,13 @@ async function handlePay(txnId: string): Promise<Response> {
   const { data: txn, error } = await admin.from("page_payment_transactions").select("*").eq("id", txnId).single();
   if (error) {
     console.log("DEBUG: transaction lookup error for", txnId, JSON.stringify(error));
-    return htmlPage("Payment not found", "This payment link is invalid or has expired.");
+    return { ok: false, status: 404, title: "Payment not found", message: "This payment link is invalid or has expired." };
   }
-  if (!txn) return htmlPage("Payment not found", "This payment link is invalid or has expired.");
+  if (!txn) return { ok: false, status: 404, title: "Payment not found", message: "This payment link is invalid or has expired." };
   const t = txn as Transaction;
-  if (t.status !== "pending") return htmlPage("Already processed", `This payment has already been marked as "${t.status}".`);
+  if (t.status !== "pending") {
+    return { ok: false, status: 409, title: "Already processed", message: `This payment has already been marked as "${t.status}".` };
+  }
 
   const amount = (t.amount_cents / 100).toFixed(2);
   const transactionUuid = t.id; // reuse our own id as eSewa's transaction_uuid — one-to-one, no separate mapping needed
@@ -142,6 +175,24 @@ async function handlePay(txnId: string): Promise<Response> {
     signature,
   };
 
+  return { ok: true, formUrl: ESEWA_FORM_URL, fields };
+}
+
+// GET /init/<id> — JSON only, safe to `fetch()` from the Flutter app on any
+// platform (web included, via CORS_HEADERS above).
+async function handleInit(txnId: string): Promise<Response> {
+  const result = await buildEsewaFields(txnId);
+  if (!result.ok) return jsonResponse({ error: result.title, message: result.message }, result.status);
+  return jsonResponse({ formUrl: result.formUrl, fields: result.fields });
+}
+
+// ---- Deprecated: /pay/<id> HTML fallback (see file-header note) -----------
+
+async function handlePay(txnId: string): Promise<Response> {
+  const result = await buildEsewaFields(txnId);
+  if (!result.ok) return htmlPage(result.title, result.message);
+  const { formUrl, fields } = result;
+
   const inputs = Object.entries(fields)
     .map(([k, v]) => `<input type="hidden" name="${k}" value="${v.replace(/"/g, "&quot;")}">`)
     .join("\n");
@@ -156,7 +207,7 @@ async function handlePay(txnId: string): Promise<Response> {
     <body onload="document.forms[0].submit()">
       <div class="card">
         <p>Redirecting to eSewa…</p>
-        <form method="POST" action="${ESEWA_FORM_URL}">
+        <form method="POST" action="${formUrl}">
           ${inputs}
           <button type="submit">Continue to eSewa</button>
         </form>
@@ -258,10 +309,15 @@ async function handleReturn(req: Request, success: boolean): Promise<Response> {
 // ---- Entry point ------------------------------------------------------------
 
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
+
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/esewa-payment/, "");
 
   try {
+    if (path.startsWith("/init/")) {
+      return await handleInit(path.slice("/init/".length));
+    }
     if (path.startsWith("/pay/")) {
       return await handlePay(path.slice("/pay/".length));
     }
