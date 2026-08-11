@@ -4,6 +4,8 @@
 // _web.dart naming convention used elsewhere in this codebase
 // (remember_me_service_web.dart etc.), paired with popup_stub.dart via
 // web_popup.dart's conditional import.
+import 'dart:js_interop';
+
 import 'package:web/web.dart' as web;
 
 /// Opens a blank popup window synchronously. Web browsers only allow
@@ -16,7 +18,11 @@ import 'package:web/web.dart' as web;
 dynamic openBlankPopup() => web.window.open('', '_blank');
 
 void navigatePopup(dynamic handle, String url) {
-  if (handle is web.Window) {
-    handle.location.href = url;
+  // `is web.Window` triggers invalid_runtime_check_with_js_interop_types
+  // (JS interop types aren't platform-consistent under `is`) — use
+  // `.isA<T>()` from dart:js_interop instead, which is the sanctioned way
+  // to runtime-check a JS interop type.
+  if (handle != null && (handle as JSAny).isA<web.Window>()) {
+    (handle as web.Window).location.href = url;
   }
 }
