@@ -1,17 +1,26 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../shared/utils/web_popup.dart';
 import '../data/repositories.dart';
 import 'pages_theme.dart';
 
 /// Real-money donation flow (Step 15b): amount entry -> initiate_page_payment
-/// RPC -> open the eSewa redirect externally -> watch the transaction row
-/// over Realtime until the edge function's callback resolves it. Nothing
-/// here ever touches a secret; that all happens server-side.
+/// RPC -> a fresh "Open eSewa" tap -> watch the transaction row over
+/// Realtime until the edge function's callback resolves it. Nothing here
+/// ever touches a secret; that all happens server-side.
+///
+/// The RPC and the eSewa launch are deliberately two separate taps, not
+/// one. A live test found that combining them (creating the transaction,
+/// then immediately opening the URL in the same async handler) works
+/// fine on native platforms but silently fails on Flutter Web: browsers
+/// only allow window.open() to bypass the popup blocker when it happens
+/// synchronously within a user gesture, and the `await` on the RPC breaks
+/// that chain with no error surfaced anywhere. Making "Open eSewa" its
+/// own fresh button tap — launchUrl called with no `await` before it —
+/// keeps it a trusted gesture on every platform, with no web-specific
+/// workaround code needed at all.
 Future<void> showDonateSheet(BuildContext context, {required String pageId, required String pageName}) {
   return showModalBottomSheet(
     context: context,
@@ -33,7 +42,7 @@ class _DonateSheetBody extends StatefulWidget {
   State<_DonateSheetBody> createState() => _DonateSheetBodyState();
 }
 
-enum _DonateStage { amount, waiting, success, failed }
+enum _DonateStage { amount, ready, waiting, success, failed }
 
 class _DonateSheetBodyState extends State<_DonateSheetBody> {
   final _repo = PageRepository();
@@ -41,6 +50,7 @@ class _DonateSheetBodyState extends State<_DonateSheetBody> {
   final _messageController = TextEditingController();
   _DonateStage _stage = _DonateStage.amount;
   String? _error;
+  String? _pendingUrl;
   RealtimeChannel? _channel;
 
   static const _quickAmounts = [50, 100, 500, 1000];
@@ -53,21 +63,13 @@ class _DonateSheetBodyState extends State<_DonateSheetBody> {
     super.dispose();
   }
 
-  Future<void> _startPayment() async {
+  Future<void> _prepare() async {
     final rupees = int.tryParse(_amountController.text.trim());
     if (rupees == null || rupees <= 0) {
       setState(() => _error = 'Enter a valid amount');
       return;
     }
-    // Must happen synchronously, before any await, or Chrome's popup
-    // blocker silently swallows the window.open() call later — found via
-    // a live test where "Continue to eSewa" appeared to do nothing on
-    // Flutter Web (the RPC below breaks the direct-user-gesture chain).
-    final popup = kIsWeb ? openBlankPopup() : null;
-    setState(() {
-      _error = null;
-      _stage = _DonateStage.waiting;
-    });
+    setState(() => _error = null);
     try {
       final txnId = await _repo.initiatePagePayment(
         pageId: widget.pageId,
@@ -86,26 +88,31 @@ class _DonateSheetBodyState extends State<_DonateSheetBody> {
         }
       });
 
-      final url = _repo.esewaPaymentUrl(txnId);
-      if (kIsWeb) {
-        navigatePopup(popup, url);
-      } else {
-        final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-        if (!opened && mounted) {
-          setState(() {
-            _error = 'Could not open eSewa. Please try again.';
-            _stage = _DonateStage.amount;
-          });
-        }
-      }
-    } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Could not start payment: $e';
-          _stage = _DonateStage.amount;
+          _pendingUrl = _repo.esewaPaymentUrl(txnId);
+          _stage = _DonateStage.ready;
         });
       }
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Could not start payment: $e');
     }
+  }
+
+  /// Deliberately synchronous up to the launchUrl call — see the class-doc
+  /// note above on why this can't be folded into _prepare().
+  void _openEsewa() {
+    final url = _pendingUrl;
+    if (url == null) return;
+    setState(() => _stage = _DonateStage.waiting);
+    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication).then((opened) {
+      if (!opened && mounted) {
+        setState(() {
+          _error = 'Could not open eSewa. Please try again.';
+          _stage = _DonateStage.ready;
+        });
+      }
+    });
   }
 
   @override
@@ -118,6 +125,7 @@ class _DonateSheetBodyState extends State<_DonateSheetBody> {
         children: [
           switch (_stage) {
             _DonateStage.amount => _buildAmountForm(context),
+            _DonateStage.ready => _buildReady(context),
             _DonateStage.waiting => _buildWaiting(context),
             _DonateStage.success => _buildResult(context, success: true),
             _DonateStage.failed => _buildResult(context, success: false),
@@ -164,12 +172,35 @@ class _DonateSheetBodyState extends State<_DonateSheetBody> {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: _startPayment,
+            onPressed: _prepare,
             icon: const Icon(Icons.volunteer_activism_outlined),
-            label: const Text('Continue to eSewa'),
+            label: const Text('Continue'),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildReady(BuildContext context) {
+    return SizedBox(
+      height: 220,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.volunteer_activism_outlined, size: 40),
+          const SizedBox(height: PageTokens.spaceMd),
+          Text("You're all set", style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Text(
+            'Tap below to complete your payment on eSewa.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+          const SizedBox(height: PageTokens.spaceMd),
+          FilledButton.icon(onPressed: _openEsewa, icon: const Icon(Icons.open_in_new), label: const Text('Open eSewa')),
+        ],
+      ),
     );
   }
 

@@ -1,19 +1,23 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../shared/utils/web_popup.dart';
 import '../data/repositories.dart';
 import 'pages_theme.dart';
 
 /// Real-money marketplace checkout (Step 15b continuation): item price x
-/// quantity -> initiate_page_payment(purpose: 'marketplace_order') ->
-/// open eSewa externally -> watch the transaction over Realtime. On
+/// quantity -> initiate_page_payment(purpose: 'marketplace_order') -> a
+/// fresh "Open eSewa" tap -> watch the transaction over Realtime. On
 /// success, the esewa-payment edge function marks the
 /// page_marketplace_orders row 'paid'; the page manager fulfills it
 /// separately from their order list.
+///
+/// The RPC and the eSewa launch are two separate taps, not one — see
+/// donate_sheet.dart's doc comment for why: browsers only trust
+/// window.open() as a real user gesture when it happens synchronously
+/// within a tap handler, and the `await` on the RPC breaks that chain on
+/// Flutter Web with no error surfaced anywhere.
 Future<void> showMarketplaceCheckoutSheet(
   BuildContext context, {
   required String pageId,
@@ -41,12 +45,13 @@ class _CheckoutSheetBody extends StatefulWidget {
   State<_CheckoutSheetBody> createState() => _CheckoutSheetBodyState();
 }
 
-enum _Stage { confirm, waiting, success, failed }
+enum _Stage { confirm, ready, waiting, success, failed }
 
 class _CheckoutSheetBodyState extends State<_CheckoutSheetBody> {
   final _repo = PageRepository();
   _Stage _stage = _Stage.confirm;
   String? _error;
+  String? _pendingUrl;
   int _quantity = 1;
   RealtimeChannel? _channel;
 
@@ -60,12 +65,8 @@ class _CheckoutSheetBodyState extends State<_CheckoutSheetBody> {
   int get _totalCents => _unitPriceCents * _quantity;
   String get _title => widget.item['title'] as String? ?? 'Item';
 
-  Future<void> _startPayment() async {
-    final popup = kIsWeb ? openBlankPopup() : null;
-    setState(() {
-      _error = null;
-      _stage = _Stage.waiting;
-    });
+  Future<void> _prepare() async {
+    setState(() => _error = null);
     try {
       final txnId = await _repo.initiatePagePayment(
         pageId: widget.pageId,
@@ -85,26 +86,29 @@ class _CheckoutSheetBodyState extends State<_CheckoutSheetBody> {
         }
       });
 
-      final url = _repo.esewaPaymentUrl(txnId);
-      if (kIsWeb) {
-        navigatePopup(popup, url);
-      } else {
-        final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-        if (!opened && mounted) {
-          setState(() {
-            _error = 'Could not open eSewa. Please try again.';
-            _stage = _Stage.confirm;
-          });
-        }
-      }
-    } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Could not start payment: $e';
-          _stage = _Stage.confirm;
+          _pendingUrl = _repo.esewaPaymentUrl(txnId);
+          _stage = _Stage.ready;
         });
       }
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Could not start payment: $e');
     }
+  }
+
+  void _openEsewa() {
+    final url = _pendingUrl;
+    if (url == null) return;
+    setState(() => _stage = _Stage.waiting);
+    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication).then((opened) {
+      if (!opened && mounted) {
+        setState(() {
+          _error = 'Could not open eSewa. Please try again.';
+          _stage = _Stage.ready;
+        });
+      }
+    });
   }
 
   @override
@@ -113,6 +117,7 @@ class _CheckoutSheetBodyState extends State<_CheckoutSheetBody> {
       padding: const EdgeInsets.all(PageTokens.spaceLg),
       child: switch (_stage) {
         _Stage.confirm => _buildConfirm(context),
+        _Stage.ready => _buildReady(context),
         _Stage.waiting => _buildWaiting(context),
         _Stage.success => _buildResult(context, success: true),
         _Stage.failed => _buildResult(context, success: false),
@@ -165,12 +170,35 @@ class _CheckoutSheetBodyState extends State<_CheckoutSheetBody> {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: _startPayment,
+            onPressed: _prepare,
             icon: const Icon(Icons.shopping_bag_outlined),
-            label: const Text('Continue to eSewa'),
+            label: const Text('Continue'),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildReady(BuildContext context) {
+    return SizedBox(
+      height: 220,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.shopping_bag_outlined, size: 40),
+          const SizedBox(height: PageTokens.spaceMd),
+          Text("You're all set", style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Text(
+            'Tap below to complete your payment on eSewa.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+          const SizedBox(height: PageTokens.spaceMd),
+          FilledButton.icon(onPressed: _openEsewa, icon: const Icon(Icons.open_in_new), label: const Text('Open eSewa')),
+        ],
+      ),
     );
   }
 
