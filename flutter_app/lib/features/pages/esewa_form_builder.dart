@@ -53,7 +53,7 @@ Future<EsewaFormFields> fetchEsewaFields(String initUrl) async {
 
 /// Builds the tiny auto-submitting HTML form — identical in spirit to
 /// what the edge function used to serve directly (see the deprecated
-/// /pay/<id> HTML fallback there), just now built on-device so Supabase
+/// `/pay/<id>` HTML fallback there), just now built on-device so Supabase
 /// never has to serve HTML at all.
 String buildEsewaFormHtml(EsewaFormFields f) {
   final inputs = f.fields.entries

@@ -11,6 +11,8 @@
 // from the RPC that creates the transaction. Fields are fetched *after*
 // the window is open and written into it once ready; if that fails, the
 // blank window is closed again instead of left hanging.
+import 'dart:js_interop';
+
 import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
@@ -24,7 +26,7 @@ Future<bool> openEsewaPayment(BuildContext context, String initUrl) async {
     final fields = await fetchEsewaFields(initUrl);
     final html = buildEsewaFormHtml(fields);
     popup.document.open();
-    popup.document.write(html);
+    popup.document.write(html.toJS);
     popup.document.close();
     return true;
   } catch (_) {
