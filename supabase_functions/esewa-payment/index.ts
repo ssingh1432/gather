@@ -33,20 +33,25 @@
 //                          used by notification-dispatch if that grant
 //                          issue recurs on this project.
 //
-// IMPORTANT — not yet live-tested against eSewa: this implementation
-// follows eSewa's publicly documented v2 ePay integration (form fields,
-// signed_field_names/signature scheme, and status-check endpoint shape).
-// The exact URLs/scheme were re-verified via multiple independent public
-// sources (eSewa's own developer docs, Drupal/Laravel/PHP eSewa
-// integration packages) after this sandbox's initial guess had the
-// production status-check host wrong (was epay.esewa.com.np, corrected
-// to esewa.com.np — no "epay." prefix on that one host, unlike every
-// other eSewa URL). Still genuinely untested end-to-end since this
-// sandbox has no network path to esewa.com.np. Once ESEWA_* secrets are
-// set, run one real test payment before relying on this for production
-// donations/subscriptions/orders — if eSewa's exact field names or status
-// endpoint path have moved since, only the two small functions
-// `buildEsewaForm` and `checkEsewaStatus` below need adjusting.
+// STATUS-CHECK HOST FIX (Aug 2026): eSewa's official developer docs
+// (developer.esewa.com.np/pages/Epay-V2) give the UAT/test status-check
+// host as https://uat.esewa.com.np/... and production as
+// https://epay.esewa.com.np/... — this file previously pointed at
+// rc.esewa.com.np (test) / esewa.com.np (prod), neither of which is
+// eSewa's documented host. Corrected below. This only affected step 3
+// (the post-redirect status re-check), not step 2 (the signed form
+// POST) — if payments were failing before eSewa's login page even
+// appeared, the cause is almost certainly ESEWA_SECRET_KEY not being
+// set to eSewa's exact published UAT secret (see note below), not this
+// URL.
+//
+// UAT test credentials (product_code=EPAYTEST only):
+//   ESEWA_SECRET_KEY must be exactly: 8gBm/:&EnhH.1/q
+//   Test eSewa login ID: 9806800001 (also ...002/003/004/005)
+//   Password: Nepal@123   MPIN: 1122   OTP token: 123456
+// Get/verify these in the Supabase dashboard under
+// Edge Functions > esewa-payment > Secrets, or via
+// `supabase secrets list` — never print the value in logs.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -62,8 +67,8 @@ const ESEWA_FORM_URL = IS_LIVE
   ? "https://epay.esewa.com.np/api/epay/main/v2/form"
   : "https://rc-epay.esewa.com.np/api/epay/main/v2/form";
 const ESEWA_STATUS_URL = IS_LIVE
-  ? "https://esewa.com.np/api/epay/transaction/status/"
-  : "https://rc.esewa.com.np/api/epay/transaction/status/";
+  ? "https://epay.esewa.com.np/api/epay/transaction/status/"
+  : "https://uat.esewa.com.np/api/epay/transaction/status/";
 
 const FUNCTION_BASE = `${SUPABASE_URL}/functions/v1/esewa-payment`;
 
