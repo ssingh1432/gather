@@ -79,52 +79,42 @@ class MediaUploadService {
 
   SupabaseClient get _client => SupabaseConfig.client;
 
-  /// Always force a fresh session immediately before a storage call.
+  /// Runs [action] (a storage upload), retrying once more after a forced
+  /// session refresh if it fails with a 403 (genuinely stale/invalid
+  /// token), backing off briefly so the SDK has time to propagate the
+  /// refreshed token before the retry.
   ///
-  /// This used to be conditional (only refresh if <60s/<5min remained),
-  /// on the theory that this was purely a stale/near-expiry token race.
-  /// That theory is now disproven: a real failure was captured with
-  /// token_seconds_left_at_failure = 3598 (nearly a full hour left), so
-  /// time-to-expiry was never the actual gate. Refreshing unconditionally
-  /// costs one extra round-trip per upload sequence but removes staleness
-  /// as a variable entirely while the JWT-sub-vs-author diagnostic
-  /// (logged on failure in create_post_screen.dart) gathers proof of
-  /// what's actually different about the failing request's auth context.
-  Future<void> _ensureFreshSession() async {
-    final session = _client.auth.currentSession;
-    if (session == null) return;
-    try {
-      await _client.auth.refreshSession();
-    } catch (_) {
-      // Best-effort — if this fails, the upload call itself will surface
-      // whatever the real auth problem is.
-    }
-  }
-
-  /// Runs [action] (a storage upload), retrying up to twice more after a
-  /// forced session refresh if it keeps failing with a 403 (RLS violation
-  /// / stale token), backing off briefly between attempts so the SDK has
-  /// time to actually propagate the refreshed token to the storage
-  /// client before the next try.
+  /// This used to force `auth.refreshSession()` unconditionally before
+  /// *every* call, plus up to two more refreshes per call on 403 — a
+  /// leftover from misdiagnosing a storage-RLS bug (see migration
+  /// `fix_post_media_grants_and_policies` / the `can_upload_post_media`
+  /// SECURITY DEFINER fix) as a token problem. A post with all four
+  /// attachment types called this four times per publish, each one
+  /// firing a real `TOKEN_REFRESHED` auth event — which
+  /// `PushNotificationService`'s listener reacts to on every publish by
+  /// writing a login-device row and re-syncing the FCM token. That's the
+  /// concrete mechanism behind the "screen refreshes ~4 times and gets
+  /// stuck" report: up to 4 extra network round trips competing with the
+  /// actual uploads, not real UI rebuilds. Refreshing is now purely
+  /// reactive — only after an upload has actually failed with a 403 —
+  /// and only retried once, since a second consecutive 403 means the
+  /// session is unrecoverable client-side and further retries just add
+  /// latency without changing the outcome.
   Future<T> _withAuthRetry<T>(Future<T> Function() action) async {
-    await _ensureFreshSession();
-    StorageException? lastError;
-    for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await action();
+    } on StorageException catch (e) {
+      if (e.statusCode != '403') rethrow;
       try {
-        return await action();
-      } on StorageException catch (e) {
-        lastError = e;
-        if (e.statusCode != '403') rethrow;
-        try {
-          await _client.auth.refreshSession();
-        } catch (_) {
-          // Best-effort — if the token is truly unrecoverable, the next
-          // action() attempt will surface that on its own.
-        }
-        await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
+        await _client.auth.refreshSession();
+      } catch (_) {
+        // Refresh itself failed — the token is unrecoverable client-side;
+        // let the retry below surface the real error instead of hiding
+        // it behind a refresh exception.
       }
+      await Future.delayed(const Duration(milliseconds: 300));
+      return action();
     }
-    throw lastError!;
   }
 
   /// Prepares [image] for upload. On mobile this compresses to temp files;

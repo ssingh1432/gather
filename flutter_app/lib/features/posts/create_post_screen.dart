@@ -73,7 +73,9 @@ class _P extends State<CreatePostScreen> {
   // Step 10 — Scheduled Posts. Null means "publish now".
   DateTime? _scheduledFor;
 
-  // username -> id, so chips can show the name while we submit ids.
+  // userId -> username. IDs are the source of truth for who's tagged;
+  // usernames are display-only. Keying by id (not name) means a Map
+  // naturally forbids duplicate tags and survives username changes.
   final Map<String, String> _taggedFriends = {};
   double? _pickedLat;
   double? _pickedLng;
@@ -290,6 +292,13 @@ class _P extends State<CreatePostScreen> {
   }
 
   Future<void> _publish() async {
+    // Explicit operation guard — belt-and-braces alongside the button's
+    // `onPressed: loading ? null : _publish`. The button disables on the
+    // next frame after setState, which is not synchronous with the tap;
+    // this check closes that gap so a double/rapid tap or a stray
+    // duplicate callback can never start a second publish while one is
+    // already in flight.
+    if (loading) return;
     if (_scheduledFor != null) return _schedule();
 
     final uid = SupabaseConfig.client.auth.currentUser?.id;
@@ -326,8 +335,8 @@ class _P extends State<CreatePostScreen> {
         'feeling': _feeling?.stored,
         'tags': _parsedTags,
         'reply_to_post_id': widget.quotePostId,
-        'mentioned_user_ids': _taggedFriends.values.toList(),
-        'mentioned_usernames': _taggedFriends.keys.toList(),
+        'mentioned_user_ids': _taggedFriends.keys.toList(),
+        'mentioned_usernames': _taggedFriends.values.toList(),
         'link_preview_url': _linkPreview?.url,
         'link_preview_title': _linkPreview?.title,
         'link_preview_description': _linkPreview?.description,
@@ -538,10 +547,18 @@ class _P extends State<CreatePostScreen> {
   Future<void> _pickFriends() async {
     final uid = SupabaseConfig.currentUserId;
     if (uid == null) return;
+    // id -> username. This is the sheet's working copy; it's only
+    // committed to _taggedFriends if the sheet is dismissed normally.
     final selected = Map<String, String>.from(_taggedFriends);
     var results = <Map<String, dynamic>>[];
     var loading = true;
     var loadedDefault = false;
+    var searchError = false;
+    Timer? debounce;
+    // Bumped on every new search kicked off; a response is only applied
+    // if it's still the *latest* generation by the time it lands, so a
+    // slow "a" response can never overwrite a faster "alice" response.
+    var generation = 0;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -551,12 +568,39 @@ class _P extends State<CreatePostScreen> {
         builder: (sheetContext, setSheetState) {
           if (!loadedDefault) {
             loadedDefault = true;
+            final myGeneration = ++generation;
             ProfileRepository().followingUsers(uid).then((people) {
+              if (myGeneration != generation) return; // superseded
               results = people;
               loading = false;
               setSheetState(() {});
+            }).catchError((_) {
+              if (myGeneration != generation) return;
+              loading = false;
+              searchError = true;
+              setSheetState(() {});
             });
           }
+
+          Future<void> runSearch(String q) async {
+            final myGeneration = ++generation;
+            try {
+              final found = q.trim().isEmpty
+                  ? await ProfileRepository().followingUsers(uid)
+                  : await ProfileRepository().searchUsersByUsername(q.trim());
+              if (myGeneration != generation) return; // a newer search landed first — drop this one
+              results = found;
+              loading = false;
+              searchError = false;
+              setSheetState(() {});
+            } catch (_) {
+              if (myGeneration != generation) return;
+              loading = false;
+              searchError = true;
+              setSheetState(() {});
+            }
+          }
+
           return DraggableScrollableSheet(
             initialChildSize: 0.7,
             minChildSize: 0.4,
@@ -576,48 +620,48 @@ class _P extends State<CreatePostScreen> {
                       prefixIcon: Icon(Icons.search),
                       border: OutlineInputBorder(),
                     ),
-                    onChanged: (q) async {
+                    onChanged: (q) {
+                      debounce?.cancel();
                       loading = true;
                       setSheetState(() {});
-                      final found = q.trim().isEmpty
-                          ? await ProfileRepository().followingUsers(uid)
-                          : await ProfileRepository().searchUsersByUsername(q);
-                      results = found;
-                      loading = false;
-                      setSheetState(() {});
+                      // ~300ms debounce — avoids firing a search on every
+                      // keystroke while still feeling responsive.
+                      debounce = Timer(const Duration(milliseconds: 300), () => runSearch(q));
                     },
                   ),
                   const SizedBox(height: 8),
                   Expanded(
                     child: loading
                         ? const Center(child: CircularProgressIndicator())
-                        : results.isEmpty
-                            ? const Center(child: Text('No one found'))
-                            : ListView.builder(
-                                controller: scrollController,
-                                itemCount: results.length,
-                                itemBuilder: (context, i) {
-                                  final person = results[i];
-                                  final id = person['id'] as String;
-                                  final name = person['username'] as String? ?? 'Unknown';
-                                  if (id == uid) return const SizedBox.shrink(); // can't tag yourself
-                                  final isSelected = selected.containsKey(name);
-                                  return CheckboxListTile(
-                                    value: isSelected,
-                                    secondary: ProfileAvatar(url: person['profile_photo_url'] as String?, radius: 16),
-                                    title: Text(name),
-                                    onChanged: (checked) {
-                                      setSheetState(() {
-                                        if (checked == true) {
-                                          selected[name] = id;
-                                        } else {
-                                          selected.remove(name);
-                                        }
-                                      });
+                        : searchError
+                            ? const Center(child: Text('Search failed — check your connection and try again'))
+                            : results.isEmpty
+                                ? const Center(child: Text('No one found'))
+                                : ListView.builder(
+                                    controller: scrollController,
+                                    itemCount: results.length,
+                                    itemBuilder: (context, i) {
+                                      final person = results[i];
+                                      final id = person['id'] as String;
+                                      final name = person['username'] as String? ?? 'Unknown';
+                                      if (id == uid) return const SizedBox.shrink(); // can't tag yourself
+                                      final isSelected = selected.containsKey(id);
+                                      return CheckboxListTile(
+                                        value: isSelected,
+                                        secondary: ProfileAvatar(url: person['profile_photo_url'] as String?, radius: 16),
+                                        title: Text(name),
+                                        onChanged: (checked) {
+                                          setSheetState(() {
+                                            if (checked == true) {
+                                              selected[id] = name;
+                                            } else {
+                                              selected.remove(id);
+                                            }
+                                          });
+                                        },
+                                      );
                                     },
-                                  );
-                                },
-                              ),
+                                  ),
                   ),
                   SafeArea(
                     child: Padding(
@@ -638,6 +682,7 @@ class _P extends State<CreatePostScreen> {
         },
       ),
     );
+    debounce?.cancel();
 
     if (mounted) {
       setState(() {
@@ -1057,10 +1102,10 @@ class _P extends State<CreatePostScreen> {
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: _taggedFriends.keys
-                    .map((name) => Chip(
-                          label: Text('@$name'),
-                          onDeleted: () => setState(() => _taggedFriends.remove(name)),
+                children: _taggedFriends.entries
+                    .map((e) => Chip(
+                          label: Text('@${e.value}'),
+                          onDeleted: () => setState(() => _taggedFriends.remove(e.key)),
                         ))
                     .toList(),
               ),
