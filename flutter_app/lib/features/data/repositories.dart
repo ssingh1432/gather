@@ -19,6 +19,7 @@ class FeedRepository {
         .from('posts')
         .select('*, users!posts_author_id_fkey(username), post_media(media_url, media_type)')
         .eq('is_removed', false)
+        .eq('publish_status', 'published')
         .isFilter('archived_at', null)
         .order('is_pinned', ascending: false)
         .order('created_at', ascending: false)
@@ -34,6 +35,7 @@ class FeedRepository {
         .select('*, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url, media_type)')
         .eq('reply_to_post_id', postId)
         .eq('is_removed', false)
+        .eq('publish_status', 'published')
         .order('created_at', ascending: false)
         .limit(limit);
     return (data as List).map((e) => PostModel.fromMap(e)).toList();
@@ -47,6 +49,7 @@ class FeedRepository {
         .select('*, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url, media_type)')
         .eq('author_id', userId)
         .eq('is_removed', false)
+        .eq('publish_status', 'published')
         .isFilter('archived_at', null)
         .order('is_pinned', ascending: false)
         .order('created_at', ascending: false)
@@ -85,6 +88,7 @@ class FeedRepository {
         .select('*, users!posts_author_id_fkey(username, profile_photo_url), post_media(media_url, media_type)')
         .eq('id', postId)
         .eq('is_removed', false)
+        .eq('publish_status', 'published')
         .single();
 
     final likeCount = await _c.from('post_likes').count(CountOption.exact).eq('post_id', postId);
@@ -1942,6 +1946,16 @@ class PostRepository {
         'mentioned_usernames': mentionedUsernames,
         'is_sensitive': isSensitive,
       }).eq('id', postId);
+
+  /// Marks a post's row as fully published — the one explicit point
+  /// where the client asserts "everything succeeded" (see migration 097).
+  /// Until this is called, the post stays invisible to every feed/
+  /// profile/search read (publish_status defaults to 'publishing' from
+  /// createPost() below) even though the row already exists, so a slow
+  /// or failed media upload can never be visible as a normal completed
+  /// post. SECURITY DEFINER on the server side re-checks author_id, so
+  /// this can't be used to publish someone else's pending post.
+  Future<void> finalizePost(String postId) => _c.rpc('finalize_post', params: {'p_post_id': postId});
 
   Future<Map<String, dynamic>> createPost(Map<String, dynamic> payload) async {
     try {

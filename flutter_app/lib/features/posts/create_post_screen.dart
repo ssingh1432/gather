@@ -401,6 +401,11 @@ class _P extends State<CreatePostScreen> {
             'link_preview_site_name': _linkPreview?.siteName,
             'is_sensitive': _isSensitive,
             'content_type': _resolvedContentType,
+            // Invisible to every feed/profile/search read until
+            // finalizePost() confirms every step below succeeded — see
+            // migration 097 / requirement #3 ("a partially-created post
+            // must not accidentally appear as a normal completed post").
+            'publish_status': 'publishing',
           }))['id'].toString();
         } catch (e) {
           throw _labeled('Post creation failed', e);
@@ -508,6 +513,16 @@ class _P extends State<CreatePostScreen> {
             throw _labeled('Attaching document failed', e);
           }
         }
+      }
+
+      try {
+        await postRepository.finalizePost(_pendingPostId!);
+      } catch (e) {
+        // Post + media are genuinely fine at this point — only the "mark
+        // it visible" flag failed. Don't clear the composer or navigate;
+        // a retry re-enters the resume branch above (updatePendingPost,
+        // no re-uploads) and just retries this call.
+        throw _labeled('Finalizing post failed', e);
       }
 
       _published = true;
