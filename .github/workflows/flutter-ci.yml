@@ -108,6 +108,23 @@ jobs:
       - name: Build web release
         run: flutter build web --release
 
+      - name: Cache-bust the web entry point
+        # flutter_service_worker.js self-updates via content hashing, but
+        # only if the browser actually fetches a fresh copy to compare —
+        # if the server (or the browser's own disk cache) serves a stale
+        # cached copy of flutter_bootstrap.js/main.dart.js/
+        # flutter_service_worker.js, a normal reload never even asks the
+        # server, so the update is never discovered. Appending the commit
+        # SHA to the bootstrap script's src makes that URL unique on every
+        # deploy, so the browser is forced to fetch it fresh regardless of
+        # any cache headers — which then correctly discovers and installs
+        # everything else. This does NOT replace setting proper
+        # Cache-Control headers on the VPS (see the deploy runbook) — it's
+        # a client-side backstop for when that's missing or misconfigured.
+        run: |
+          sed -i "s#src=\"flutter_bootstrap.js\"#src=\"flutter_bootstrap.js?v=${GITHUB_SHA}\"#" build/web/index.html
+          grep -o 'src="flutter_bootstrap.js[^"]*"' build/web/index.html
+
       - name: Deploy build/web to VPS
         uses: easingthemes/ssh-deploy@v6
         with:
