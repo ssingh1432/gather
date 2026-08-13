@@ -37,6 +37,31 @@ class QuotedPostPreview {
   }
 }
 
+/// One attachment on a post. A post can carry several simultaneously
+/// (e.g. image + video + audio + document) — see the non-else-if upload
+/// block in create_post_screen.dart. `PostModel.mediaItems` holds all of
+/// them, in upload order; `imageUrl`/`mediaType`/`thumbnailUrl` on
+/// [PostModel] itself remain as the first item for any code that only
+/// needs one.
+class PostMediaItem {
+  final String mediaUrl;
+  final String mediaType;
+  final String? thumbnailUrl;
+
+  const PostMediaItem({required this.mediaUrl, required this.mediaType, this.thumbnailUrl});
+
+  static PostMediaItem? fromMap(dynamic raw) {
+    if (raw is! Map) return null;
+    final url = raw['media_url'] as String?;
+    if (url == null || url.isEmpty) return null;
+    return PostMediaItem(
+      mediaUrl: url,
+      mediaType: raw['media_type'] as String? ?? 'image',
+      thumbnailUrl: raw['thumbnail_url'] as String?,
+    );
+  }
+}
+
 class PostModel {
   final String id;
   final String authorId;
@@ -58,6 +83,7 @@ class PostModel {
   final List<String> tags;
   final QuotedPostPreview? replyTo;
   final String? mediaType;
+  final List<PostMediaItem> mediaItems;
   final bool authorAdsEligible;
   final List<String> mentionedUsernames;
   final List<String> mentionedUserIds;
@@ -100,6 +126,7 @@ class PostModel {
     this.tags = const [],
     this.replyTo,
     this.mediaType,
+    this.mediaItems = const [],
     this.authorAdsEligible = false,
     this.mentionedUsernames = const [],
     this.mentionedUserIds = const [],
@@ -125,6 +152,19 @@ class PostModel {
   factory PostModel.fromMap(Map<String, dynamic> map) {
     final author = map['users'];
     final media = map['post_media'] as List?;
+    // media_items: the RPC-aggregated jsonb array (get_home_feed*,
+    // get_community_feed, search_posts). post_media: the PostgREST embed
+    // used by publicFeed/repliesTo/postsByUser/getPost, which already
+    // returns every attached row. Prefer whichever is present; both are
+    // ordered created_at asc so element 0 always matches the legacy
+    // single-item columns below.
+    final rawMediaItems = map['media_items'];
+    final mediaItems = <PostMediaItem>[
+      if (rawMediaItems is List)
+        ...rawMediaItems.map(PostMediaItem.fromMap).whereType<PostMediaItem>()
+      else if (media != null)
+        ...media.map(PostMediaItem.fromMap).whereType<PostMediaItem>(),
+    ];
     final flatImageUrl = map['image_url'] as String?;
     final flatThumbnailUrl = map['thumbnail_url'] as String?;
     final mediaUpdatedAtValue = map['media_updated_at'] ?? (media != null && media.isNotEmpty ? media.first['updated_at'] : null);
@@ -136,8 +176,9 @@ class PostModel {
       communityId: map['community_id']?.toString(),
       authorUsername: author is Map<String, dynamic> ? author['username'] : map['author_username'] as String?,
       authorAvatarUrl: author is Map<String, dynamic> ? author['profile_photo_url'] as String? : map['author_avatar_url'] as String?,
-      imageUrl: flatImageUrl ?? (media != null && media.isNotEmpty ? media.first['media_url'] as String? : null),
-      thumbnailUrl: flatThumbnailUrl ?? (media != null && media.isNotEmpty ? media.first['thumbnail_url'] as String? : null),
+      imageUrl: mediaItems.isNotEmpty ? mediaItems.first.mediaUrl : flatImageUrl,
+      thumbnailUrl: mediaItems.isNotEmpty ? (mediaItems.first.thumbnailUrl ?? flatThumbnailUrl) : flatThumbnailUrl,
+      mediaItems: mediaItems,
       likeCount: _intFromMap(map, 'like_count'),
       commentCount: _intFromMap(map, 'comment_count'),
       shareCount: _intFromMap(map, 'share_count'),
@@ -148,7 +189,11 @@ class PostModel {
       feeling: map['feeling'] as String?,
       tags: ((map['tags'] as List?) ?? const []).map((e) => e.toString()).toList(),
       replyTo: QuotedPostPreview.fromMap(map),
-      mediaType: map['media_type'] as String? ?? (media != null && media.isNotEmpty ? media.first['media_type'] as String? : null),
+      // Prefer the aggregated list's first entry so audio/document posts
+      // classify correctly even from RPCs that don't return a flat
+      // media_type column (get_home_feed / get_home_feed_cursor didn't,
+      // historically — see migration 095).
+      mediaType: mediaItems.isNotEmpty ? mediaItems.first.mediaType : (map['media_type'] as String?),
       authorAdsEligible: map['author_ads_eligible'] == true,
       mentionedUsernames: ((map['mentioned_usernames'] as List?) ?? const []).map((e) => e.toString()).toList(),
       mentionedUserIds: ((map['mentioned_user_ids'] as List?) ?? const []).map((e) => e.toString()).toList(),
@@ -191,6 +236,7 @@ class PostModel {
         communityId: communityId,
         imageUrl: imageUrl,
         thumbnailUrl: thumbnailUrl,
+        mediaItems: mediaItems,
         likeCount: likeCount ?? this.likeCount,
         commentCount: commentCount ?? this.commentCount,
         shareCount: shareCount ?? this.shareCount,

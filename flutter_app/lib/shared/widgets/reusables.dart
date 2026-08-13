@@ -422,7 +422,18 @@ class PostCard extends StatelessWidget {
           // Media is deliberately outside any horizontal padding — full
           // device width, flush left and right, no rounded corners.
           // Facebook-style, not a card-inset thumbnail.
-          if (post.displayImageUrl != null && (post.isVideo || (!post.isAudio && !post.isDocument)))
+          //
+          // A post can carry more than one attachment (image + video +
+          // audio + document together — see the composer's upload step).
+          // The single-item branches below are untouched so the common
+          // case (0 or 1 attachment) renders exactly as before; a
+          // carousel only appears when there's genuinely more than one.
+          if (post.mediaItems.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: _PostMediaCarousel(post: post, liked: liked, onLike: onLike),
+            )
+          else if (post.displayImageUrl != null && (post.isVideo || (!post.isAudio && !post.isDocument)))
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: post.isSensitive
@@ -973,6 +984,103 @@ class _RsvpChip extends StatelessWidget {
   }
 }
 
+
+/// Wraps [_PostMedia]/[_PostAudioCard]/[_PostDocumentCard] for posts with
+/// more than one attachment, in a swipeable PageView with a dot
+/// indicator — the common single-attachment path never touches this
+/// widget, so existing rendering is unchanged for the vast majority of
+/// posts.
+class _PostMediaCarousel extends StatefulWidget {
+  const _PostMediaCarousel({required this.post, required this.liked, required this.onLike});
+  final PostModel post;
+  final bool liked;
+  final VoidCallback onLike;
+
+  @override
+  State<_PostMediaCarousel> createState() => _PostMediaCarouselState();
+}
+
+class _PostMediaCarouselState extends State<_PostMediaCarousel> {
+  final _controller = PageController();
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// A single-item view of [widget.post] standing in for one carousel
+  /// page, so [_PostMedia] (which reads imageUrl/mediaType/isVideo off a
+  /// whole PostModel) can be reused unmodified for the image/video case.
+  PostModel _pageModel(PostMediaItem item) => PostModel(
+        id: widget.post.id,
+        authorId: widget.post.authorId,
+        textContent: widget.post.textContent,
+        createdAt: widget.post.createdAt,
+        authorUsername: widget.post.authorUsername,
+        authorAvatarUrl: widget.post.authorAvatarUrl,
+        communityId: widget.post.communityId,
+        imageUrl: item.mediaUrl,
+        thumbnailUrl: item.thumbnailUrl,
+        mediaType: item.mediaType,
+        mediaUpdatedAt: widget.post.mediaUpdatedAt,
+        isSensitive: widget.post.isSensitive,
+        visibility: widget.post.visibility,
+        contentType: widget.post.contentType,
+      );
+
+  Widget _buildPage(PostMediaItem item) {
+    switch (item.mediaType) {
+      case 'audio':
+        return Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: _PostAudioCard(url: item.mediaUrl));
+      case 'document':
+        return Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: _PostDocumentCard(url: item.mediaUrl));
+      case 'image':
+      case 'video':
+      default:
+        final pageModel = _pageModel(item);
+        return widget.post.isSensitive
+            ? _SensitiveContentGate(child: _PostMedia(post: pageModel, liked: widget.liked, onLike: widget.onLike))
+            : _PostMedia(post: pageModel, liked: widget.liked, onLike: widget.onLike);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.post.mediaItems;
+    return Column(
+      children: [
+        SizedBox(
+          height: 360,
+          child: PageView.builder(
+            controller: _controller,
+            itemCount: items.length,
+            onPageChanged: (i) => setState(() => _page = i),
+            itemBuilder: (context, i) => _buildPage(items[i]),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            items.length,
+            (i) => AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: i == _page ? 16 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: i == _page ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _PostMedia extends StatefulWidget {
   const _PostMedia({required this.post, required this.liked, required this.onLike});
