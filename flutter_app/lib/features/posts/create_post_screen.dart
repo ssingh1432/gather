@@ -20,6 +20,17 @@ import '../../shared/widgets/reusables.dart';
 import '../data/repositories.dart';
 import 'location_picker_screen.dart';
 
+/// Wraps an error with which publish step it happened in, so the
+/// composer can tell the user "Video upload failed" instead of a generic
+/// "Something went wrong" — see requirement #12 and _friendlyError().
+class _PublishStepFailure implements Exception {
+  final String label;
+  final Object cause;
+  const _PublishStepFailure(this.label, this.cause);
+  @override
+  String toString() => '$label: $cause';
+}
+
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key, this.communityId, this.quotePostId, this.sharedText});
   final String? communityId;
@@ -120,10 +131,16 @@ class _P extends State<CreatePostScreen> {
       final draft = await PostRepository().loadDraft(userId: uid, communityId: widget.communityId);
       if (draft == null || !mounted) return;
       final savedText = draft['text_content'] as String? ?? '';
-      if (savedText.isEmpty) return;
+      final pendingId = draft['pending_post_id'] as String?;
+      if (savedText.isEmpty && pendingId == null) return;
       setState(() {
         text.text = savedText;
         _draftLoaded = true;
+        // Restores a publish that was interrupted by the app being
+        // killed/crashing mid-upload in an earlier session — resuming
+        // finishes the SAME post instead of createPost() making a new
+        // one. See migration 096.
+        _pendingPostId = pendingId;
       });
     } catch (_) {
       // No draft, or the fetch failed — composer just opens empty, same as before.
@@ -253,11 +270,28 @@ class _P extends State<CreatePostScreen> {
     return 'text';
   }
 
+  /// Labels which publish step failed (per requirement #12: "Post
+  /// creation failed" / "Image upload failed" / etc. are meaningfully
+  /// different for the user, not just for a developer reading logs) by
+  /// wrapping the original error rather than replacing it, so
+  /// BetaErrorLoggingService still gets the real exception underneath.
+  Object _labeled(String label, Object e) => _PublishStepFailure(label, e);
+
   /// Turns known backend errors into plain-language messages. Full
   /// technical detail (code/message/hint) still goes to
   /// BetaErrorLoggingService for debugging — it's just no longer shown
   /// verbatim to the user, who has no use for a Postgres error code.
   String _friendlyError(Object e) {
+    if (e is _PublishStepFailure) {
+      final inner = e.cause;
+      if (inner is PostgrestException && (inner.code == 'P0001' || inner.code == '23505' || inner.message.toLowerCase().contains('duplicate'))) {
+        return 'This post may have already gone through — check your feed before posting again.';
+      }
+      if (inner is StorageException && inner.statusCode == '403') {
+        return '${e.label} — your session needs a refresh. Please try again, or sign out and back in if it keeps happening.';
+      }
+      return '${e.label}. Please check your connection and try again.';
+    }
     if (e is PostgrestException) {
       switch (e.code) {
         case 'P0001':
@@ -323,46 +357,98 @@ class _P extends State<CreatePostScreen> {
 
     try {
       final postRepository = PostRepository();
+      final isResuming = _pendingPostId != null;
 
-      _pendingPostId ??= (await postRepository.createPost({
-        'author_id': uid,
-        'community_id': widget.communityId,
-        'text_content': text.text.trim(),
-        'visibility': _visibility,
-        'location': location.text.trim().isEmpty ? null : location.text.trim(),
-        'location_lat': _pickedLat,
-        'location_lng': _pickedLng,
-        'feeling': _feeling?.stored,
-        'tags': _parsedTags,
-        'reply_to_post_id': widget.quotePostId,
-        'mentioned_user_ids': _taggedFriends.keys.toList(),
-        'mentioned_usernames': _taggedFriends.values.toList(),
-        'link_preview_url': _linkPreview?.url,
-        'link_preview_title': _linkPreview?.title,
-        'link_preview_description': _linkPreview?.description,
-        'link_preview_image_url': _linkPreview?.imageUrl,
-        'link_preview_site_name': _linkPreview?.siteName,
-        'is_sensitive': _isSensitive,
-        'content_type': _resolvedContentType,
-      }))['id'].toString();
+      if (isResuming) {
+        // The post row from an earlier attempt already exists — don't
+        // create a second one. But the composer's content may have
+        // changed since then (the user edited text/tags/visibility
+        // before retrying), so sync it onto the existing row rather than
+        // silently publishing whatever was there from the first attempt.
+        try {
+          await postRepository.updatePendingPost(
+            _pendingPostId!,
+            textContent: text.text.trim(),
+            visibility: _visibility,
+            tags: _parsedTags,
+            mentionedUserIds: _taggedFriends.keys.toList(),
+            mentionedUsernames: _taggedFriends.values.toList(),
+            isSensitive: _isSensitive,
+          );
+        } catch (e) {
+          throw _labeled('Post update failed', e);
+        }
+      } else {
+        try {
+          _pendingPostId = (await postRepository.createPost({
+            'author_id': uid,
+            'community_id': widget.communityId,
+            'text_content': text.text.trim(),
+            'visibility': _visibility,
+            'location': location.text.trim().isEmpty ? null : location.text.trim(),
+            'location_lat': _pickedLat,
+            'location_lng': _pickedLng,
+            'feeling': _feeling?.stored,
+            'tags': _parsedTags,
+            'reply_to_post_id': widget.quotePostId,
+            'mentioned_user_ids': _taggedFriends.keys.toList(),
+            'mentioned_usernames': _taggedFriends.values.toList(),
+            'link_preview_url': _linkPreview?.url,
+            'link_preview_title': _linkPreview?.title,
+            'link_preview_description': _linkPreview?.description,
+            'link_preview_image_url': _linkPreview?.imageUrl,
+            'link_preview_site_name': _linkPreview?.siteName,
+            'is_sensitive': _isSensitive,
+            'content_type': _resolvedContentType,
+          }))['id'].toString();
+        } catch (e) {
+          throw _labeled('Post creation failed', e);
+        }
+        // Persist immediately (best-effort — a failure here just means a
+        // crash in the next few seconds would fall back to creating a
+        // new post, same as before this fix existed) so a resume after
+        // an app kill can find this row instead of createPost() making
+        // a duplicate. Not awaited: this must not add latency/failure
+        // surface to the actual publish path.
+        unawaited(
+          postRepository
+              .saveDraft(
+                userId: uid,
+                communityId: widget.communityId,
+                textContent: text.text.trim(),
+                tags: _parsedTags,
+                visibility: _visibility,
+                pendingPostId: _pendingPostId,
+              )
+              .catchError((_) {}),
+        );
+      }
 
       if (pollDraft != null) {
-        await postRepository.createPoll(
-          _pendingPostId!,
-          question: pollDraft!.question,
-          options: pollDraft!.options,
-          allowMultiple: pollDraft!.allowMultiple,
-          isAnonymous: pollDraft!.isAnonymous,
-          expiresAt: pollDraft!.expiresAt,
-        );
+        try {
+          await postRepository.createPoll(
+            _pendingPostId!,
+            question: pollDraft!.question,
+            options: pollDraft!.options,
+            allowMultiple: pollDraft!.allowMultiple,
+            isAnonymous: pollDraft!.isAnonymous,
+            expiresAt: pollDraft!.expiresAt,
+          );
+        } catch (e) {
+          throw _labeled('Poll creation failed', e);
+        }
       } else if (eventDraft != null) {
-        await postRepository.createEvent(
-          _pendingPostId!,
-          title: eventDraft!.title,
-          startsAt: eventDraft!.startsAt,
-          locationText: eventDraft!.locationText,
-          onlineUrl: eventDraft!.onlineUrl,
-        );
+        try {
+          await postRepository.createEvent(
+            _pendingPostId!,
+            title: eventDraft!.title,
+            startsAt: eventDraft!.startsAt,
+            locationText: eventDraft!.locationText,
+            onlineUrl: eventDraft!.onlineUrl,
+          );
+        } catch (e) {
+          throw _labeled('Event creation failed', e);
+        }
       } else {
         // Independent — a post can carry any combination of photo, video,
         // audio, and document at once (each lives as its own row in
@@ -370,20 +456,56 @@ class _P extends State<CreatePostScreen> {
         // else-if chain. They previously were, which silently dropped
         // every attachment but the first one the user had picked.
         if (video != null) {
-          final videoUrl = await postRepository.uploadPostVideo(_pendingPostId!, video!);
-          await postRepository.addPostMedia(_pendingPostId!, videoUrl, mediaType: 'video');
+          String videoUrl;
+          try {
+            videoUrl = await postRepository.uploadPostVideo(_pendingPostId!, video!);
+          } catch (e) {
+            throw _labeled('Video upload failed', e);
+          }
+          try {
+            await postRepository.addPostMedia(_pendingPostId!, videoUrl, mediaType: 'video');
+          } catch (e) {
+            throw _labeled('Attaching video failed', e);
+          }
         }
         if (image != null) {
-          final uploaded = await postRepository.uploadPostImage(_pendingPostId!, image!);
-          await postRepository.addPostMedia(_pendingPostId!, uploaded.originalUrl);
+          UploadedPostImage uploaded;
+          try {
+            uploaded = await postRepository.uploadPostImage(_pendingPostId!, image!);
+          } catch (e) {
+            throw _labeled('Image upload failed', e);
+          }
+          try {
+            await postRepository.addPostMedia(_pendingPostId!, uploaded.originalUrl);
+          } catch (e) {
+            throw _labeled('Attaching image failed', e);
+          }
         }
         if (audio != null) {
-          final audioUrl = await postRepository.uploadPostAudio(_pendingPostId!, audio!);
-          await postRepository.addPostMedia(_pendingPostId!, audioUrl, mediaType: 'audio');
+          String audioUrl;
+          try {
+            audioUrl = await postRepository.uploadPostAudio(_pendingPostId!, audio!);
+          } catch (e) {
+            throw _labeled('Audio upload failed', e);
+          }
+          try {
+            await postRepository.addPostMedia(_pendingPostId!, audioUrl, mediaType: 'audio');
+          } catch (e) {
+            throw _labeled('Attaching audio failed', e);
+          }
         }
         if (document != null) {
-          final docUrl = await postRepository.uploadPostDocument(_pendingPostId!, document!);
-          await postRepository.addPostMedia(_pendingPostId!, docUrl, mediaType: 'document');
+          String docUrl;
+          try {
+            docUrl = await postRepository.uploadPostDocument(_pendingPostId!, document!);
+          } catch (e) {
+            throw _labeled('Document upload failed', e);
+          }
+          try {
+            await postRepository.addPostMedia(_pendingPostId!, docUrl, mediaType: 'document');
+          } catch (e) {
+            throw _labeled('Attaching document failed', e);
+          }
         }
       }
 

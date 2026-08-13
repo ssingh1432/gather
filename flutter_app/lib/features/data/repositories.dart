@@ -1914,6 +1914,35 @@ class MonetizationRepository {
 class PostRepository {
   SupabaseClient get _c => SupabaseConfig.client;
 
+  /// Syncs a *pending* (not-yet-fully-published) post's core fields to
+  /// what the composer currently holds. Used only when resuming a publish
+  /// after createPost() already succeeded in an earlier attempt — createPost
+  /// itself is skipped on resume (see _pendingPostId in create_post_screen.dart),
+  /// so if the user edited text/tags/visibility before retrying, this is
+  /// what keeps the post row in sync with the composer instead of
+  /// silently publishing the stale first-attempt content.
+  ///
+  /// Deliberately NOT the same as [editPost]: this isn't a real edit of a
+  /// published post, so it must not write post_edit_history or bump
+  /// edited_at/edit_count.
+  Future<void> updatePendingPost(
+    String postId, {
+    required String textContent,
+    required String visibility,
+    required List<String> tags,
+    required List<String> mentionedUserIds,
+    required List<String> mentionedUsernames,
+    bool isSensitive = false,
+  }) =>
+      _c.from('posts').update({
+        'text_content': textContent,
+        'visibility': visibility,
+        'tags': tags,
+        'mentioned_user_ids': mentionedUserIds,
+        'mentioned_usernames': mentionedUsernames,
+        'is_sensitive': isSensitive,
+      }).eq('id', postId);
+
   Future<Map<String, dynamic>> createPost(Map<String, dynamic> payload) async {
     try {
       final created = await _c.from('posts').insert(payload).select().single();
@@ -2128,6 +2157,11 @@ class PostRepository {
     required String textContent,
     List<String> tags = const [],
     String visibility = 'public',
+    // Only overwritten when explicitly passed a value (including null to
+    // clear it after a resumed post finishes). Callers that don't know
+    // about the pending post (the plain text-autosave path) omit this so
+    // they never accidentally erase one that's already recorded.
+    Object? pendingPostId = _unset,
   }) async {
     var existingQuery = _c.from('post_drafts').select('id').eq('user_id', userId);
     existingQuery = communityId == null
@@ -2142,6 +2176,7 @@ class PostRepository {
       'tags': tags,
       'visibility': visibility,
       'updated_at': DateTime.now().toIso8601String(),
+      if (!identical(pendingPostId, _unset)) 'pending_post_id': pendingPostId,
     };
 
     if (existing == null) {
@@ -2150,6 +2185,8 @@ class PostRepository {
       await _c.from('post_drafts').update(row).eq('id', existing['id']);
     }
   }
+
+  static const _unset = Object();
 
   Future<Map<String, dynamic>?> loadDraft({required String userId, String? communityId}) {
     var q = _c.from('post_drafts').select().eq('user_id', userId);
