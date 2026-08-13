@@ -13,6 +13,7 @@ import '../../shared/services/analytics_service.dart';
 import '../../shared/services/beta_error_logging_service.dart';
 import '../../shared/services/link_preview_service.dart';
 import '../../shared/services/media/web_safe_pick.dart';
+import '../../shared/services/media_upload_service.dart' show UploadedPostImage;
 import '../../shared/utils/feelings.dart';
 import '../../shared/widgets/format_toolbar.dart';
 import '../../shared/widgets/profile_view.dart' show PickedImagePreview;
