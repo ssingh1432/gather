@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'env.dart';
@@ -8,6 +9,14 @@ import 'secure_local_storage.dart';
 /// worrying about initialization order.
 class SupabaseConfig {
   SupabaseConfig._();
+
+  /// Test-only override for [currentUserId]. Real app code must never set
+  /// this — it stays null in production, so [currentUserId] falls
+  /// through to the real Supabase session exactly as before. It exists
+  /// solely so widget tests can exercise auth-dependent code paths (like
+  /// CreatePostScreen._publish()) without a live Supabase connection.
+  @visibleForTesting
+  static String? debugUserIdOverride;
 
   static Future<void> initialize() async {
     await Supabase.initialize(
@@ -33,5 +42,5 @@ class SupabaseConfig {
     }
   }
 
-  static String? get currentUserId => maybeClient?.auth.currentUser?.id;
+  static String? get currentUserId => debugUserIdOverride ?? maybeClient?.auth.currentUser?.id;
 }

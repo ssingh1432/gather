@@ -34,7 +34,7 @@ class _PublishStepFailure implements Exception {
 }
 
 class CreatePostScreen extends StatefulWidget {
-  const CreatePostScreen({super.key, this.communityId, this.quotePostId, this.sharedText});
+  const CreatePostScreen({super.key, this.communityId, this.quotePostId, this.sharedText, this.postRepository});
   final String? communityId;
 
   /// When set, this post is published as a quote/reply-share of the given
@@ -46,11 +46,21 @@ class CreatePostScreen extends StatefulWidget {
   /// receive_sharing_intent listener) — pre-fills the compose box.
   final String? sharedText;
 
+  /// Test-only injection seam. Real app code should never pass this —
+  /// every call site in the app constructs CreatePostScreen with no
+  /// arguments and gets the real PostRepository via the getter below.
+  /// It exists so widget tests can exercise _publish()'s state machine
+  /// (single-flight, resume-after-failure, finalize) against a mock
+  /// instead of a live Supabase connection.
+  @visibleForTesting
+  final PostRepository? postRepository;
+
   @override
   State<CreatePostScreen> createState() => _P();
 }
 
 class _P extends State<CreatePostScreen> {
+  PostRepository get _repo => widget.postRepository ?? PostRepository();
   final text = TextEditingController();
   final _textFocus = FocusNode();
   final location = TextEditingController();
@@ -130,7 +140,7 @@ class _P extends State<CreatePostScreen> {
     final uid = SupabaseConfig.currentUserId;
     if (uid == null || widget.quotePostId != null) return;
     try {
-      final draft = await PostRepository().loadDraft(userId: uid, communityId: widget.communityId);
+      final draft = await _repo.loadDraft(userId: uid, communityId: widget.communityId);
       if (draft == null || !mounted) return;
       final savedText = draft['text_content'] as String? ?? '';
       final pendingId = draft['pending_post_id'] as String?;
@@ -158,7 +168,7 @@ class _P extends State<CreatePostScreen> {
       if (value.trim().isEmpty) return;
       setState(() => _draftSaving = true);
       try {
-        await PostRepository().saveDraft(
+        await _repo.saveDraft(
           userId: uid,
           communityId: widget.communityId,
           textContent: value,
@@ -178,7 +188,7 @@ class _P extends State<CreatePostScreen> {
     final uid = SupabaseConfig.currentUserId;
     if (uid == null) return;
     try {
-      await PostRepository().deleteDraft(userId: uid, communityId: widget.communityId);
+      await _repo.deleteDraft(userId: uid, communityId: widget.communityId);
     } catch (_) {}
     if (mounted) {
       setState(() {
@@ -337,7 +347,7 @@ class _P extends State<CreatePostScreen> {
     if (loading) return;
     if (_scheduledFor != null) return _schedule();
 
-    final uid = SupabaseConfig.client.auth.currentUser?.id;
+    final uid = SupabaseConfig.currentUserId;
     if (uid == null) {
       if (mounted) {
         context.go('/login?redirect=${Uri.encodeComponent(_redirectLocation)}');
@@ -358,7 +368,7 @@ class _P extends State<CreatePostScreen> {
     }
 
     try {
-      final postRepository = PostRepository();
+      final postRepository = _repo;
       final isResuming = _pendingPostId != null;
 
       if (isResuming) {
@@ -527,7 +537,7 @@ class _P extends State<CreatePostScreen> {
       }
 
       _published = true;
-      unawaited(PostRepository().deleteDraft(userId: uid, communityId: widget.communityId).catchError((_) {}));
+      unawaited(_repo.deleteDraft(userId: uid, communityId: widget.communityId).catchError((_) {}));
       if (mounted) {
         text.clear();
         image = null;
@@ -645,7 +655,7 @@ class _P extends State<CreatePostScreen> {
       if (media.isNotEmpty) await scheduledRepo.attachMedia(scheduled.id, media);
 
       _published = true;
-      unawaited(PostRepository().deleteDraft(userId: uid, communityId: widget.communityId).catchError((_) {}));
+      unawaited(_repo.deleteDraft(userId: uid, communityId: widget.communityId).catchError((_) {}));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Post scheduled')),
@@ -1022,6 +1032,7 @@ class _P extends State<CreatePostScreen> {
                   FormatToolbar(controller: text, onChanged: _onTextChanged, focusNode: _textFocus),
                   Container(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
                   TextField(
+                    key: const Key('composeTextField'),
                     controller: text,
                     focusNode: _textFocus,
                     minLines: 3,
@@ -1305,6 +1316,7 @@ class _P extends State<CreatePostScreen> {
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton(
+            key: const Key('publishButton'),
             onPressed: loading ? null : _publish,
             child: loading
                 ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
