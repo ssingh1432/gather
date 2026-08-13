@@ -20,6 +20,7 @@ import '../../shared/widgets/profile_view.dart' show PickedImagePreview;
 import '../../shared/widgets/reusables.dart';
 import '../data/repositories.dart';
 import 'location_picker_screen.dart';
+import 'tag_friend_search_controller.dart';
 
 /// Wraps an error with which publish step it happened in, so the
 /// composer can tell the user "Video upload failed" instead of a generic
@@ -693,10 +694,9 @@ class _P extends State<CreatePostScreen> {
     var loadedDefault = false;
     var searchError = false;
     Timer? debounce;
-    // Bumped on every new search kicked off; a response is only applied
-    // if it's still the *latest* generation by the time it lands, so a
-    // slow "a" response can never overwrite a faster "alice" response.
-    var generation = 0;
+    // See TagFriendSearchController: guarantees a slow "a" response can
+    // never overwrite a faster "alice" response.
+    final searchController = TagFriendSearchController();
 
     await showModalBottomSheet<void>(
       context: context,
@@ -706,14 +706,12 @@ class _P extends State<CreatePostScreen> {
         builder: (sheetContext, setSheetState) {
           if (!loadedDefault) {
             loadedDefault = true;
-            final myGeneration = ++generation;
-            ProfileRepository().followingUsers(uid).then((people) {
-              if (myGeneration != generation) return; // superseded
-              results = people;
+            searchController.search('', (_) => ProfileRepository().followingUsers(uid)).then((found) {
+              if (found == null) return; // superseded
+              results = found;
               loading = false;
               setSheetState(() {});
             }).catchError((_) {
-              if (myGeneration != generation) return;
               loading = false;
               searchError = true;
               setSheetState(() {});
@@ -721,18 +719,19 @@ class _P extends State<CreatePostScreen> {
           }
 
           Future<void> runSearch(String q) async {
-            final myGeneration = ++generation;
             try {
-              final found = q.trim().isEmpty
-                  ? await ProfileRepository().followingUsers(uid)
-                  : await ProfileRepository().searchUsersByUsername(q.trim());
-              if (myGeneration != generation) return; // a newer search landed first — drop this one
+              final found = await searchController.search(
+                q,
+                (query) => query.trim().isEmpty
+                    ? ProfileRepository().followingUsers(uid)
+                    : ProfileRepository().searchUsersByUsername(query.trim()),
+              );
+              if (found == null) return; // a newer search landed first — drop this one
               results = found;
               loading = false;
               searchError = false;
               setSheetState(() {});
             } catch (_) {
-              if (myGeneration != generation) return;
               loading = false;
               searchError = true;
               setSheetState(() {});
