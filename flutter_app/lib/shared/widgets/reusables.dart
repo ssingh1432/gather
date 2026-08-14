@@ -1665,7 +1665,7 @@ class _PostFollowButtonState extends State<_PostFollowButton> {
   }
 }
 
-/// Post body text, collapsed to [collapsedMaxLines] with a Facebook-style
+/// Post body text, collapsed to 6 lines with a Facebook-style
 /// "…See more" toggle that only appears when the text actually overflows
 /// that many lines at the rendered width — measured with a TextPainter
 /// against MarkdownLiteText's real formatted spans, not a guess based on
@@ -1673,8 +1673,13 @@ class _PostFollowButtonState extends State<_PostFollowButton> {
 /// single-line text are both judged by what actually overflows on screen.
 class _ExpandableText extends StatefulWidget {
   final String text;
-  final int collapsedMaxLines;
-  const _ExpandableText(this.text, {this.collapsedMaxLines = 6});
+  const _ExpandableText(this.text);
+
+  // No caller needs a different collapsed height today, so this stays a
+  // fixed constant rather than an unused optional parameter (which
+  // flutter analyze flags as a warning and fails CI). Bump this in place
+  // if a shorter/taller collapsed view is ever needed somewhere.
+  static const int _collapsedMaxLines = 6;
 
   @override
   State<_ExpandableText> createState() => _ExpandableTextState();
@@ -1688,7 +1693,7 @@ class _ExpandableTextState extends State<_ExpandableText> {
     final base = DefaultTextStyle.of(context).style;
     final span = MarkdownLiteText(widget.text).buildTextSpan(base);
     return LayoutBuilder(builder: (context, constraints) {
-      final painter = TextPainter(text: span, maxLines: widget.collapsedMaxLines, textDirection: ui.TextDirection.ltr)
+      final painter = TextPainter(text: span, maxLines: _ExpandableText._collapsedMaxLines, textDirection: ui.TextDirection.ltr)
         ..layout(maxWidth: constraints.maxWidth);
       final overflows = !_expanded && painter.didExceedMaxLines;
       return Column(
@@ -1696,7 +1701,7 @@ class _ExpandableTextState extends State<_ExpandableText> {
         children: [
           RichText(
             text: span,
-            maxLines: _expanded ? null : widget.collapsedMaxLines,
+            maxLines: _expanded ? null : _ExpandableText._collapsedMaxLines,
             overflow: _expanded ? TextOverflow.visible : TextOverflow.clip,
           ),
           if (overflows)
