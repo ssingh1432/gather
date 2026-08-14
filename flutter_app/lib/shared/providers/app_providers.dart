@@ -103,3 +103,26 @@ final recommendedUsersProvider = FutureProvider.autoDispose<List<RecommendedUser
 /// session, so their card can flip to "Requested" and disable immediately
 /// without waiting on a round trip back through [recommendedUsersProvider].
 final sentFriendRequestsProvider = StateProvider.autoDispose<Set<String>>((ref) => <String>{});
+
+/// Public, not-already-joined communities for the home feed's "Suggested
+/// for you" groups row — mirrors [recommendedUsersProvider]'s shape and
+/// autoDispose/re-shuffle behavior exactly, just for communities instead
+/// of people. CommunityRepository has no existing provider registration
+/// (CommunitiesScreen instantiates it directly), so this does the same
+/// rather than introducing a new indirection just for this one call.
+final suggestedCommunitiesProvider = FutureProvider.autoDispose<List<SuggestedCommunity>>((ref) async {
+  final client = SupabaseConfig.maybeClient;
+  final uid = client?.auth.currentUser?.id;
+  if (client == null || uid == null) return [];
+  return CommunityRepository().suggestedCommunitiesForFeed(uid);
+});
+
+/// Ids of suggested communities that have been joined or marked "Not
+/// interested" this session, so their card can disappear immediately
+/// without waiting on a round trip back through
+/// [suggestedCommunitiesProvider]. Session-only by design, same as
+/// [sentFriendRequestsProvider] — a fresh app launch is allowed to
+/// resurface a dismissed suggestion, the same way Facebook's own
+/// "Not interested" only clears that single card instance.
+final dismissedSuggestedCommunitiesProvider = StateProvider.autoDispose<Set<String>>((ref) => <String>{});
+final joinedSuggestedCommunitiesProvider = StateProvider.autoDispose<Set<String>>((ref) => <String>{});

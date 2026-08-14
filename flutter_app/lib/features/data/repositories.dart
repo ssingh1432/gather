@@ -434,6 +434,24 @@ class CommunityRepository {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  /// Public, not-already-joined communities for the home feed's
+  /// "Suggested for you" groups row. Explicitly filters to
+  /// visibility='public' — belt-and-suspenders on top of RLS (which
+  /// already hides secret communities from non-members) since this row
+  /// is specifically meant to only ever surface joinable, public groups.
+  Future<List<SuggestedCommunity>> suggestedCommunitiesForFeed(String userId, {int limit = 10}) async {
+    final joinedRows = await _c.from('community_memberships').select('community_id').eq('user_id', userId);
+    final joinedIds = (joinedRows as List).map((r) => r['community_id'].toString()).toSet();
+
+    var query = _c.from('communities').select('id, name, image_url, member_count').eq('visibility', 'public');
+    if (joinedIds.isNotEmpty) {
+      query = query.not('id', 'in', '(${joinedIds.join(',')})');
+    }
+    final data = await query.order('member_count', ascending: false).limit(limit * 2);
+    final communities = (data as List).map((e) => SuggestedCommunity.fromMap(e as Map<String, dynamic>)).toList()..shuffle();
+    return communities.take(limit).toList();
+  }
+
   Future<List<Map<String, dynamic>>> recentlyActiveCommunities({int limit = 20}) async {
     final rows = await _c.from('communities').select().order('last_activity_at', ascending: false).limit(limit);
     return (rows as List).cast<Map<String, dynamic>>();

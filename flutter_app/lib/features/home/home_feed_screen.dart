@@ -17,6 +17,7 @@ import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/reusables.dart';
 import '../../shared/widgets/composer_prompt.dart';
 import '../../shared/widgets/people_you_may_know.dart';
+import '../../shared/widgets/suggested_communities.dart';
 import '../../shared/widgets/feed_ad_card.dart';
 import '../../shared/widgets/story_bar.dart';
 import '../../shared/widgets/top_bar_profile_link.dart';
@@ -42,6 +43,14 @@ class _AdSlot {
 /// fixed index.
 class _PYMKSlot {
   const _PYMKSlot();
+}
+
+/// Marker row for the "Suggested for you" public-communities section —
+/// same idea as [_PYMKSlot], kept as its own slot type (rather than
+/// reusing _PYMKSlot) so the two sections can be placed at different,
+/// independently-tunable points in the feed.
+class _SuggestedCommunitiesSlot {
+  const _SuggestedCommunitiesSlot();
 }
 
 class _S extends ConsumerState<HomeFeedScreen> {
@@ -337,15 +346,22 @@ class _S extends ConsumerState<HomeFeedScreen> {
     return DateTime.now().difference(createdAt) < const Duration(days: 3);
   }
 
-  /// Interleaves the "People you may know" row into [feedRows]: at the top
-  /// for brand-new accounts, otherwise after the 3rd row so it reads as a
-  /// natural break rather than blocking the feed.
+  /// Interleaves the "People you may know" and "Suggested for you" groups
+  /// rows into [feedRows]: PYMK at the top for brand-new accounts (or
+  /// right after row 3 otherwise), with the communities row placed a
+  /// further few rows below it so the two breaks don't land back-to-back
+  /// — mirrors Facebook staggering "People You May Know" and "Suggested
+  /// for you" groups rather than stacking them.
   List<Object> _rowsWithSuggestions(List<Object> feedRows, bool isNewAccount) {
     if (SupabaseConfig.currentUserId == null) return feedRows;
     if (isNewAccount || feedRows.length <= 3) {
-      return [const _PYMKSlot(), ...feedRows];
+      final withPymk = [const _PYMKSlot(), ...feedRows];
+      if (withPymk.length <= 8) return [...withPymk, const _SuggestedCommunitiesSlot()];
+      return [...withPymk.sublist(0, 8), const _SuggestedCommunitiesSlot(), ...withPymk.sublist(8)];
     }
-    return [...feedRows.sublist(0, 3), const _PYMKSlot(), ...feedRows.sublist(3)];
+    final withPymk = [...feedRows.sublist(0, 3), const _PYMKSlot(), ...feedRows.sublist(3)];
+    if (withPymk.length <= 10) return [...withPymk, const _SuggestedCommunitiesSlot()];
+    return [...withPymk.sublist(0, 10), const _SuggestedCommunitiesSlot(), ...withPymk.sublist(10)];
   }
 
   @override
@@ -380,6 +396,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
                           SliverToBoxAdapter(child: StoryBar()),
                           SliverToBoxAdapter(child: ComposerPrompt()),
                           SliverToBoxAdapter(child: PeopleYouMayKnow()),
+                          SliverToBoxAdapter(child: SuggestedCommunities()),
                           SliverFillRemaining(
                             child: EmptyState(icon: Icons.dynamic_feed_outlined, title: 'No posts yet', message: 'Pull to refresh or check back soon.'),
                           ),
@@ -404,6 +421,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
                           }
                           final rowPost = rows[index];
                           if (rowPost is _PYMKSlot) return const PeopleYouMayKnow(key: ValueKey('pymk'));
+                          if (rowPost is _SuggestedCommunitiesSlot) return const SuggestedCommunities(key: ValueKey('suggested-communities'));
                           if (rowPost is _AdSlot) return FeedAdCard(key: ValueKey('ad-${rowPost.postId}'), postId: rowPost.postId);
                           final p = rowPost as PostModel;
                           return PostCard(

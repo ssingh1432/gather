@@ -309,6 +309,26 @@ class RecommendedUser {
       );
 }
 
+/// A minimal, public-only community shape for the feed's "Suggested for
+/// you" groups row — deliberately narrower than the full community row
+/// used by CommunitiesScreen's own discovery list (name/image/member
+/// count is all a feed card needs).
+class SuggestedCommunity {
+  final String id;
+  final String name;
+  final String? imageUrl;
+  final int memberCount;
+
+  SuggestedCommunity({required this.id, required this.name, this.imageUrl, this.memberCount = 0});
+
+  factory SuggestedCommunity.fromMap(Map<String, dynamic> map) => SuggestedCommunity(
+        id: map['id'].toString(),
+        name: map['name'] as String? ?? 'Community',
+        imageUrl: map['image_url'] as String?,
+        memberCount: (map['member_count'] as num?)?.toInt() ?? 0,
+      );
+}
+
 
 /// A single comment (or reply-to-comment) on a post. [parentCommentId] is
 /// null for a top-level comment; when set, the comment nests one level
