@@ -156,34 +156,41 @@ class MarkdownLiteText extends StatelessWidget {
     return spans;
   }
 
+  /// Builds the same formatted TextSpan the widget renders — exposed so
+  /// callers that need to measure the text (e.g. _ExpandableText's
+  /// overflow check) use identical formatting logic instead of guessing
+  /// against raw, unformatted markdown source.
+  TextSpan buildTextSpan(TextStyle base) {
+    final lines = data.split('\n');
+    return TextSpan(
+      style: base,
+      children: [
+        for (var i = 0; i < lines.length; i++) ...[
+          if (i > 0) const TextSpan(text: '\n'),
+          if (lines[i].startsWith('> '))
+            TextSpan(
+              text: lines[i].substring(2),
+              style: base.copyWith(color: base.color?.withValues(alpha: 0.65), fontStyle: FontStyle.italic),
+            )
+          else if (lines[i].startsWith('- '))
+            TextSpan(children: [
+              const TextSpan(text: '•  '),
+              ..._parseInline(lines[i].substring(2), base),
+            ])
+          else
+            TextSpan(children: _parseInline(lines[i], base)),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final base = style ?? DefaultTextStyle.of(context).style;
-    final lines = data.split('\n');
-
     return RichText(
       maxLines: maxLines,
       overflow: overflow ?? TextOverflow.clip,
-      text: TextSpan(
-        style: base,
-        children: [
-          for (var i = 0; i < lines.length; i++) ...[
-            if (i > 0) const TextSpan(text: '\n'),
-            if (lines[i].startsWith('> '))
-              TextSpan(
-                text: lines[i].substring(2),
-                style: base.copyWith(color: base.color?.withValues(alpha: 0.65), fontStyle: FontStyle.italic),
-              )
-            else if (lines[i].startsWith('- '))
-              TextSpan(children: [
-                const TextSpan(text: '•  '),
-                ..._parseInline(lines[i].substring(2), base),
-              ])
-            else
-              TextSpan(children: _parseInline(lines[i], base)),
-          ],
-        ],
-      ),
+      text: buildTextSpan(base),
     );
   }
 }

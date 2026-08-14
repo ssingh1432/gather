@@ -77,6 +77,7 @@ class PostModel {
   final int shareCount;
   final bool isLiked;
   final bool isBookmarked;
+  final bool isFollowingAuthor;
   final DateTime? mediaUpdatedAt;
   final String? location;
   final String? feeling;
@@ -120,6 +121,7 @@ class PostModel {
     this.shareCount = 0,
     this.isLiked = false,
     this.isBookmarked = false,
+    this.isFollowingAuthor = false,
     this.mediaUpdatedAt,
     this.location,
     this.feeling,
@@ -184,6 +186,7 @@ class PostModel {
       shareCount: _intFromMap(map, 'share_count'),
       isLiked: map['is_liked'] == true,
       isBookmarked: map['is_bookmarked'] == true,
+      isFollowingAuthor: map['is_following'] == true,
       mediaUpdatedAt: mediaUpdatedAtValue is String ? DateTime.tryParse(mediaUpdatedAtValue) : null,
       location: map['location'] as String?,
       feeling: map['feeling'] as String?,
@@ -242,6 +245,7 @@ class PostModel {
         shareCount: shareCount ?? this.shareCount,
         isLiked: isLiked ?? this.isLiked,
         isBookmarked: isBookmarked,
+        isFollowingAuthor: isFollowingAuthor,
         mediaUpdatedAt: mediaUpdatedAt,
         location: location,
         feeling: feeling,

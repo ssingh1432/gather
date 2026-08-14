@@ -402,7 +402,7 @@ class PostCard extends StatelessWidget {
           if (post.textContent.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: MarkdownLiteText(post.textContent),
+              child: _ExpandableText(post.textContent),
             ),
           if (post.tags.isNotEmpty)
             Padding(
@@ -1547,6 +1547,18 @@ class _PeopleSheetState extends State<_PeopleSheet> {
   }
 }
 
+/// (icon, tooltip) per post.visibility value — mirrors the label/icon pairs
+/// CreatePostScreen offers when the person picks a visibility, so the same
+/// meaning is shown consistently on the way in and the way back out.
+const Map<String, (IconData, String)> _kVisibilityIcons = {
+  'public': (Icons.public, 'Public'),
+  'followers': (Icons.group_outlined, 'Followers'),
+  'friends': (Icons.people_alt_outlined, 'Close friends'),
+  'community': (Icons.diversity_3_outlined, 'Community only'),
+  'private': (Icons.lock_outline, 'Only me'),
+  'unlisted': (Icons.link_outlined, 'Unlisted'),
+};
+
 class _PostHeader extends StatelessWidget {
   final PostModel post;
   final VoidCallback onTapAuthor;
@@ -1554,37 +1566,151 @@ class _PostHeader extends StatelessWidget {
   const _PostHeader({required this.post, required this.onTapAuthor, required this.onTapMore});
 
   @override
-  Widget build(BuildContext context) => Row(children: [
-        GestureDetector(
-          onTap: onTapAuthor,
-          child: ProfileAvatar(url: post.authorAvatarUrl, radius: 19),
+  Widget build(BuildContext context) {
+    final outlineStyle = Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline);
+    final visibilityEntry = _kVisibilityIcons[post.visibility];
+    return Row(children: [
+      GestureDetector(
+        onTap: onTapAuthor,
+        child: ProfileAvatar(url: post.authorAvatarUrl, radius: 19),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              onTap: onTapAuthor,
+              child: Text(post.authorUsername ?? 'Unknown', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+            ),
+            Row(children: [
+              Text(timeAgo(post.createdAt), style: outlineStyle),
+              if (post.editedAt != null) Text(' · Edited', style: outlineStyle),
+              if (post.communityId != null) Text(' · community', style: outlineStyle),
+              if (post.isPinned) ...[
+                const SizedBox(width: 6),
+                Icon(Icons.push_pin, size: 12, color: Theme.of(context).colorScheme.primary),
+              ],
+              if (visibilityEntry != null) ...[
+                const SizedBox(width: 4),
+                Tooltip(message: visibilityEntry.$2, child: Icon(visibilityEntry.$1, size: 12, color: Theme.of(context).colorScheme.outline)),
+              ],
+            ]),
+          ],
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              GestureDetector(
-                onTap: onTapAuthor,
-                child: Text(post.authorUsername ?? 'Unknown', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-              ),
-              Row(children: [
-                Text(timeAgo(post.createdAt), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline)),
-                if (post.editedAt != null)
-                  Text(' · Edited', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline)),
-                if (post.communityId != null) ...[
-                  Text(' · community', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline)),
-                ],
-                if (post.isPinned) ...[
-                  const SizedBox(width: 6),
-                  Icon(Icons.push_pin, size: 12, color: Theme.of(context).colorScheme.primary),
-                ],
-              ]),
-            ],
+      ),
+      _PostFollowButton(post: post),
+      IconButton(onPressed: onTapMore, icon: const Icon(Icons.more_horiz), tooltip: 'More'),
+    ]);
+  }
+}
+
+/// A compact "Follow" pill next to the overflow menu, shown only when the
+/// viewer is logged in, isn't the author, and doesn't already follow them
+/// — same three conditions ProfileScreen's own Follow/Unfollow toggle
+/// uses. Manages its own optimistic state locally (seeded from
+/// post.isFollowingAuthor) rather than plumbing follow-state through every
+/// feed screen's state management, the same way liked/bookmarked already
+/// flow through explicit onLike/onBookmark callbacks from the parent —
+/// follow has no such callback today, so this stays self-contained.
+class _PostFollowButton extends StatefulWidget {
+  final PostModel post;
+  const _PostFollowButton({required this.post});
+
+  @override
+  State<_PostFollowButton> createState() => _PostFollowButtonState();
+}
+
+class _PostFollowButtonState extends State<_PostFollowButton> {
+  late bool _following = widget.post.isFollowingAuthor;
+  bool _busy = false;
+
+  Future<void> _follow() async {
+    final me = SupabaseConfig.currentUserId;
+    if (me == null) {
+      redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to follow people.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ProfileRepository().follow(widget.post.authorId, me);
+      if (mounted) setState(() => _following = true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not follow. Please try again.')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final me = SupabaseConfig.currentUserId;
+    if (_following || widget.post.authorId.isEmpty || widget.post.authorId == me) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: OutlinedButton(
+        onPressed: _busy ? null : _follow,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 32),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          visualDensity: VisualDensity.compact,
+        ),
+        child: Text(_busy ? '…' : 'Follow'),
+      ),
+    );
+  }
+}
+
+/// Post body text, collapsed to [collapsedMaxLines] with a Facebook-style
+/// "…See more" toggle that only appears when the text actually overflows
+/// that many lines at the rendered width — measured with a TextPainter
+/// against MarkdownLiteText's real formatted spans, not a guess based on
+/// raw character count, so short multi-paragraph text and long
+/// single-line text are both judged by what actually overflows on screen.
+class _ExpandableText extends StatefulWidget {
+  final String text;
+  final int collapsedMaxLines;
+  const _ExpandableText(this.text, {this.collapsedMaxLines = 6});
+
+  @override
+  State<_ExpandableText> createState() => _ExpandableTextState();
+}
+
+class _ExpandableTextState extends State<_ExpandableText> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = DefaultTextStyle.of(context).style;
+    final span = MarkdownLiteText(widget.text).buildTextSpan(base);
+    return LayoutBuilder(builder: (context, constraints) {
+      final painter = TextPainter(text: span, maxLines: widget.collapsedMaxLines, textDirection: ui.TextDirection.ltr)
+        ..layout(maxWidth: constraints.maxWidth);
+      final overflows = !_expanded && painter.didExceedMaxLines;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RichText(
+            text: span,
+            maxLines: _expanded ? null : widget.collapsedMaxLines,
+            overflow: _expanded ? TextOverflow.visible : TextOverflow.clip,
           ),
-        ),
-        IconButton(onPressed: onTapMore, icon: const Icon(Icons.more_horiz), tooltip: 'More'),
-      ]);
+          if (overflows)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: InkWell(
+                onTap: () => setState(() => _expanded = true),
+                child: Text('See more', style: TextStyle(color: Theme.of(context).colorScheme.outline, fontWeight: FontWeight.w600)),
+              ),
+            ),
+        ],
+      );
+    });
+  }
 }
 
 class _FeelingLocationLine extends StatelessWidget {
