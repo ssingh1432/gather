@@ -80,9 +80,9 @@ class MediaUploadService {
   SupabaseClient get _client => SupabaseConfig.client;
 
   /// Runs [action] (a storage upload), retrying once more after a forced
-  /// session refresh if it fails with a 403, OR with a 400 whose body
-  /// indicates a storage RLS rejection (see below), backing off briefly so
-  /// the SDK has time to propagate the refreshed token before the retry.
+  /// session refresh if it fails with a 403 (genuinely stale/invalid
+  /// token), backing off briefly so the SDK has time to propagate the
+  /// refreshed token before the retry.
   ///
   /// This used to force `auth.refreshSession()` unconditionally before
   /// *every* call, plus up to two more refreshes per call on 403 — a
@@ -95,36 +95,16 @@ class MediaUploadService {
   /// writing a login-device row and re-syncing the FCM token. That's the
   /// concrete mechanism behind the "screen refreshes ~4 times and gets
   /// stuck" report: up to 4 extra network round trips competing with the
-  /// actual uploads, not real UI rebuilds. Refreshing was made purely
-  /// reactive — only after an upload had actually failed — as a fix for
-  /// that.
-  ///
-  /// But that later turned out to be too narrow: production logs (post
-  /// e55f6f05..., publish attempts spanning 2026-08-13 through
-  /// 2026-08-14) showed the *same* post getting rejected by storage RLS
-  /// on every single retry over many hours, even though
-  /// `can_upload_post_media()` verifiably returns true for that exact
-  /// post/author pair when evaluated directly in SQL. The only way both
-  /// of those are true at once is that the live request's access token
-  /// had gone stale (Flutter Web throttles JS timers — including the
-  /// SDK's background auto-refresh — on a backgrounded/inactive browser
-  /// tab, per https://developer.chrome.com/blog/timer-throttling-in-chrome-88/),
-  /// and the old `!= '403'` check let a token-related 400 straight
-  /// through unretried. So this now also proactively tops up the session
-  /// before ever calling [action] (cheap no-op if the token still has
-  /// plenty of life left — see [_ensureFreshSession]), and reactively
-  /// retries on a 400 that looks like a storage-RLS rejection in addition
-  /// to a 403. A second consecutive failure after that still means the
-  /// session is unrecoverable client-side, so it's only ever retried once.
+  /// actual uploads, not real UI rebuilds. Refreshing is now purely
+  /// reactive — only after an upload has actually failed with a 403 —
+  /// and only retried once, since a second consecutive 403 means the
+  /// session is unrecoverable client-side and further retries just add
+  /// latency without changing the outcome.
   Future<T> _withAuthRetry<T>(Future<T> Function() action) async {
-    await _ensureFreshSession();
     try {
       return await action();
     } on StorageException catch (e) {
-      final isForbidden = e.statusCode == '403';
-      final isRlsRejection = e.statusCode == '400' &&
-          e.message.toLowerCase().contains('row-level security');
-      if (!isForbidden && !isRlsRejection) rethrow;
+      if (e.statusCode != '403') rethrow;
       try {
         await _client.auth.refreshSession();
       } catch (_) {
@@ -134,27 +114,6 @@ class MediaUploadService {
       }
       await Future.delayed(const Duration(milliseconds: 300));
       return action();
-    }
-  }
-
-  /// Tops up the session if the access token is at or near expiry (60s
-  /// buffer, to cover the network round-trip the upload itself is about
-  /// to make). No-ops entirely if the token is still fresh, or if there's
-  /// no session at all (the caller's own auth check surfaces that error).
-  /// This is what actually closes the backgrounded-tab gap described in
-  /// [_withAuthRetry] above — refreshSession() is safe to call even when
-  /// nothing needs refreshing yet, but we still gate on expiry so a fresh
-  /// upload doesn't pay a network round trip it doesn't need.
-  Future<void> _ensureFreshSession() async {
-    final session = _client.auth.currentSession;
-    if (session?.expiresAt == null) return;
-    final secondsLeft = session!.expiresAt! - (DateTime.now().millisecondsSinceEpoch ~/ 1000);
-    if (secondsLeft > 60) return;
-    try {
-      await _client.auth.refreshSession();
-    } catch (_) {
-      // Let the actual upload attempt surface the real failure below
-      // rather than hiding it behind a refresh error here.
     }
   }
 
