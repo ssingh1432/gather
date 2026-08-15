@@ -19,7 +19,7 @@ import 'reusables.dart';
 ///
 /// Two things are always visible regardless of [expanded]: the single
 /// latest top-level comment (if any), and a comment input with a
-/// "Comment as <username>" placeholder. Tapping the comment icon (which
+/// "Comment as `username`" placeholder. Tapping the comment icon (which
 /// toggles [expanded] from the parent, the same way liked/bookmarked are
 /// lifted into HomeFeedScreen's own state) reveals the rest of the thread
 /// in an AnimatedSize "opens downward" reveal instead of navigating away.
