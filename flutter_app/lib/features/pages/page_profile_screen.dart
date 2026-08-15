@@ -52,6 +52,8 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
   bool _favorite = false;
   bool _canManage = false;
   bool _canViewFollowers = false;
+  bool _hasSubscriptionTiers = false;
+  bool _hasMarketplaceItems = false;
   List<Map<String, dynamic>> _posts = const [];
   List<Map<String, dynamic>> _events = const [];
   String? _error;
@@ -75,6 +77,8 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       final canViewFollowers = uid == null ? false : await _repo.hasPagePermission(widget.pageId, 'view_analytics');
       final posts = await _repo.listPagePosts(widget.pageId, status: 'published');
       final events = await _repo.listPageEvents(widget.pageId);
+      final hasTiers = await _repo.hasVisibleSubscriptionTiers(widget.pageId);
+      final hasItems = await _repo.hasVisibleMarketplaceItems(widget.pageId);
       if (!mounted) return;
       setState(() {
         _page = page;
@@ -82,6 +86,8 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
         _favorite = followState?['favorite'] as bool? ?? false;
         _canManage = role != null;
         _canViewFollowers = canViewFollowers;
+        _hasSubscriptionTiers = hasTiers;
+        _hasMarketplaceItems = hasItems;
         _posts = posts;
         _events = events.where((e) => DateTime.parse(e['start_time'] as String).isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
         _loading = false;
@@ -304,22 +310,26 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                   ),
                                   page: _page!,
                                 ),
-                                const SizedBox(height: PageTokens.spaceSm),
-                                Wrap(
-                                  spacing: 8,
-                                  children: [
-                                    TextButton.icon(
-                                      onPressed: () => context.push('/page-subscriptions?id=${widget.pageId}&name=${Uri.encodeComponent(_page!['name'] as String? ?? 'Page')}'),
-                                      icon: const Icon(Icons.workspace_premium_outlined, size: 16),
-                                      label: const Text('Subscriptions'),
-                                    ),
-                                    TextButton.icon(
-                                      onPressed: () => context.push('/page-marketplace?id=${widget.pageId}&name=${Uri.encodeComponent(_page!['name'] as String? ?? 'Page')}'),
-                                      icon: const Icon(Icons.storefront_outlined, size: 16),
-                                      label: const Text('Shop'),
-                                    ),
-                                  ],
-                                ),
+                                if (_hasSubscriptionTiers || _hasMarketplaceItems) ...[
+                                  const SizedBox(height: PageTokens.spaceSm),
+                                  Wrap(
+                                    spacing: 8,
+                                    children: [
+                                      if (_hasSubscriptionTiers)
+                                        TextButton.icon(
+                                          onPressed: () => context.push('/page-subscriptions?id=${widget.pageId}&name=${Uri.encodeComponent(_page!['name'] as String? ?? 'Page')}'),
+                                          icon: const Icon(Icons.workspace_premium_outlined, size: 16),
+                                          label: const Text('Subscriptions'),
+                                        ),
+                                      if (_hasMarketplaceItems)
+                                        TextButton.icon(
+                                          onPressed: () => context.push('/page-marketplace?id=${widget.pageId}&name=${Uri.encodeComponent(_page!['name'] as String? ?? 'Page')}'),
+                                          icon: const Icon(Icons.storefront_outlined, size: 16),
+                                          label: const Text('Shop'),
+                                        ),
+                                    ],
+                                  ),
+                                ],
                                 if (_page!['monetization_enabled'] == true) ...[
                                   const SizedBox(height: PageTokens.spaceMd),
                                   SizedBox(

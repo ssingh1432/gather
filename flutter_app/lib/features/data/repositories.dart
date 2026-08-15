@@ -1631,6 +1631,18 @@ class PageRepository {
     return List<Map<String, dynamic>>.from(rows as List);
   }
 
+  /// Lightweight existence check for the public Page Profile: does this
+  /// page have anything a visitor could actually subscribe to right now?
+  /// Deliberately filters to `active = true` even though the caller might
+  /// be a manager who can also see inactive drafts via RLS — a manager
+  /// with only unpublished drafts should see the same "nothing to show
+  /// yet" state a visitor would, not a false positive from their own
+  /// draft.
+  Future<bool> hasVisibleSubscriptionTiers(String pageId) async {
+    final rows = await _c.from('page_subscription_tiers').select('id').eq('page_id', pageId).eq('active', true).limit(1);
+    return (rows as List).isNotEmpty;
+  }
+
   Future<void> upsertSubscriptionTier(String pageId, Map<String, dynamic> tier) async {
     final payload = {...tier, 'page_id': pageId};
     if (tier['id'] != null) {
@@ -1661,6 +1673,16 @@ class PageRepository {
   Future<List<Map<String, dynamic>>> listMarketplaceItems(String pageId) async {
     final rows = await _c.from('page_marketplace_items').select().eq('page_id', pageId).order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(rows as List);
+  }
+
+  /// Lightweight existence check for the public Page Profile — same
+  /// reasoning as [hasVisibleSubscriptionTiers]: only counts listings a
+  /// visitor could actually see and buy ('active' or 'sold_out'), so a
+  /// manager with only draft listings gets the same empty state a visitor
+  /// would.
+  Future<bool> hasVisibleMarketplaceItems(String pageId) async {
+    final rows = await _c.from('page_marketplace_items').select('id').eq('page_id', pageId).inFilter('status', ['active', 'sold_out']).limit(1);
+    return (rows as List).isNotEmpty;
   }
 
   Future<void> upsertMarketplaceItem(String pageId, Map<String, dynamic> item) async {
