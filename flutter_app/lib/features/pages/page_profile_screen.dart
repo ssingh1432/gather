@@ -8,9 +8,8 @@ import '../../shared/utils/external_link.dart';
 import '../../shared/widgets/reusables.dart';
 import '../../shared/utils/time_ago.dart';
 import '../data/repositories.dart';
-import 'page_content_screen.dart';
-import 'page_inbox_screen.dart';
 import 'page_chat_screen.dart';
+import 'page_manage_screen.dart';
 import 'donate_sheet.dart';
 import 'page_preview_screen.dart' show PageInfoRow;
 import 'pages_theme.dart';
@@ -24,10 +23,18 @@ import 'pages_theme.dart';
 /// info, business hours, social links, Follow/Favorite CTA) plus a
 /// read-only preview of published content (Step 7: pinned/recent posts,
 /// upcoming events) and a rating chip linking into Reviews (Step 10) so a
-/// visitor doesn't have to leave the profile to see them. Full analytics
-/// (Step 11) is a separate, later step. The follower-count chip and the
-/// appbar people icon deep-link into the Followers screen (Step 8) for
-/// anyone with `view_analytics`.
+/// visitor doesn't have to leave the profile to see them. The follower-count
+/// chip deep-links into the Followers screen for anyone with
+/// `view_analytics`.
+///
+/// Management tools (content, inbox, insights, team, settings) used to be
+/// five separate, unlabeled `IconButton`s living right here in the public
+/// app bar — indistinguishable from visitor-facing icons unless you already
+/// knew which ones were yours. They're now consolidated into a single
+/// labeled "Manage" entry point that opens [PageManageScreen], per the
+/// Pages UX audit: this screen stays focused on being a clean, trustworthy
+/// public identity page, and page owners get one obvious place to start
+/// instead of a scavenger hunt across the app bar.
 class PageProfileScreen extends StatefulWidget {
   const PageProfileScreen({super.key, required this.pageId});
   final String pageId;
@@ -44,8 +51,6 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
   bool _followBusy = false;
   bool _favorite = false;
   bool _canManage = false;
-  bool _canManageContent = false;
-  bool _canManageMessages = false;
   bool _canViewFollowers = false;
   List<Map<String, dynamic>> _posts = const [];
   List<Map<String, dynamic>> _events = const [];
@@ -67,10 +72,6 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       final uid = SupabaseConfig.currentUserId;
       final followState = uid == null ? null : await _repo.getFollowState(widget.pageId);
       final role = uid == null ? null : await _repo.currentUserPageRole(widget.pageId);
-      final canManageContent = uid == null ? false : await _repo.hasPagePermission(widget.pageId, 'manage_content');
-      final canManageMessages = uid == null
-          ? false
-          : (role == 'owner' || await _repo.hasPagePermission(widget.pageId, 'manage_messages'));
       final canViewFollowers = uid == null ? false : await _repo.hasPagePermission(widget.pageId, 'view_analytics');
       final posts = await _repo.listPagePosts(widget.pageId, status: 'published');
       final events = await _repo.listPageEvents(widget.pageId);
@@ -80,8 +81,6 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
         _following = followState != null;
         _favorite = followState?['favorite'] as bool? ?? false;
         _canManage = role != null;
-        _canManageContent = canManageContent;
-        _canManageMessages = canManageMessages;
         _canViewFollowers = canViewFollowers;
         _posts = posts;
         _events = events.where((e) => DateTime.parse(e['start_time'] as String).isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
@@ -219,39 +218,13 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       appBar: AppBar(
         title: Text(_page?['name'] as String? ?? 'Page', style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
-          if (_canViewFollowers)
-            IconButton(
-              icon: const Icon(Icons.people_alt_outlined),
-              tooltip: 'Followers',
-              onPressed: () => context.push('/page-followers?id=${widget.pageId}'),
-            ),
-          if (_canManageContent)
-            IconButton(
-              icon: const Icon(Icons.dashboard_customize_outlined),
-              tooltip: 'Manage content',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => PageContentScreen(pageId: widget.pageId)),
-              ),
-            ),
-          if (_canManageMessages)
-            IconButton(
-              icon: const Icon(Icons.inbox_outlined),
-              tooltip: 'Inbox',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => PageInboxScreen(pageId: widget.pageId, pageName: _page?['name'] as String? ?? 'Page')),
-              ),
-            ),
-          if (_canViewFollowers)
-            IconButton(
-              icon: const Icon(Icons.insights_outlined),
-              tooltip: 'Insights',
-              onPressed: () => context.push('/page-analytics?id=${widget.pageId}&name=${Uri.encodeComponent(_page?['name'] as String? ?? 'Page')}'),
-            ),
           if (_canManage)
             IconButton(
-              icon: const Icon(Icons.group_outlined),
-              tooltip: 'Manage team',
-              onPressed: () => context.push('/page-team?id=${widget.pageId}'),
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Manage page',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => PageManageScreen(pageId: widget.pageId)),
+              ),
             ),
         ],
       ),
