@@ -434,6 +434,12 @@ class _S extends ConsumerState<HomeFeedScreen> {
                                 post: p,
                                 liked: liked.contains(p.id) || p.isLiked,
                                 bookmarked: bookmarked.contains(p.id) || p.isBookmarked,
+                                // InlinePostComments renders immediately below on the
+                                // same card background and owns the closing bottom
+                                // divider instead, so the two read as one continuous
+                                // card rather than PostCard visually closing itself
+                                // off before the comments panel starts.
+                                showBottomDivider: false,
                                 onLike: () async {
                                   if (uid == null) {
                                     redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to like posts.');

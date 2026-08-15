@@ -58,6 +58,15 @@ class PostCard extends StatelessWidget {
   final bool liked;
   final bool bookmarked;
 
+  /// The card's own thick bottom divider (the visual "gap" between one
+  /// post and the next). Set to false only when something else — namely
+  /// HomeFeedScreen's inline comments panel — renders immediately below
+  /// this card on the same background and needs to visually continue as
+  /// one card instead of being cut off by it. Every other usage
+  /// (CommunityDetailScreen, PostRepliesScreen, PostDetailScreen) leaves
+  /// this at its default so their spacing is completely unchanged.
+  final bool showBottomDivider;
+
   const PostCard({
     super.key,
     required this.post,
@@ -66,6 +75,7 @@ class PostCard extends StatelessWidget {
     required this.onComment,
     this.liked = false,
     this.bookmarked = false,
+    this.showBottomDivider = true,
   });
 
   void _openAuthorProfile(BuildContext context) {
@@ -382,10 +392,10 @@ class PostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(bottom: 8),
+        margin: EdgeInsets.only(bottom: showBottomDivider ? 8 : 0),
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
-          border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 8)),
+          border: showBottomDivider ? Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 8)) : null,
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(

@@ -111,9 +111,19 @@ class _InlinePostCommentsState extends ConsumerState<InlinePostComments> {
     final latest = topLevel.isEmpty ? null : topLevel.reduce((a, b) => a.createdAt.isAfter(b.createdAt) ? a : b);
     final remainingCount = widget.post.commentCount - (latest == null ? 0 : 1);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        border: Border(bottom: BorderSide(color: theme.dividerColor, width: 8)),
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Divider(height: 1, thickness: 1, color: theme.dividerColor.withValues(alpha: 0.5)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!widget.expanded && latest != null)
@@ -221,6 +231,9 @@ class _InlinePostCommentsState extends ConsumerState<InlinePostComments> {
                 ]),
               ],
             ),
+          ),
+        ],
+      ),
           ),
         ],
       ),
