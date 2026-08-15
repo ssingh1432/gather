@@ -59,7 +59,7 @@ class _SuggestedCommunitiesSection extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
             child: Row(
               children: [
-                Expanded(child: Text('Suggested for you', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+                Expanded(child: Text('Suggested groups', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
                 IconButton(
                   tooltip: 'Hide',
                   icon: const Icon(Icons.close, size: 20),

@@ -497,11 +497,11 @@ class PostCard extends StatelessWidget {
 /// - a small download button in the corner saves the media directly from
 ///   the feed, without needing to open the viewer first
 ///
-/// Videos are NOT given a live `VideoPlayerController` here — running one
-/// controller per visible video in a scrolling list is a real memory/perf
-/// risk, so the feed shows a lightweight static placeholder and only pays
-/// for video playback once the person actually opens the full viewer.
-/// Blurs whatever [child] is (media, in practice) behind a "Sensitive
+/// Videos autoplay muted and looping once they become the single "most
+/// visible" video across the whole scroll — see [FeedVideoManager], which
+/// only ever keeps one live `VideoPlayerController` alive at a time
+/// regardless of how many video posts are loaded, so this stays cheap in
+/// a long scrolling feed. Blurs whatever [child] is (media, in practice) behind a "Sensitive
 /// content" notice until tapped — the same tap-to-reveal contract as
 /// Twitter/X's content warnings. Safe search filters these posts out of
 /// the feed entirely server-side; this gate is what everyone else sees.
@@ -1315,6 +1315,13 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
   // has already scrolled past and a newer request has taken over.
   int _generation = 0;
 
+  // Rewind/forward-5s controls stay hidden until the video is tapped, then
+  // auto-hide after a few seconds — same reveal-then-fade pattern as
+  // YouTube/Instagram's in-feed scrubber, so the muted autoplay view stays
+  // uncluttered until someone actually wants to seek.
+  bool _controlsVisible = false;
+  Timer? _hideControlsTimer;
+
   @override
   void initState() {
     super.initState();
@@ -1326,6 +1333,7 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
     FeedVideoManager.instance.activePostId.removeListener(_onActiveChanged);
     FeedVideoManager.instance.reportDisposed(widget.postId);
     _generation++; // invalidate any in-flight init for this instance
+    _hideControlsTimer?.cancel();
     _controller?.dispose();
     super.dispose();
   }
@@ -1368,17 +1376,44 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
     }
   }
 
+  void _toggleControls() {
+    _hideControlsTimer?.cancel();
+    setState(() => _controlsVisible = !_controlsVisible);
+    if (_controlsVisible) {
+      _hideControlsTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _controlsVisible = false);
+      });
+    }
+  }
+
+  Future<void> _skip(Duration offset) async {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    final target = c.value.position + offset;
+    final clamped = target < Duration.zero
+        ? Duration.zero
+        : (target > c.value.duration ? c.value.duration : target);
+    await c.seekTo(clamped);
+    // Re-arm the auto-hide window so a skip doesn't get cut short right
+    // after tapping it.
+    _hideControlsTimer?.cancel();
+    _hideControlsTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _controlsVisible = false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final ready = _controller?.value.isInitialized == true;
     return VisibilityDetector(
       key: ValueKey('post-video-${widget.postId}'),
       onVisibilityChanged: (info) => FeedVideoManager.instance.reportVisibility(widget.postId, info.visibleFraction),
       child: SizedBox(
         width: double.infinity,
         child: AspectRatio(
-          aspectRatio: _controller?.value.isInitialized == true ? _controller!.value.aspectRatio : 4 / 5,
+          aspectRatio: ready ? _controller!.value.aspectRatio : 4 / 5,
           child: GestureDetector(
-            onTap: _failed ? _startInit : null,
+            onTap: _failed ? _startInit : (ready ? _toggleControls : null),
             child: Stack(
               alignment: Alignment.center,
               fit: StackFit.expand,
@@ -1388,7 +1423,7 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
                     gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF2B2B2B), Color(0xFF161616)]),
                   ),
                 ),
-                if (_controller?.value.isInitialized == true)
+                if (ready)
                   VideoPlayer(_controller!)
                 else if (_initializing)
                   const CircularProgressIndicator(color: Colors.white)
@@ -1407,6 +1442,22 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
                       ],
                     ],
                   ),
+                if (ready)
+                  IgnorePointer(
+                    ignoring: !_controlsVisible,
+                    child: AnimatedOpacity(
+                      opacity: _controlsVisible ? 1 : 0,
+                      duration: const Duration(milliseconds: 150),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _VideoSkipButton(icon: Icons.replay_5, onTap: () => _skip(const Duration(seconds: -5))),
+                          const SizedBox(width: 48),
+                          _VideoSkipButton(icon: Icons.forward_5, onTap: () => _skip(const Duration(seconds: 5))),
+                        ],
+                      ),
+                    ),
+                  ),
                 const Positioned(left: 10, bottom: 10, child: _MediaBadge(label: 'VIDEO', icon: Icons.videocam_outlined)),
               ],
             ),
@@ -1415,6 +1466,25 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
       ),
     );
   }
+}
+
+/// One rewind-5s / forward-5s tap target for [_AutoplayVideo]'s reveal-on-
+/// tap controls overlay.
+class _VideoSkipButton extends StatelessWidget {
+  const _VideoSkipButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle),
+          child: Icon(icon, color: Colors.white, size: 26),
+        ),
+      );
 }
 
 /// One tappable app icon in the "Share to" row (WhatsApp, Facebook, X,
