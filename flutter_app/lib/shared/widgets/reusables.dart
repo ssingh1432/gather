@@ -1307,6 +1307,14 @@ class _AutoplayVideo extends StatefulWidget {
 }
 
 class _AutoplayVideoState extends State<_AutoplayVideo> {
+  // Shared across every _AutoplayVideo instance (not per-post) so toggling
+  // sound once carries forward as the person scrolls to the next video —
+  // same behavior as TikTok/Reels remembering the last mute choice rather
+  // than resetting to muted on every new video. Starts unmuted per
+  // request (sound on by default), unlike the muted-by-default convention
+  // most feeds use.
+  static bool _globallyMuted = false;
+
   VideoPlayerController? _controller;
   bool _initializing = false;
   bool _failed = false;
@@ -1317,8 +1325,11 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
 
   // Rewind/forward-5s controls stay hidden until the video is tapped, then
   // auto-hide after a few seconds — same reveal-then-fade pattern as
-  // YouTube/Instagram's in-feed scrubber, so the muted autoplay view stays
-  // uncluttered until someone actually wants to seek.
+  // YouTube/Instagram's in-feed scrubber, so the autoplay view stays
+  // uncluttered until someone actually wants to seek. The mute toggle
+  // (below) is deliberately NOT part of this reveal-on-tap group — it
+  // stays permanently visible, since sound on/off is state the person
+  // needs to see at a glance, not a control they dig for.
   bool _controlsVisible = false;
   Timer? _hideControlsTimer;
 
@@ -1360,7 +1371,7 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
       // A hung network request would otherwise freeze this post forever
       // with no feedback — cap it so it fails gracefully instead.
       await c.initialize().timeout(const Duration(seconds: 12));
-      await c.setVolume(0); // muted autoplay, same as every app does this
+      await c.setVolume(_globallyMuted ? 0 : 1);
       await c.setLooping(true);
       if (myGeneration != _generation || !mounted || !_isActive) {
         await c.dispose();
@@ -1374,6 +1385,11 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
     } finally {
       if (myGeneration == _generation) _initializing = false;
     }
+  }
+
+  void _toggleMute() {
+    setState(() => _globallyMuted = !_globallyMuted);
+    _controller?.setVolume(_globallyMuted ? 0 : 1);
   }
 
   void _toggleControls() {
@@ -1459,6 +1475,12 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
                     ),
                   ),
                 const Positioned(left: 10, bottom: 10, child: _MediaBadge(label: 'VIDEO', icon: Icons.videocam_outlined)),
+                if (ready)
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: _VideoSkipButton(icon: _globallyMuted ? Icons.volume_off : Icons.volume_up, onTap: _toggleMute),
+                  ),
               ],
             ),
           ),
@@ -1468,8 +1490,9 @@ class _AutoplayVideoState extends State<_AutoplayVideo> {
   }
 }
 
-/// One rewind-5s / forward-5s tap target for [_AutoplayVideo]'s reveal-on-
-/// tap controls overlay.
+/// A small circular icon overlay button used on [_AutoplayVideo] — the
+/// rewind-5s / forward-5s reveal-on-tap controls, and the permanently
+/// visible mute toggle.
 class _VideoSkipButton extends StatelessWidget {
   const _VideoSkipButton({required this.icon, required this.onTap});
   final IconData icon;
