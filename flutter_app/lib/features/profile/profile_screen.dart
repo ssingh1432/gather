@@ -115,18 +115,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             onSelected: (value) {
               if (value == 'share') {
                 Share.share('Check out my profile on Gather: https://eiquoab.xyz/user?id=$uid');
-              } else if (value == 'pages') {
-                context.push('/my-pages');
               } else if (value == 'signout') {
                 _confirmAndSignOut();
               }
             },
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'share', child: ListTile(leading: Icon(Icons.ios_share), title: Text('Share profile'), contentPadding: EdgeInsets.zero)),
-              PopupMenuItem(
-                value: 'pages',
-                child: ListTile(leading: Icon(Icons.storefront_outlined), title: Text('Your Pages'), contentPadding: EdgeInsets.zero),
-              ),
               PopupMenuItem(
                 value: 'signout',
                 child: ListTile(leading: Icon(Icons.logout), title: Text('Sign out'), contentPadding: EdgeInsets.zero),
@@ -256,6 +250,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         subtitle: const Text('Earn from ads on your posts'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/monetization'),
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.storefront_outlined),
+                        title: const Text('Pages'),
+                        subtitle: const Text('Create and manage a business, brand, or organization page'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/my-pages'),
                       ),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
