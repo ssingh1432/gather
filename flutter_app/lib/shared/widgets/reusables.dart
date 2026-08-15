@@ -1705,7 +1705,7 @@ class _ExpandableTextState extends State<_ExpandableText> {
     return LayoutBuilder(builder: (context, constraints) {
       final painter = TextPainter(text: span, maxLines: _ExpandableText._collapsedMaxLines, textDirection: ui.TextDirection.ltr)
         ..layout(maxWidth: constraints.maxWidth);
-      final overflows = !_expanded && painter.didExceedMaxLines;
+      final couldCollapse = painter.didExceedMaxLines;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1714,12 +1714,15 @@ class _ExpandableTextState extends State<_ExpandableText> {
             maxLines: _expanded ? null : _ExpandableText._collapsedMaxLines,
             overflow: _expanded ? TextOverflow.visible : TextOverflow.clip,
           ),
-          if (overflows)
+          if (couldCollapse)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: InkWell(
-                onTap: () => setState(() => _expanded = true),
-                child: Text('See more', style: TextStyle(color: Theme.of(context).colorScheme.outline, fontWeight: FontWeight.w600)),
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Text(
+                  _expanded ? 'See less' : 'See more',
+                  style: TextStyle(color: Theme.of(context).colorScheme.outline, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
         ],
