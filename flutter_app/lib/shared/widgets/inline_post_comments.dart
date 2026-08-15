@@ -116,20 +116,33 @@ class _InlinePostCommentsState extends ConsumerState<InlinePostComments> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!widget.expanded && latest != null) ...[
-            _CommentRow(comment: latest, onReply: () => _startReply(latest)),
-            if (remainingCount > 0)
-              Padding(
-                padding: const EdgeInsets.only(left: 40, top: 2),
-                child: InkWell(
-                  onTap: widget.onToggleExpanded,
-                  child: Text(
-                    'View all ${widget.post.commentCount} comments',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline, fontWeight: FontWeight.w600),
-                  ),
+          if (!widget.expanded && latest != null)
+            // The whole preview area is tappable to expand — not just the
+            // small "N comments" hint — so a light touch anywhere near the
+            // latest comment reveals the full thread, rather than
+            // requiring a precise tap on a small link. The Reply link and
+            // avatar inside _CommentRow still resolve to their own taps
+            // first (innermost hit-test wins), so they aren't swallowed.
+            InkWell(
+              onTap: widget.onToggleExpanded,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _CommentRow(comment: latest, onReply: () => _startReply(latest)),
+                    if (remainingCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 40, top: 1),
+                        child: Text(
+                          '${widget.post.commentCount} comments',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline.withValues(alpha: 0.7)),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-          ],
+            ),
           AnimatedSize(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
