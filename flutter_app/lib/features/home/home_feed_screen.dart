@@ -18,6 +18,7 @@ import '../../shared/widgets/reusables.dart';
 import '../../shared/widgets/composer_prompt.dart';
 import '../../shared/widgets/people_you_may_know.dart';
 import '../../shared/widgets/suggested_communities.dart';
+import '../../shared/widgets/inline_post_comments.dart';
 import '../../shared/widgets/feed_ad_card.dart';
 import '../../shared/widgets/story_bar.dart';
 import '../../shared/widgets/top_bar_profile_link.dart';
@@ -62,6 +63,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
 
   Set<String> liked = <String>{};
   Set<String> bookmarked = <String>{};
+  final Set<String> _expandedComments = <String>{};
   List<PostModel> _posts = const [];
   // Cursor pagination (Step 16) for the authenticated home feed. Only
   // used when signed in; the logged-out public feed still uses
@@ -424,60 +426,83 @@ class _S extends ConsumerState<HomeFeedScreen> {
                           if (rowPost is _SuggestedCommunitiesSlot) return const SuggestedCommunities(key: ValueKey('suggested-communities'));
                           if (rowPost is _AdSlot) return FeedAdCard(key: ValueKey('ad-${rowPost.postId}'), postId: rowPost.postId);
                           final p = rowPost as PostModel;
-                          return PostCard(
-                            key: ValueKey('post-${p.id}'),
-                            post: p,
-                            liked: liked.contains(p.id) || p.isLiked,
-                            bookmarked: bookmarked.contains(p.id) || p.isBookmarked,
-                            onLike: () async {
-                              if (uid == null) {
-                                redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to like posts.');
-                                return;
-                              }
-                              _markFeedInteracted();
-                              AnalyticsService.instance.firstActionCompleted(action: 'post_liked');
-                              final wasLiked = liked.contains(p.id) || p.isLiked;
-                              // Optimistic: flip the local flag immediately so the tap feels
-                              // instant, instead of round-tripping liked/bookmarked state for
-                              // every loaded post (previously refetched on every single tap).
-                              setState(() => wasLiked ? liked.remove(p.id) : liked.add(p.id));
-                              try {
-                                if (wasLiked) {
-                                  await repo.unlikePost(p.id, uid);
-                                } else {
-                                  await repo.likePost(p.id, uid);
-                                }
-                              } catch (_) {
-                                if (mounted) setState(() => wasLiked ? liked.add(p.id) : liked.remove(p.id));
-                              }
-                            },
-                            onComment: () {
-                              if (uid == null) {
-                                redirectToLogin(context, redirect: '/post?id=${p.id}', message: 'Please log in or create an account to comment.');
-                                return;
-                              }
-                              _markFeedInteracted();
-                              context.push('/post?id=${p.id}');
-                            },
-                            onBookmark: () async {
-                              if (uid == null) {
-                                redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to save posts.');
-                                return;
-                              }
-                              _markFeedInteracted();
-                              AnalyticsService.instance.firstActionCompleted(action: 'post_bookmarked');
-                              final wasBookmarked = bookmarked.contains(p.id) || p.isBookmarked;
-                              setState(() => wasBookmarked ? bookmarked.remove(p.id) : bookmarked.add(p.id));
-                              try {
-                                if (wasBookmarked) {
-                                  await repo.unbookmarkPost(p.id, uid);
-                                } else {
-                                  await repo.bookmarkPost(p.id, uid);
-                                }
-                              } catch (_) {
-                                if (mounted) setState(() => wasBookmarked ? bookmarked.add(p.id) : bookmarked.remove(p.id));
-                              }
-                            },
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              PostCard(
+                                key: ValueKey('post-${p.id}'),
+                                post: p,
+                                liked: liked.contains(p.id) || p.isLiked,
+                                bookmarked: bookmarked.contains(p.id) || p.isBookmarked,
+                                onLike: () async {
+                                  if (uid == null) {
+                                    redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to like posts.');
+                                    return;
+                                  }
+                                  _markFeedInteracted();
+                                  AnalyticsService.instance.firstActionCompleted(action: 'post_liked');
+                                  final wasLiked = liked.contains(p.id) || p.isLiked;
+                                  // Optimistic: flip the local flag immediately so the tap feels
+                                  // instant, instead of round-tripping liked/bookmarked state for
+                                  // every loaded post (previously refetched on every single tap).
+                                  setState(() => wasLiked ? liked.remove(p.id) : liked.add(p.id));
+                                  try {
+                                    if (wasLiked) {
+                                      await repo.unlikePost(p.id, uid);
+                                    } else {
+                                      await repo.likePost(p.id, uid);
+                                    }
+                                  } catch (_) {
+                                    if (mounted) setState(() => wasLiked ? liked.add(p.id) : liked.remove(p.id));
+                                  }
+                                },
+                                onComment: () {
+                                  if (uid == null) {
+                                    redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to comment.');
+                                    return;
+                                  }
+                                  _markFeedInteracted();
+                                  setState(() {
+                                    if (_expandedComments.contains(p.id)) {
+                                      _expandedComments.remove(p.id);
+                                    } else {
+                                      _expandedComments.add(p.id);
+                                    }
+                                  });
+                                },
+                                onBookmark: () async {
+                                  if (uid == null) {
+                                    redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to save posts.');
+                                    return;
+                                  }
+                                  _markFeedInteracted();
+                                  AnalyticsService.instance.firstActionCompleted(action: 'post_bookmarked');
+                                  final wasBookmarked = bookmarked.contains(p.id) || p.isBookmarked;
+                                  setState(() => wasBookmarked ? bookmarked.remove(p.id) : bookmarked.add(p.id));
+                                  try {
+                                    if (wasBookmarked) {
+                                      await repo.unbookmarkPost(p.id, uid);
+                                    } else {
+                                      await repo.bookmarkPost(p.id, uid);
+                                    }
+                                  } catch (_) {
+                                    if (mounted) setState(() => wasBookmarked ? bookmarked.add(p.id) : bookmarked.remove(p.id));
+                                  }
+                                },
+                              ),
+                              InlinePostComments(
+                                key: ValueKey('comments-${p.id}'),
+                                post: p,
+                                expanded: _expandedComments.contains(p.id),
+                                onToggleExpanded: () => setState(() {
+                                  if (_expandedComments.contains(p.id)) {
+                                    _expandedComments.remove(p.id);
+                                  } else {
+                                    _expandedComments.add(p.id);
+                                  }
+                                }),
+                              ),
+                            ],
                           );
                         },
                       ),
