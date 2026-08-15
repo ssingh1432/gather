@@ -1003,16 +1003,20 @@ class _P extends State<CreatePostScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sectionLabelStyle = theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600);
+
     return Scaffold(
+      backgroundColor: theme.colorScheme.surfaceContainerLowest,
       appBar: AppBar(title: Text(widget.quotePostId != null ? 'Share to your feed' : 'Create Post')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_draftLoaded)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: [
                     const Icon(Icons.history, size: 16, color: Colors.grey),
@@ -1022,15 +1026,20 @@ class _P extends State<CreatePostScreen> {
                   ],
                 ),
               ),
+
+            // Composer — the one section that stays visually "loose" (no
+            // card wrapper) since it's the primary focus of the screen;
+            // everything below it groups into clearly separated cards
+            // instead of floating loosely one after another.
             Container(
               decoration: BoxDecoration(
-                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: theme.colorScheme.outlineVariant),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Column(
                 children: [
                   FormatToolbar(controller: text, onChanged: _onTextChanged, focusNode: _textFocus),
-                  Container(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
+                  Container(height: 1, color: theme.colorScheme.outlineVariant),
                   TextField(
                     key: const Key('composeTextField'),
                     controller: text,
@@ -1064,250 +1073,280 @@ class _P extends State<CreatePostScreen> {
                 }),
               ),
             ],
-            const SizedBox(height: 12),
-            _VisibilityPicker(
-              value: _visibility,
-              options: _effectiveVisibilityOptions,
-              onChanged: (v) => setState(() => _visibility = v),
-            ),
-            const SizedBox(height: 8),
-            _SchedulePicker(
-              value: _scheduledFor,
-              onChanged: (v) => setState(() => _scheduledFor = v),
-            ),
-            const SizedBox(height: 12),
             if (_loadingQuote) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator()),
             if (_quotedPost != null) ...[
-              _QuotedPostPreviewCard(post: _quotedPost!),
               const SizedBox(height: 12),
+              _QuotedPostPreviewCard(post: _quotedPost!),
             ],
-            Text('Add to your post', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _attachTile(context, icon: Icons.photo_camera_outlined, label: 'Camera', onTap: _showCameraSheet),
-                  const SizedBox(width: 8),
-                  _attachTile(context, icon: Icons.image_outlined, label: 'Photo', active: image != null, onTap: () => _pickImage(ImageSource.gallery)),
-                  const SizedBox(width: 8),
-                  _attachTile(context, icon: Icons.videocam_outlined, label: 'Video', active: video != null, onTap: () => _pickVideo(ImageSource.gallery)),
-                  const SizedBox(width: 8),
-                  _attachTile(context, icon: Icons.audiotrack_outlined, label: 'Audio', active: audio != null, onTap: _pickAudio),
-                  const SizedBox(width: 8),
-                  _attachTile(context, icon: Icons.description_outlined, label: 'Document', active: document != null, onTap: _pickDocument),
-                  const SizedBox(width: 8),
-                  _attachTile(
-                    context,
-                    icon: Icons.poll_outlined,
-                    label: 'Poll',
-                    active: pollDraft != null,
-                    onTap: () async {
-                      final draft = await _showPollSheet(context, pollDraft);
-                      if (draft == null) return;
-                      setState(() {
-                        pollDraft = draft;
-                        eventDraft = null;
-                        image = null;
-                        video = null;
-                        audio = null;
-                        document = null;
-                      });
-                    },
+
+            _SectionCard(
+              children: [
+                _VisibilityPicker(
+                  value: _visibility,
+                  options: _effectiveVisibilityOptions,
+                  onChanged: (v) => setState(() => _visibility = v),
+                ),
+                const Divider(height: 20),
+                _SchedulePicker(
+                  value: _scheduledFor,
+                  onChanged: (v) => setState(() => _scheduledFor = v),
+                ),
+              ],
+            ),
+
+            _SectionCard(
+              children: [
+                Text('Add to your post', style: sectionLabelStyle),
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _attachTile(context, icon: Icons.photo_camera_outlined, label: 'Camera', onTap: _showCameraSheet),
+                      const SizedBox(width: 8),
+                      _attachTile(context, icon: Icons.image_outlined, label: 'Photo', active: image != null, onTap: () => _pickImage(ImageSource.gallery)),
+                      const SizedBox(width: 8),
+                      _attachTile(context, icon: Icons.videocam_outlined, label: 'Video', active: video != null, onTap: () => _pickVideo(ImageSource.gallery)),
+                      const SizedBox(width: 8),
+                      _attachTile(context, icon: Icons.audiotrack_outlined, label: 'Audio', active: audio != null, onTap: _pickAudio),
+                      const SizedBox(width: 8),
+                      _attachTile(context, icon: Icons.description_outlined, label: 'Document', active: document != null, onTap: _pickDocument),
+                      const SizedBox(width: 8),
+                      _attachTile(
+                        context,
+                        icon: Icons.poll_outlined,
+                        label: 'Poll',
+                        active: pollDraft != null,
+                        onTap: () async {
+                          final draft = await _showPollSheet(context, pollDraft);
+                          if (draft == null) return;
+                          setState(() {
+                            pollDraft = draft;
+                            eventDraft = null;
+                            image = null;
+                            video = null;
+                            audio = null;
+                            document = null;
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      _attachTile(
+                        context,
+                        icon: Icons.event_outlined,
+                        label: 'Event',
+                        active: eventDraft != null,
+                        onTap: () async {
+                          final draft = await _showEventSheet(context, eventDraft);
+                          if (draft == null) return;
+                          setState(() {
+                            eventDraft = draft;
+                            pollDraft = null;
+                            image = null;
+                            video = null;
+                            audio = null;
+                            document = null;
+                          });
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  _attachTile(
-                    context,
-                    icon: Icons.event_outlined,
-                    label: 'Event',
-                    active: eventDraft != null,
-                    onTap: () async {
-                      final draft = await _showEventSheet(context, eventDraft);
-                      if (draft == null) return;
-                      setState(() {
-                        eventDraft = draft;
-                        pollDraft = null;
-                        image = null;
-                        video = null;
-                        audio = null;
-                        document = null;
-                      });
-                    },
+                ),
+                if (image != null || video != null || audio != null || document != null || pollDraft != null || eventDraft != null) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 60,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        if (image != null)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: _attachmentPreviewChip(
+                              context,
+                              leading: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: SizedBox(width: 40, height: 40, child: PickedImagePreview(bytesFuture: image!.readAsBytes())),
+                              ),
+                              title: 'Photo',
+                              onRemove: () => setState(() => image = null),
+                            ),
+                          ),
+                        if (video != null)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: _attachmentPreviewChip(
+                              context,
+                              leading: const Icon(Icons.videocam, size: 28),
+                              title: 'Video',
+                              subtitle: 'up to 5 min',
+                              onRemove: () => setState(() => video = null),
+                            ),
+                          ),
+                        if (audio != null)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: _attachmentPreviewChip(
+                              context,
+                              leading: const Icon(Icons.audiotrack, size: 28),
+                              title: audio!.name,
+                              subtitle: _formatFileSize(audio!.size),
+                              onRemove: () => setState(() => audio = null),
+                            ),
+                          ),
+                        if (document != null)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: _attachmentPreviewChip(
+                              context,
+                              leading: const Icon(Icons.description, size: 28),
+                              title: document!.name,
+                              subtitle: _formatFileSize(document!.size),
+                              onRemove: () => setState(() => document = null),
+                            ),
+                          ),
+                        if (pollDraft != null)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: _attachmentPreviewChip(
+                              context,
+                              leading: const Icon(Icons.poll, size: 28),
+                              title: pollDraft!.question,
+                              subtitle: '${pollDraft!.options.length} options${pollDraft!.expiresAt != null ? ' · ends ${_formatPollEnd(pollDraft!.expiresAt!)}' : ''}',
+                              onRemove: () => setState(() => pollDraft = null),
+                            ),
+                          ),
+                        if (eventDraft != null)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: _attachmentPreviewChip(
+                              context,
+                              leading: const Icon(Icons.event, size: 28),
+                              title: eventDraft!.title,
+                              onRemove: () => setState(() => eventDraft = null),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ],
-              ),
+              ],
             ),
-            if (image != null || video != null || audio != null || document != null || pollDraft != null || eventDraft != null) ...[
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 60,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
+
+            _SectionCard(
+              children: [
+                Text('More options', style: sectionLabelStyle),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    if (image != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: _attachmentPreviewChip(
-                          context,
-                          leading: ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: SizedBox(width: 40, height: 40, child: PickedImagePreview(bytesFuture: image!.readAsBytes())),
+                    OutlinedButton.icon(
+                      onPressed: _pickFeeling,
+                      icon: Text(_feeling?.emoji ?? '🙂'),
+                      label: Text(_feeling == null ? 'Feeling' : _feeling!.label),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _pickFriends,
+                      icon: const Icon(Icons.person_add_alt_1_outlined),
+                      label: Text(_taggedFriends.isEmpty ? 'Tag friends' : 'Tagged ${_taggedFriends.length}'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => setState(() => _isSensitive = !_isSensitive),
+                      style: _isSensitive
+                          ? OutlinedButton.styleFrom(
+                              foregroundColor: theme.colorScheme.error,
+                              side: BorderSide(color: theme.colorScheme.error),
+                            )
+                          : null,
+                      icon: Icon(_isSensitive ? Icons.warning_amber_rounded : Icons.warning_amber),
+                      label: const Text('Sensitive content'),
+                    ),
+                  ],
+                ),
+                if (_taggedFriends.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _taggedFriends.entries
+                        .map((e) => Chip(
+                              label: Text('@${e.value}'),
+                              onDeleted: () => setState(() => _taggedFriends.remove(e.key)),
+                            ))
+                        .toList(),
+                  ),
+                ],
+              ],
+            ),
+
+            _SectionCard(
+              children: [
+                Text('Details', style: sectionLabelStyle),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: location,
+                  readOnly: true,
+                  onTap: () async {
+                    final picked = await Navigator.of(context).push<PickedLocation>(
+                      MaterialPageRoute(
+                        builder: (_) => LocationPickerScreen(
+                          initial: _pickedLat != null && _pickedLng != null && location.text.isNotEmpty
+                              ? PickedLocation(label: location.text, lat: _pickedLat!, lng: _pickedLng!)
+                              : null,
+                        ),
+                      ),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        location.text = picked.label;
+                        _pickedLat = picked.lat;
+                        _pickedLng = picked.lng;
+                      });
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Location',
+                    hintText: 'Tap to pick on the map',
+                    prefixIcon: const Icon(Icons.location_on_outlined),
+                    suffixIcon: location.text.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => setState(() {
+                              location.clear();
+                              _pickedLat = null;
+                              _pickedLng = null;
+                            }),
                           ),
-                          title: 'Photo',
-                          onRemove: () => setState(() => image = null),
-                        ),
-                      ),
-                    if (video != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: _attachmentPreviewChip(
-                          context,
-                          leading: const Icon(Icons.videocam, size: 28),
-                          title: 'Video',
-                          subtitle: 'up to 5 min',
-                          onRemove: () => setState(() => video = null),
-                        ),
-                      ),
-                    if (audio != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: _attachmentPreviewChip(
-                          context,
-                          leading: const Icon(Icons.audiotrack, size: 28),
-                          title: audio!.name,
-                          subtitle: _formatFileSize(audio!.size),
-                          onRemove: () => setState(() => audio = null),
-                        ),
-                      ),
-                    if (document != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: _attachmentPreviewChip(
-                          context,
-                          leading: const Icon(Icons.description, size: 28),
-                          title: document!.name,
-                          subtitle: _formatFileSize(document!.size),
-                          onRemove: () => setState(() => document = null),
-                        ),
-                      ),
-                    if (pollDraft != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: _attachmentPreviewChip(
-                          context,
-                          leading: const Icon(Icons.poll, size: 28),
-                          title: pollDraft!.question,
-                          subtitle: '${pollDraft!.options.length} options${pollDraft!.expiresAt != null ? ' · ends ${_formatPollEnd(pollDraft!.expiresAt!)}' : ''}',
-                          onRemove: () => setState(() => pollDraft = null),
-                        ),
-                      ),
-                    if (eventDraft != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: _attachmentPreviewChip(
-                          context,
-                          leading: const Icon(Icons.event, size: 28),
-                          title: eventDraft!.title,
-                          onRemove: () => setState(() => eventDraft = null),
-                        ),
-                      ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: tagsCtrl,
+                  decoration: const InputDecoration(labelText: 'Tags', hintText: 'e.g. music, nepal, travel', prefixIcon: Icon(Icons.tag)),
+                ),
+              ],
+            ),
+
+            if (err != null) ...[
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.errorContainer.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(err!, style: TextStyle(color: theme.colorScheme.error)),
+                    const SizedBox(height: 4),
+                    const Text('You can press Publish again to retry the same post upload.'),
                   ],
                 ),
               ),
             ],
-            const SizedBox(height: 14),
-            Text('More options', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _pickFeeling,
-                  icon: Text(_feeling?.emoji ?? '🙂'),
-                  label: Text(_feeling == null ? 'Feeling' : _feeling!.label),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _pickFriends,
-                  icon: const Icon(Icons.person_add_alt_1_outlined),
-                  label: Text(_taggedFriends.isEmpty ? 'Tag friends' : 'Tagged ${_taggedFriends.length}'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => setState(() => _isSensitive = !_isSensitive),
-                  style: _isSensitive
-                      ? OutlinedButton.styleFrom(
-                          foregroundColor: Theme.of(context).colorScheme.error,
-                          side: BorderSide(color: Theme.of(context).colorScheme.error),
-                        )
-                      : null,
-                  icon: Icon(_isSensitive ? Icons.warning_amber_rounded : Icons.warning_amber),
-                  label: const Text('Sensitive content'),
-                ),
-              ],
-            ),
-            if (_taggedFriends.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: _taggedFriends.entries
-                    .map((e) => Chip(
-                          label: Text('@${e.value}'),
-                          onDeleted: () => setState(() => _taggedFriends.remove(e.key)),
-                        ))
-                    .toList(),
-              ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: location,
-              readOnly: true,
-              onTap: () async {
-                final picked = await Navigator.of(context).push<PickedLocation>(
-                  MaterialPageRoute(
-                    builder: (_) => LocationPickerScreen(
-                      initial: _pickedLat != null && _pickedLng != null && location.text.isNotEmpty
-                          ? PickedLocation(label: location.text, lat: _pickedLat!, lng: _pickedLng!)
-                          : null,
-                    ),
-                  ),
-                );
-                if (picked != null) {
-                  setState(() {
-                    location.text = picked.label;
-                    _pickedLat = picked.lat;
-                    _pickedLng = picked.lng;
-                  });
-                }
-              },
-              decoration: InputDecoration(
-                labelText: 'Location',
-                hintText: 'Tap to pick on the map',
-                prefixIcon: const Icon(Icons.location_on_outlined),
-                suffixIcon: location.text.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => setState(() {
-                          location.clear();
-                          _pickedLat = null;
-                          _pickedLng = null;
-                        }),
-                      ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: tagsCtrl,
-              decoration: const InputDecoration(labelText: 'Tags', hintText: 'e.g. music, nepal, travel', prefixIcon: Icon(Icons.tag)),
-            ),
-            if (err != null) ...[
-              const SizedBox(height: 12),
-              Text(err!, style: const TextStyle(color: Colors.red)),
-              const SizedBox(height: 8),
-              const Text('You can press Publish again to retry the same post upload.'),
-            ],
-            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -1326,6 +1365,31 @@ class _P extends State<CreatePostScreen> {
       ),
     );
   }
+}
+
+/// Consistent grouping wrapper used throughout CreatePostScreen so related
+/// controls (visibility+schedule, attachments, feeling/tag/sensitive,
+/// location+tags) read as one card each instead of a long flat stack of
+/// individually-bordered fields and rows — purely a visual grouping, no
+/// behavior of its own.
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+        ),
+      );
 }
 
 /// Lets the user pick a future date/time to publish at instead of posting
