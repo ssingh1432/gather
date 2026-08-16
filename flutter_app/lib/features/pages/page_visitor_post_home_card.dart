@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../shared/models/models.dart';
-import '../../shared/services/feed_offline_cache.dart';
 import '../../shared/utils/time_ago.dart';
 import '../../shared/widgets/reusables.dart';
 
