@@ -3,6 +3,9 @@
 -- viewer's own Page posts) are eligible for the authenticated Home feed.
 -- Visitor posts remain in page_visitor_posts for Page moderation; they are not
 -- copied into public.posts.
+-- The existing feed DTO uses community_id for the Page id only when
+-- content_type='page_visitor'; the client uses that discriminator before
+-- rendering the Page-specific Home card.
 
 create or replace function public.get_home_feed_cursor(
   user_id uuid,
@@ -84,7 +87,7 @@ as $$
     select
       vp.id,
       vp.author_id,
-      null::uuid as community_id,
+      vp.page_id as community_id,
       vp.content as text_content,
       vp.created_at,
       u.username as author_username,
@@ -109,7 +112,7 @@ as $$
       null::timestamptz as reply_to_created_at,
       false as reply_to_removed,
       false as is_sensitive,
-      'text'::text as content_type,
+      'page_visitor'::text as content_type,
       false as is_pinned,
       null::timestamptz as edited_at,
       0::integer as edit_count,
