@@ -64,6 +64,13 @@ class PageLocalRepository {
     });
   }
 
+  Future<bool> isPageOwner(String pageId) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) return false;
+    final row = await _c.from('page_roles').select('role').eq('page_id', pageId).eq('user_id', uid).maybeSingle();
+    return row?['role'] == 'owner';
+  }
+
   /// Owner-only lifecycle actions. These stay Page-local so no shared Gather
   /// repository needs to know about Page-specific destructive operations.
   Future<void> deactivatePage(String pageId) => _c.rpc('deactivate_page', params: {'p_page_id': pageId});
