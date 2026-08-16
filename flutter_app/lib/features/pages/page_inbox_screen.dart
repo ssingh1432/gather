@@ -8,10 +8,9 @@ import 'page_chat_screen.dart';
 import 'page_messaging_settings_screen.dart';
 import 'pages_theme.dart';
 
-/// Team-facing customer-chat inbox (Step 9 of the brief) — one row per
-/// thread, most recently active first, with an unread badge. Gated on
-/// `manage_messages`/owner both here (hides the entry point) and, more
-/// importantly, server-side by `list_page_message_threads` (migration 080).
+/// Team-facing customer-chat inbox. Messaging settings are intentionally
+/// exposed as a visible action when the user can edit them; they are not
+/// hidden behind an unlabeled/undiscoverable icon.
 class PageInboxScreen extends StatefulWidget {
   const PageInboxScreen({super.key, required this.pageId, this.pageName});
   final String pageId;
@@ -73,6 +72,15 @@ class _PageInboxScreenState extends State<PageInboxScreen> {
     _load();
   }
 
+  Future<void> _openMessagingSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PageMessagingSettingsScreen(pageId: widget.pageId),
+      ),
+    );
+    if (mounted) _loadPermission();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -83,9 +91,7 @@ class _PageInboxScreenState extends State<PageInboxScreen> {
             IconButton(
               icon: const Icon(Icons.settings_outlined),
               tooltip: 'Messaging settings',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => PageMessagingSettingsScreen(pageId: widget.pageId)),
-              ),
+              onPressed: _openMessagingSettings,
             ),
         ],
       ),
@@ -93,55 +99,99 @@ class _PageInboxScreenState extends State<PageInboxScreen> {
           ? const FeedSkeletonList()
           : _error != null
               ? ErrorRetryState(title: 'Unable to load', message: _error!, onRetry: _load)
-              : _threads.isEmpty
-                  ? const EmptyState(icon: Icons.inbox_outlined, title: 'No messages yet', message: 'Customer conversations will show up here.')
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView.separated(
-                        itemCount: _threads.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (_, i) {
-                          final t = _threads[i];
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    children: [
+                      if (_canEditSettings)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            PageTokens.spaceLg,
+                            PageTokens.spaceMd,
+                            PageTokens.spaceLg,
+                            PageTokens.spaceSm,
+                          ),
+                          child: OutlinedButton.icon(
+                            onPressed: _openMessagingSettings,
+                            icon: const Icon(Icons.settings_outlined),
+                            label: const Text('Messaging settings'),
+                          ),
+                        ),
+                      if (_threads.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 96),
+                          child: EmptyState(
+                            icon: Icons.inbox_outlined,
+                            title: 'No messages yet',
+                            message: 'Customer conversations will show up here.',
+                          ),
+                        )
+                      else
+                        ..._threads.map((t) {
                           final unread = (t['unread_count'] as int?) ?? 0;
                           final fromPage = t['last_sender_type'] == 'page';
-                          return ListTile(
-                            onTap: () => _openThread(t),
-                            leading: CircleAvatar(
-                              backgroundImage: (t['profile_photo_url'] as String?) != null ? NetworkImage(t['profile_photo_url'] as String) : null,
-                              child: (t['profile_photo_url'] as String?) == null ? const Icon(Icons.person_outline) : null,
-                            ),
-                            title: Text(
-                              (t['display_name'] as String?)?.isNotEmpty == true ? t['display_name'] as String : '@${t['username']}',
-                              style: TextStyle(fontWeight: unread > 0 ? FontWeight.w800 : FontWeight.w600),
-                            ),
-                            subtitle: Text(
-                              '${fromPage ? 'You: ' : ''}${t['last_message'] ?? ''}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontWeight: unread > 0 ? FontWeight.w600 : FontWeight.w400),
-                            ),
-                            trailing: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  t['last_message_at'] != null ? timeAgo(DateTime.parse(t['last_message_at'] as String)) : '',
-                                  style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          return Column(
+                            children: [
+                              ListTile(
+                                onTap: () => _openThread(t),
+                                leading: CircleAvatar(
+                                  backgroundImage: (t['profile_photo_url'] as String?) != null
+                                      ? NetworkImage(t['profile_photo_url'] as String)
+                                      : null,
+                                  child: (t['profile_photo_url'] as String?) == null
+                                      ? const Icon(Icons.person_outline)
+                                      : null,
                                 ),
-                                if (unread > 0) ...[
-                                  const SizedBox(height: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                    decoration: BoxDecoration(color: AppColors.brandTeal, borderRadius: BorderRadius.circular(PageTokens.radiusPill)),
-                                    child: Text('$unread', style: const TextStyle(color: AppColors.onBrandTeal, fontSize: 11, fontWeight: FontWeight.w700)),
-                                  ),
-                                ],
-                              ],
-                            ),
+                                title: Text(
+                                  (t['display_name'] as String?)?.isNotEmpty == true
+                                      ? t['display_name'] as String
+                                      : '@${t['username']}',
+                                  style: TextStyle(fontWeight: unread > 0 ? FontWeight.w800 : FontWeight.w600),
+                                ),
+                                subtitle: Text(
+                                  '${fromPage ? 'You: ' : ''}${t['last_message'] ?? ''}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontWeight: unread > 0 ? FontWeight.w600 : FontWeight.w400),
+                                ),
+                                trailing: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      t['last_message_at'] != null
+                                          ? timeAgo(DateTime.parse(t['last_message_at'] as String))
+                                          : '',
+                                      style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                    ),
+                                    if (unread > 0) ...[
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.brandTeal,
+                                          borderRadius: BorderRadius.circular(PageTokens.radiusPill),
+                                        ),
+                                        child: Text(
+                                          '$unread',
+                                          style: const TextStyle(
+                                            color: AppColors.onBrandTeal,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const Divider(height: 1),
+                            ],
                           );
-                        },
-                      ),
-                    ),
+                        }),
+                    ],
+                  ),
+                ),
     );
   }
 }
