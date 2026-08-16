@@ -63,18 +63,9 @@ import '../features/reports/report_screen.dart';
 import '../features/search/search_screen.dart';
 import 'supabase_client.dart';
 
-/// Lets services outside the widget tree (namely [PushNotificationService]'s
-/// foreground-message handler) surface a SnackBar without needing a
-/// BuildContext of their own. Wired into MaterialApp.router in main.dart.
 final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 final appRouter = GoRouter(
-  // GoRouter's default error screen shows the raw exception text (e.g.
-  // "GoException: no routes for location: error=access_denied&..."). That
-  // exact case happens whenever an expired/invalid Supabase auth link
-  // (signup confirmation, password reset) redirects back with an
-  // "#error=..." fragment that doesn't match any route. Recognize that
-  // pattern and show something a person can actually act on.
   errorBuilder: (context, state) {
     final text = state.error?.toString() ?? '';
     final isAuthLinkError = text.contains('otp_expired') ||
@@ -151,10 +142,6 @@ final appRouter = GoRouter(
     GoRoute(path: '/signup', builder: (_, s) => SignupScreen(redirect: s.uri.queryParameters['redirect'])),
     GoRoute(path: '/register', builder: (_, s) => SignupScreen(redirect: s.uri.queryParameters['redirect'])),
     GoRoute(path: '/forgot', builder: (_, __) => ForgotPasswordScreen()),
-    // Deliberately not in _authRoutes/_protectedRoutes: the recovery link
-    // lands here with a fresh recovery session that supabase_flutter is
-    // still parsing from the URL fragment on the very first frame, so it
-    // must never be bounced by the authed/protected redirect check above.
     GoRoute(path: '/reset-password', builder: (_, __) => const ResetPasswordScreen()),
     GoRoute(path: '/verify-phone', builder: (_, s) => VerifyPhoneScreen(phone: s.uri.queryParameters['phone'] ?? '')),
     GoRoute(
@@ -309,9 +296,6 @@ class MainNav extends StatelessWidget {
       );
     }
 
-    // Mobile & tablet: keep the familiar bottom nav; cap content width on
-    // tablet so cards/forms don't stretch uncomfortably wide before the
-    // desktop breakpoint kicks in.
     return Scaffold(
       body: BetaGate(
         child: Breakpoints.isTablet(context) ? ResponsiveCenter(child: child) : child,
@@ -330,31 +314,42 @@ class MainNav extends StatelessWidget {
   }
 }
 
-const _authRoutes = {'/login', '/signup', '/register', '/forgot'};
+const _authRoutes = {
+  '/login',
+  '/signup',
+  '/register',
+  '/forgot',
+  '/verify-phone',
+  '/verify-email',
+};
+
 const _protectedRoutes = {
-  '/',
-  '/communities',
-  '/community',
-  '/community-members',
-  '/community-chat',
-  '/community-events',
-  '/community-analytics',
-  '/edit-community',
-  '/post',
-  '/media',
-  '/search',
-  '/user',
   '/create-post',
-  '/create-community',
+  '/edit-post',
   '/profile',
   '/edit-profile',
-  '/verify-phone',
-  '/monetization',
   '/settings',
-  '/close-friends',
   '/bookmarks',
   '/notifications',
-  '/report',
+  '/my-pages',
+  '/create-page',
+  '/discover-pages',
+  '/followed-pages',
+  '/page-manage',
+  '/page-settings',
+  '/page-content',
+  '/page-team',
+  '/page-followers',
+  '/page-reviews',
+  '/page-subscriptions',
+  '/page-marketplace',
+  '/page-analytics',
+  '/page-inbox',
+  '/page-chat',
+  '/page-messaging-settings',
+  '/scheduled-posts',
+  '/close-friends',
+  '/monetization',
   '/admin',
   '/admin/moderation',
   '/my-moderation',
@@ -365,14 +360,12 @@ const _protectedRoutes = {
   '/admin/legal',
 };
 
-String _loginLocation({required String redirect}) =>
-    '/login?redirect=${Uri.encodeComponent(redirect)}';
+String _loginLocation({required String redirect}) => '/login?redirect=${Uri.encodeComponent(redirect)}';
 
 String? _safeRedirect(String? redirect) {
   if (redirect == null || redirect.isEmpty) return null;
   final uri = Uri.tryParse(redirect);
-  if (uri == null || !uri.hasAbsolutePath || uri.hasScheme || uri.hasAuthority) {
-    return null;
-  }
-  return uri.toString();
+  if (uri == null || !uri.isAbsolute && !uri.path.startsWith('/')) return null;
+  if (uri.hasScheme || uri.host.isNotEmpty) return null;
+  return redirect;
 }
