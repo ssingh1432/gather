@@ -18,6 +18,7 @@ import '../../shared/widgets/reusables.dart';
 import '../../shared/widgets/composer_prompt.dart';
 import '../../shared/widgets/people_you_may_know.dart';
 import '../../shared/widgets/suggested_communities.dart';
+import '../../shared/widgets/suggested_pages.dart';
 import '../../shared/widgets/inline_post_comments.dart';
 import '../../shared/widgets/feed_ad_card.dart';
 import '../../shared/widgets/story_bar.dart';
@@ -52,6 +53,13 @@ class _PYMKSlot {
 /// independently-tunable points in the feed.
 class _SuggestedCommunitiesSlot {
   const _SuggestedCommunitiesSlot();
+}
+
+/// Marker row for the "Suggested Pages" section — same idea as
+/// [_SuggestedCommunitiesSlot], placed further down the feed so the two
+/// suggestion breaks (groups, then pages) don't land back-to-back.
+class _SuggestedPagesSlot {
+  const _SuggestedPagesSlot();
 }
 
 class _S extends ConsumerState<HomeFeedScreen> {
@@ -356,14 +364,22 @@ class _S extends ConsumerState<HomeFeedScreen> {
   /// for you" groups rather than stacking them.
   List<Object> _rowsWithSuggestions(List<Object> feedRows, bool isNewAccount) {
     if (SupabaseConfig.currentUserId == null) return feedRows;
+    List<Object> withCommunities;
     if (isNewAccount || feedRows.length <= 3) {
       final withPymk = [const _PYMKSlot(), ...feedRows];
-      if (withPymk.length <= 8) return [...withPymk, const _SuggestedCommunitiesSlot()];
-      return [...withPymk.sublist(0, 8), const _SuggestedCommunitiesSlot(), ...withPymk.sublist(8)];
+      withCommunities = withPymk.length <= 8
+          ? [...withPymk, const _SuggestedCommunitiesSlot()]
+          : [...withPymk.sublist(0, 8), const _SuggestedCommunitiesSlot(), ...withPymk.sublist(8)];
+    } else {
+      final withPymk = [...feedRows.sublist(0, 3), const _PYMKSlot(), ...feedRows.sublist(3)];
+      withCommunities = withPymk.length <= 10
+          ? [...withPymk, const _SuggestedCommunitiesSlot()]
+          : [...withPymk.sublist(0, 10), const _SuggestedCommunitiesSlot(), ...withPymk.sublist(10)];
     }
-    final withPymk = [...feedRows.sublist(0, 3), const _PYMKSlot(), ...feedRows.sublist(3)];
-    if (withPymk.length <= 10) return [...withPymk, const _SuggestedCommunitiesSlot()];
-    return [...withPymk.sublist(0, 10), const _SuggestedCommunitiesSlot(), ...withPymk.sublist(10)];
+    // Suggested Pages placed further down still, so PYMK / Communities /
+    // Pages read as three separate feed breaks rather than stacking.
+    if (withCommunities.length <= 18) return [...withCommunities, const _SuggestedPagesSlot()];
+    return [...withCommunities.sublist(0, 18), const _SuggestedPagesSlot(), ...withCommunities.sublist(18)];
   }
 
   @override
@@ -399,6 +415,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
                           SliverToBoxAdapter(child: ComposerPrompt()),
                           SliverToBoxAdapter(child: PeopleYouMayKnow()),
                           SliverToBoxAdapter(child: SuggestedCommunities()),
+                          SliverToBoxAdapter(child: SuggestedPages()),
                           SliverFillRemaining(
                             child: EmptyState(icon: Icons.dynamic_feed_outlined, title: 'No posts yet', message: 'Pull to refresh or check back soon.'),
                           ),
@@ -424,6 +441,7 @@ class _S extends ConsumerState<HomeFeedScreen> {
                           final rowPost = rows[index];
                           if (rowPost is _PYMKSlot) return const PeopleYouMayKnow(key: ValueKey('pymk'));
                           if (rowPost is _SuggestedCommunitiesSlot) return const SuggestedCommunities(key: ValueKey('suggested-communities'));
+                          if (rowPost is _SuggestedPagesSlot) return const SuggestedPages(key: ValueKey('suggested-pages'));
                           if (rowPost is _AdSlot) return FeedAdCard(key: ValueKey('ad-${rowPost.postId}'), postId: rowPost.postId);
                           final p = rowPost as PostModel;
                           return Column(

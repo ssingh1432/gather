@@ -1071,6 +1071,23 @@ class PageRepository {
   Future<Map<String, dynamic>?> getPageByUsername(String username) async =>
       await _c.from('pages').select().eq('username', username).maybeSingle();
 
+  /// Mirrors [CommunityRepository.suggestedCommunitiesForFeed] for the
+  /// home feed's "Suggested Pages" row: published pages the user doesn't
+  /// already follow, biased toward popularity then shuffled so the same
+  /// handful of top pages don't dominate every load.
+  Future<List<SuggestedPage>> suggestedPagesForFeed(String userId, {int limit = 10}) async {
+    final followedRows = await _c.from('page_followers').select('page_id').eq('user_id', userId);
+    final followedIds = (followedRows as List).map((r) => r['page_id'].toString()).toSet();
+
+    var query = _c.from('pages').select('id, name, logo_url, follower_count').eq('status', 'published');
+    if (followedIds.isNotEmpty) {
+      query = query.not('id', 'in', '(${followedIds.join(',')})');
+    }
+    final data = await query.order('follower_count', ascending: false).limit(limit * 2);
+    final pages = (data as List).map((e) => SuggestedPage.fromMap(e as Map<String, dynamic>)).toList()..shuffle();
+    return pages.take(limit).toList();
+  }
+
   Future<void> updatePage(String pageId, Map<String, dynamic> patch) async {
     await _c.from('pages').update(patch).eq('id', pageId);
   }

@@ -329,6 +329,24 @@ class SuggestedCommunity {
       );
 }
 
+/// Same idea as [SuggestedCommunity], for the home feed's "Suggested
+/// Pages" row.
+class SuggestedPage {
+  final String id;
+  final String name;
+  final String? logoUrl;
+  final int followerCount;
+
+  SuggestedPage({required this.id, required this.name, this.logoUrl, this.followerCount = 0});
+
+  factory SuggestedPage.fromMap(Map<String, dynamic> map) => SuggestedPage(
+        id: map['id'].toString(),
+        name: map['name'] as String? ?? 'Page',
+        logoUrl: map['logo_url'] as String?,
+        followerCount: (map['follower_count'] as num?)?.toInt() ?? 0,
+      );
+}
+
 
 /// A single comment (or reply-to-comment) on a post. [parentCommentId] is
 /// null for a top-level comment; when set, the comment nests one level

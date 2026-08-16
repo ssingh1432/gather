@@ -117,6 +117,15 @@ final suggestedCommunitiesProvider = FutureProvider.autoDispose<List<SuggestedCo
   return CommunityRepository().suggestedCommunitiesForFeed(uid);
 });
 
+/// Mirrors [suggestedCommunitiesProvider] for the home feed's "Suggested
+/// Pages" row.
+final suggestedPagesProvider = FutureProvider.autoDispose<List<SuggestedPage>>((ref) async {
+  final client = SupabaseConfig.maybeClient;
+  final uid = client?.auth.currentUser?.id;
+  if (client == null || uid == null) return [];
+  return PageRepository().suggestedPagesForFeed(uid);
+});
+
 /// Ids of suggested communities that have been joined or marked "Not
 /// interested" this session, so their card can disappear immediately
 /// without waiting on a round trip back through
@@ -126,3 +135,7 @@ final suggestedCommunitiesProvider = FutureProvider.autoDispose<List<SuggestedCo
 /// "Not interested" only clears that single card instance.
 final dismissedSuggestedCommunitiesProvider = StateProvider.autoDispose<Set<String>>((ref) => <String>{});
 final joinedSuggestedCommunitiesProvider = StateProvider.autoDispose<Set<String>>((ref) => <String>{});
+
+/// Session-only, same reasoning as the communities pair above.
+final dismissedSuggestedPagesProvider = StateProvider.autoDispose<Set<String>>((ref) => <String>{});
+final followedSuggestedPagesProvider = StateProvider.autoDispose<Set<String>>((ref) => <String>{});
