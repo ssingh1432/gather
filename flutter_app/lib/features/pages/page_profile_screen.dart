@@ -449,14 +449,12 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                   favorite: _favorite,
                                   busy: _followBusy,
                                   onFollow: _toggleFollow,
-                                  onFavorite:
-                                      _following ? _toggleFavorite : null,
+                                  onFavorite: _following ? _toggleFavorite : null,
                                   onMessage: () => Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder: (_) => PageChatScreen(
                                         pageId: widget.pageId,
-                                        pageName:
-                                            page['name'] as String? ?? 'Page',
+                                        pageName: page['name'] as String? ?? 'Page',
                                       ),
                                     ),
                                   ),
@@ -472,8 +470,7 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                     ),
                                   ),
                                 ],
-                                if (_hasSubscriptionTiers ||
-                                    _hasMarketplaceItems) ...[
+                                if (_hasSubscriptionTiers || _hasMarketplaceItems) ...[
                                   const SizedBox(height: PageTokens.spaceSm),
                                   Wrap(
                                     spacing: 8,
@@ -483,10 +480,7 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                           onPressed: () => context.push(
                                             '/page-subscriptions?id=${widget.pageId}&name=${Uri.encodeComponent(page['name'] as String? ?? 'Page')}',
                                           ),
-                                          icon: const Icon(
-                                            Icons.workspace_premium_outlined,
-                                            size: 16,
-                                          ),
+                                          icon: const Icon(Icons.workspace_premium_outlined, size: 16),
                                           label: const Text('Subscriptions'),
                                         ),
                                       if (_hasMarketplaceItems)
@@ -494,10 +488,7 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                           onPressed: () => context.push(
                                             '/page-marketplace?id=${widget.pageId}&name=${Uri.encodeComponent(page['name'] as String? ?? 'Page')}',
                                           ),
-                                          icon: const Icon(
-                                            Icons.storefront_outlined,
-                                            size: 16,
-                                          ),
+                                          icon: const Icon(Icons.storefront_outlined, size: 16),
                                           label: const Text('Shop'),
                                         ),
                                     ],
@@ -511,33 +502,21 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                       onPressed: () => showDonateSheet(
                                         context,
                                         pageId: widget.pageId,
-                                        pageName:
-                                            page['name'] as String? ?? 'this Page',
+                                        pageName: page['name'] as String? ?? 'this Page',
                                       ),
-                                      icon: const Icon(
-                                        Icons.volunteer_activism_outlined,
-                                        size: 18,
-                                      ),
+                                      icon: const Icon(Icons.volunteer_activism_outlined, size: 18),
                                       label: const Text('Support this Page'),
                                     ),
                                   ),
-                                ] else if (page['owner_id'] ==
-                                    SupabaseConfig.currentUserId) ...[
+                                ] else if (page['owner_id'] == SupabaseConfig.currentUserId) ...[
                                   const SizedBox(height: PageTokens.spaceMd),
                                   TextButton.icon(
                                     onPressed: _enableMonetization,
-                                    icon: const Icon(
-                                      Icons.volunteer_activism_outlined,
-                                      size: 16,
-                                    ),
-                                    label: const Text(
-                                      'Enable donations for this Page',
-                                    ),
+                                    icon: const Icon(Icons.volunteer_activism_outlined, size: 16),
+                                    label: const Text('Enable donations for this Page'),
                                   ),
                                 ],
-                                if ((page['description'] as String?)
-                                        ?.isNotEmpty ??
-                                    false) ...[
+                                if ((page['description'] as String?)?.isNotEmpty ?? false) ...[
                                   const SizedBox(height: PageTokens.spaceLg),
                                   Text(page['description'] as String),
                                 ],
@@ -546,59 +525,28 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                 const SizedBox(height: PageTokens.spaceSm),
                                 if (page['website'] != null)
                                   InkWell(
-                                    onTap: () => openExternalLink(
-                                      context,
-                                      page['website'] as String,
-                                    ),
-                                    child: PageInfoRow(
-                                      icon: Icons.link,
-                                      text: page['website'] as String,
-                                    ),
+                                    onTap: () => openExternalLink(context, page['website'] as String),
+                                    child: PageInfoRow(icon: Icons.link, text: page['website'] as String),
                                   ),
                                 if (page['phone'] != null)
                                   InkWell(
-                                    onTap: () => _launchOrSnack(
-                                      Uri(
-                                        scheme: 'tel',
-                                        path: page['phone'] as String,
-                                      ),
-                                    ),
-                                    child: PageInfoRow(
-                                      icon: Icons.phone_outlined,
-                                      text: page['phone'] as String,
-                                    ),
+                                    onTap: () => _launchOrSnack(Uri(scheme: 'tel', path: page['phone'] as String)),
+                                    child: PageInfoRow(icon: Icons.phone_outlined, text: page['phone'] as String),
                                   ),
                                 if (page['email'] != null)
                                   InkWell(
-                                    onTap: () => _launchOrSnack(
-                                      Uri(
-                                        scheme: 'mailto',
-                                        path: page['email'] as String,
-                                      ),
-                                    ),
-                                    child: PageInfoRow(
-                                      icon: Icons.email_outlined,
-                                      text: page['email'] as String,
-                                    ),
+                                    onTap: () => _launchOrSnack(Uri(scheme: 'mailto', path: page['email'] as String)),
+                                    child: PageInfoRow(icon: Icons.email_outlined, text: page['email'] as String),
                                   ),
                                 if (page['country'] != null)
-                                  PageInfoRow(
-                                    icon: Icons.public,
-                                    text: page['country'] as String,
-                                  ),
+                                  PageInfoRow(icon: Icons.public, text: page['country'] as String),
                                 if (_businessHoursNote != null)
-                                  PageInfoRow(
-                                    icon: Icons.schedule_outlined,
-                                    text: _businessHoursNote!,
-                                  ),
+                                  PageInfoRow(icon: Icons.schedule_outlined, text: _businessHoursNote!),
                                 if (_socialLinks.isNotEmpty) ...[
                                   const SizedBox(height: PageTokens.spaceMd),
                                   Text(
                                     'Social',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelLarge
-                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                    style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
                                   ),
                                   const SizedBox(height: 6),
                                   Wrap(
@@ -609,10 +557,7 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                         ActionChip(
                                           avatar: const Icon(Icons.public, size: 16),
                                           label: Text(entry.key),
-                                          onPressed: () => openExternalLink(
-                                            context,
-                                            entry.value,
-                                          ),
+                                          onPressed: () => openExternalLink(context, entry.value),
                                         ),
                                     ],
                                   ),
@@ -764,15 +709,12 @@ class _VisitorPostCard extends StatelessWidget {
                         label,
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                      if (username?.isNotEmpty == true &&
-                          name?.isNotEmpty == true)
+                      if (username?.isNotEmpty == true && name?.isNotEmpty == true)
                         Text(
                           '@$username',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                     ],
@@ -780,7 +722,7 @@ class _VisitorPostCard extends StatelessWidget {
                 ),
                 if (created != null)
                   Text(
-                    timeAgo(DateTime.parse(created!)),
+                    timeAgo(DateTime.parse(created)),
                     style: TextStyle(
                       fontSize: 11,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -824,13 +766,10 @@ class _ProfilePostCardState extends State<_ProfilePostCard> {
     final pinned = post['pinned'] as bool? ?? false;
     final content = post['content'] as String? ?? '';
     final media = post['media'];
-    final imageUrl = media is List &&
-            media.isNotEmpty &&
-            media.first is Map
+    final imageUrl = media is List && media.isNotEmpty && media.first is Map
         ? (media.first as Map)['url'] as String?
         : null;
-    final publishedAt = post['published_at'] as String? ??
-        post['created_at'] as String?;
+    final publishedAt = post['published_at'] as String? ?? post['created_at'] as String?;
 
     return Container(
       padding: const EdgeInsets.all(PageTokens.spaceMd),
@@ -848,11 +787,7 @@ class _ProfilePostCardState extends State<_ProfilePostCard> {
               if (pinned)
                 const Padding(
                   padding: EdgeInsets.only(right: 6),
-                  child: Icon(
-                    Icons.push_pin,
-                    size: 14,
-                    color: AppColors.brandTeal,
-                  ),
+                  child: Icon(Icons.push_pin, size: 14, color: AppColors.brandTeal),
                 ),
               PageStatChip(
                 icon: kPagePostTypeIcons[type] ?? Icons.article_outlined,
@@ -861,7 +796,7 @@ class _ProfilePostCardState extends State<_ProfilePostCard> {
               const Spacer(),
               if (publishedAt != null)
                 Text(
-                  timeAgo(DateTime.parse(publishedAt!)),
+                  timeAgo(DateTime.parse(publishedAt)),
                   style: TextStyle(
                     fontSize: 11,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -878,7 +813,7 @@ class _ProfilePostCardState extends State<_ProfilePostCard> {
             ClipRRect(
               borderRadius: BorderRadius.circular(PageTokens.radiusSm),
               child: Image.network(
-                imageUrl!,
+                imageUrl,
                 width: double.infinity,
                 height: 180,
                 fit: BoxFit.cover,
