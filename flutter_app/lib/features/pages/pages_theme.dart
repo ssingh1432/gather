@@ -297,14 +297,52 @@ class PageCoverAndLogo extends StatelessWidget {
   Widget build(BuildContext context) {
     final coverUrl = page['cover_url'] as String?;
     final logoUrl = page['logo_url'] as String?;
+    final surface = PageColors.surfaceCard(context);
+
+    Widget coverFallback() => Container(
+          decoration: BoxDecoration(
+            gradient: PageColors.coverFallbackGradient(context),
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.image_outlined,
+            color: Colors.white.withValues(alpha: 0.9),
+            size: 32,
+          ),
+        );
+
+    Widget logoFallback() => const Center(
+          child: Icon(Icons.storefront, size: 28),
+        );
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
         AspectRatio(
           aspectRatio: 3,
           child: coverUrl != null
-              ? Image.network(coverUrl, fit: BoxFit.cover)
-              : Container(decoration: BoxDecoration(gradient: PageColors.coverFallbackGradient(context))),
+              ? Image.network(
+                  coverUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => coverFallback(),
+                )
+              : coverFallback(),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.16),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
         Positioned(
           left: PageTokens.spaceLg,
@@ -314,11 +352,17 @@ class PageCoverAndLogo extends StatelessWidget {
             height: 72,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: PageColors.surfaceCard(context), width: 3),
+              border: Border.all(color: surface, width: 3),
               color: PageColors.surfaceMuted(context),
-              image: logoUrl != null ? DecorationImage(image: NetworkImage(logoUrl), fit: BoxFit.cover) : null,
             ),
-            child: logoUrl == null ? const Icon(Icons.storefront, size: 28) : null,
+            clipBehavior: Clip.antiAlias,
+            child: logoUrl != null
+                ? Image.network(
+                    logoUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => logoFallback(),
+                  )
+                : logoFallback(),
           ),
         ),
       ],
