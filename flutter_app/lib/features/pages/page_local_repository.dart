@@ -2,7 +2,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
 
-/// Page-only data access for visitor posts, Page rules, and audience moderation.
+/// Page-only data access for visitor posts, Page rules, audience moderation,
+/// and owner lifecycle actions.
 class PageLocalRepository {
   SupabaseClient get _c => SupabaseConfig.client;
 
@@ -62,4 +63,12 @@ class PageLocalRepository {
       'p_user_id': userId,
     });
   }
+
+  /// Owner-only lifecycle actions. These stay Page-local so no shared Gather
+  /// repository needs to know about Page-specific destructive operations.
+  Future<void> deactivatePage(String pageId) => _c.rpc('deactivate_page', params: {'p_page_id': pageId});
+
+  Future<void> reactivatePage(String pageId) => _c.rpc('reactivate_page', params: {'p_page_id': pageId});
+
+  Future<void> deletePagePermanently(String pageId) => _c.rpc('delete_page_permanently', params: {'p_page_id': pageId});
 }
