@@ -19,9 +19,9 @@ import 'reusables.dart';
 /// same lightweight, low-risk discovery surface Communities already gets
 /// on Home, following the exact same pattern as [SuggestedCommunities].
 ///
-/// Only ever shows `status == 'published'` pages — enforced both by
-/// [PageRepository.suggestedPagesForFeed]'s explicit filter and by RLS
-/// underneath it, which already hides drafts from non-team-members.
+/// Only ever shows `status == 'published'` pages the user doesn't already
+/// follow — enforced by the underlying `page_suggested` RPC (migration
+/// 085), the same one PageDiscoveryScreen's "Suggested" tab already uses.
 class SuggestedPages extends ConsumerWidget {
   const SuggestedPages({super.key});
 

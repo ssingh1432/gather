@@ -118,12 +118,16 @@ final suggestedCommunitiesProvider = FutureProvider.autoDispose<List<SuggestedCo
 });
 
 /// Mirrors [suggestedCommunitiesProvider] for the home feed's "Suggested
-/// Pages" row.
+/// Pages" row — reuses the same `page_suggested` RPC/[PageRepository.suggestedPages]
+/// already powering PageDiscoveryScreen's "Suggested" tab, rather than a
+/// second, separate query. That RPC already excludes followed pages and
+/// ranks by category affinity to what the user follows, server-side.
 final suggestedPagesProvider = FutureProvider.autoDispose<List<SuggestedPage>>((ref) async {
   final client = SupabaseConfig.maybeClient;
   final uid = client?.auth.currentUser?.id;
   if (client == null || uid == null) return [];
-  return PageRepository().suggestedPagesForFeed(uid);
+  final rows = await PageRepository().suggestedPages(limit: 10);
+  return rows.map(SuggestedPage.fromMap).toList();
 });
 
 /// Ids of suggested communities that have been joined or marked "Not

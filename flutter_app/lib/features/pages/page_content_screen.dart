@@ -438,7 +438,7 @@ class _CreateEventSheetState extends State<_CreateEventSheet> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.schedule_outlined),
-            title: Text(_start == null ? 'Choose date & time' : _start.toString()),
+            title: Text(_start == null ? 'Choose date & time' : _formatEventStart(_start!)),
             onTap: _pickStart,
           ),
           const SizedBox(height: 16),
@@ -461,4 +461,18 @@ class _CreateEventSheetState extends State<_CreateEventSheet> {
       ),
     );
   }
+}
+
+const _eventMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/// Mirrors the composer's own `_formatScheduled` (page_content_composer_screen.dart)
+/// so a chosen event date/time reads the same way scheduled posts do,
+/// instead of the raw `DateTime.toString()` this replaced (e.g.
+/// "2026-08-20 14:30:00.000").
+String _formatEventStart(DateTime dateTime) {
+  final local = dateTime.toLocal();
+  final hour12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
+  final ampm = local.hour < 12 ? 'AM' : 'PM';
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '${_eventMonths[local.month - 1]} ${local.day}, ${local.year} · $hour12:$minute $ampm';
 }
