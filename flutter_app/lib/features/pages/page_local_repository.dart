@@ -2,7 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase_client.dart';
 
-/// Page-only data access for visitor posts and Page rules.
+/// Page-only data access for visitor posts, Page rules, and audience moderation.
 class PageLocalRepository {
   SupabaseClient get _c => SupabaseConfig.client;
 
@@ -52,5 +52,14 @@ class PageLocalRepository {
 
   Future<void> updateVisitorPostingSettings(String pageId, {required bool enabled, required bool requireApproval}) async {
     await _c.from('pages').update({'allow_visitor_posts': enabled, 'visitor_posts_require_approval': requireApproval}).eq('id', pageId);
+  }
+
+  /// Removes a follower through the server-side Page permission check.
+  /// Only users with manage_roles (owner/manager by default) can perform it.
+  Future<void> removeFollower(String pageId, String userId) async {
+    await _c.rpc('remove_page_follower', params: {
+      'p_page_id': pageId,
+      'p_user_id': userId,
+    });
   }
 }
