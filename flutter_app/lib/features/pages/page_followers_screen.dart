@@ -4,14 +4,14 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/utils/time_ago.dart';
 import '../../shared/widgets/reusables.dart';
 import '../data/repositories.dart';
+import 'page_local_repository.dart';
 import 'pages_theme.dart';
 
-/// Follower Analytics + Invite Followers (Step 8 of the brief).
+/// Follower analytics + audience management for a Page.
 ///
-/// Gated end-to-end on `view_analytics` (roster/stats) and `manage_content`
-/// (invites) — both re-checked server-side by the RPCs in migration 078, so
-/// this screen's own `_canView`/`_canInvite` checks only control what's
-/// shown, never what's actually allowed.
+/// Viewing the roster is gated by `view_analytics`. Removing a follower is a
+/// stronger owner/manager action and is gated independently by `manage_roles`
+/// through the server-side `remove_page_follower` RPC.
 class PageFollowersScreen extends StatefulWidget {
   const PageFollowersScreen({super.key, required this.pageId});
   final String pageId;
@@ -22,11 +22,17 @@ class PageFollowersScreen extends StatefulWidget {
 
 class _PageFollowersScreenState extends State<PageFollowersScreen> {
   final _repo = PageRepository();
+  final _localRepo = PageLocalRepository();
   bool _loading = true;
   String? _error;
   bool _canView = false;
   bool _canInvite = false;
-  Map<String, dynamic> _stats = const {'total_followers': 0, 'new_last_7d': 0, 'new_last_30d': 0};
+  bool _canManageFollowers = false;
+  Map<String, dynamic> _stats = const {
+    'total_followers': 0,
+    'new_last_7d': 0,
+    'new_last_30d': 0,
+  };
   List<Map<String, dynamic>> _followers = const [];
 
   @override
@@ -43,12 +49,16 @@ class _PageFollowersScreenState extends State<PageFollowersScreen> {
     try {
       final canView = await _repo.hasPagePermission(widget.pageId, 'view_analytics');
       final canInvite = await _repo.hasPagePermission(widget.pageId, 'manage_content');
+      final canManageFollowers = await _repo.hasPagePermission(widget.pageId, 'manage_roles');
       final stats = canView ? await _repo.getPageFollowerStats(widget.pageId) : _stats;
-      final followers = canView ? await _repo.listPageFollowers(widget.pageId) : const <Map<String, dynamic>>[];
+      final followers = canView
+          ? await _repo.listPageFollowers(widget.pageId)
+          : const <Map<String, dynamic>>[];
       if (!mounted) return;
       setState(() {
         _canView = canView;
         _canInvite = canInvite;
+        _canManageFollowers = canManageFollowers;
         _stats = stats;
         _followers = followers;
         _loading = false;
@@ -71,6 +81,61 @@ class _PageFollowersScreenState extends State<PageFollowersScreen> {
     );
   }
 
+  Future<void> _removeFollower(Map<String, dynamic> follower) async {
+    final userId = follower['user_id'] as String?;
+    if (userId == null) return;
+    final username = (follower['username'] as String?)?.trim();
+    final displayName = (follower['display_name'] as String?)?.trim();
+    final label = displayName?.isNotEmpty == true
+        ? displayName!
+        : username?.isNotEmpty == true
+            ? '@$username'
+            : 'this follower';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove follower?'),
+        content: Text(
+          'Remove $label from this Page\'s followers? They can follow the Page again later unless the Page is configured otherwise.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Remove',
+              style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _localRepo.removeFollower(widget.pageId, userId);
+      if (!mounted) return;
+      setState(() {
+        _followers = _followers.where((f) => f['user_id'] != userId).toList();
+        final total = (_stats['total_followers'] as num?)?.toInt() ?? 0;
+        _stats = {..._stats, 'total_followers': total > 0 ? total - 1 : 0};
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$label was removed from the Page followers.')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not remove follower: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -78,18 +143,27 @@ class _PageFollowersScreenState extends State<PageFollowersScreen> {
         title: const Text('Followers', style: TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           if (_canInvite)
-            IconButton(icon: const Icon(Icons.person_add_alt_1_outlined), tooltip: 'Invite followers', onPressed: _openInviteSheet),
+            IconButton(
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+              tooltip: 'Invite followers',
+              onPressed: _openInviteSheet,
+            ),
         ],
       ),
       body: _loading
           ? const FeedSkeletonList()
           : _error != null
-              ? ErrorRetryState(title: 'Unable to load followers', message: _error!, onRetry: _load)
+              ? ErrorRetryState(
+                  title: 'Unable to load followers',
+                  message: _error!,
+                  onRetry: _load,
+                )
               : !_canView
                   ? const EmptyState(
                       icon: Icons.lock_outline,
                       title: 'Not authorized',
-                      message: 'Follower analytics are visible to team members with the "View analytics" permission.',
+                      message:
+                          'Follower analytics are visible to team members with the "View analytics" permission.',
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
@@ -100,32 +174,80 @@ class _PageFollowersScreenState extends State<PageFollowersScreen> {
                             padding: const EdgeInsets.all(PageTokens.spaceLg),
                             child: Row(
                               children: [
-                                Expanded(child: _StatCard(label: 'Total', value: '${_stats['total_followers'] ?? 0}')),
+                                Expanded(
+                                  child: _StatCard(
+                                    label: 'Total',
+                                    value: '${_stats['total_followers'] ?? 0}',
+                                  ),
+                                ),
                                 const SizedBox(width: PageTokens.spaceSm),
-                                Expanded(child: _StatCard(label: 'Last 7 days', value: '+${_stats['new_last_7d'] ?? 0}')),
+                                Expanded(
+                                  child: _StatCard(
+                                    label: 'Last 7 days',
+                                    value: '+${_stats['new_last_7d'] ?? 0}',
+                                  ),
+                                ),
                                 const SizedBox(width: PageTokens.spaceSm),
-                                Expanded(child: _StatCard(label: 'Last 30 days', value: '+${_stats['new_last_30d'] ?? 0}')),
+                                Expanded(
+                                  child: _StatCard(
+                                    label: 'Last 30 days',
+                                    value: '+${_stats['new_last_30d'] ?? 0}',
+                                  ),
+                                ),
                               ],
                             ),
                           ),
-                          PageSectionHeader(title: '${_followers.length} follower${_followers.length == 1 ? '' : 's'}'),
+                          PageSectionHeader(
+                            title: '${_followers.length} follower${_followers.length == 1 ? '' : 's'}',
+                          ),
                           if (_followers.isEmpty)
                             const Padding(
                               padding: EdgeInsets.symmetric(horizontal: PageTokens.spaceLg),
-                              child: EmptyState(icon: Icons.people_outline, title: 'No followers yet', message: 'Invite people to get your first followers.'),
+                              child: EmptyState(
+                                icon: Icons.people_outline,
+                                title: 'No followers yet',
+                                message: 'Invite people to get your first followers.',
+                              ),
                             )
                           else
                             for (final f in _followers)
                               ListTile(
                                 leading: CircleAvatar(
-                                  backgroundImage: (f['profile_photo_url'] as String?) != null ? NetworkImage(f['profile_photo_url'] as String) : null,
-                                  child: (f['profile_photo_url'] as String?) == null ? const Icon(Icons.person_outline) : null,
+                                  backgroundImage: (f['profile_photo_url'] as String?) != null
+                                      ? NetworkImage(f['profile_photo_url'] as String)
+                                      : null,
+                                  child: (f['profile_photo_url'] as String?) == null
+                                      ? const Icon(Icons.person_outline)
+                                      : null,
                                 ),
-                                title: Text((f['display_name'] as String?)?.isNotEmpty == true ? f['display_name'] as String : '@${f['username']}'),
-                                subtitle: Text('@${f['username']} · followed ${timeAgo(DateTime.parse(f['followed_at'] as String))}'),
-                                trailing: (f['notify'] as bool? ?? false)
-                                    ? const Icon(Icons.notifications_active_outlined, size: 18, color: AppColors.brandTeal)
-                                    : null,
+                                title: Text(
+                                  (f['display_name'] as String?)?.isNotEmpty == true
+                                      ? f['display_name'] as String
+                                      : '@${f['username']}',
+                                ),
+                                subtitle: Text(
+                                  '@${f['username']} · followed ${timeAgo(DateTime.parse(f['followed_at'] as String))}',
+                                ),
+                                trailing: _canManageFollowers
+                                    ? PopupMenuButton<String>(
+                                        tooltip: 'Manage follower',
+                                        onSelected: (value) {
+                                          if (value == 'remove') _removeFollower(f);
+                                        },
+                                        itemBuilder: (_) => const [
+                                          PopupMenuItem(
+                                            value: 'remove',
+                                            child: Text('Remove follower'),
+                                          ),
+                                        ],
+                                      )
+                                    : (f['notify'] as bool? ?? false)
+                                        ? const Icon(
+                                            Icons.notifications_active_outlined,
+                                            size: 18,
+                                            color: AppColors.brandTeal,
+                                          )
+                                        : null,
                               ),
                         ],
                       ),
@@ -142,7 +264,10 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: PageTokens.spaceMd, horizontal: PageTokens.spaceSm),
+      padding: const EdgeInsets.symmetric(
+        vertical: PageTokens.spaceMd,
+        horizontal: PageTokens.spaceSm,
+      ),
       decoration: BoxDecoration(
         color: PageColors.surfaceCard(context),
         borderRadius: BorderRadius.circular(PageTokens.radiusMd),
@@ -150,9 +275,21 @@ class _StatCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: AppColors.brandTeal)),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.brandTeal,
+                ),
+          ),
           const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
@@ -192,14 +329,21 @@ class _InviteFollowersSheetState extends State<_InviteFollowersSheet> {
       _error = null;
     });
     try {
-      final invited = await widget.repo.inviteUsersToFollowPage(widget.pageId, usernames);
+      final invited = await widget.repo.inviteUsersToFollowPage(
+        widget.pageId,
+        usernames,
+      );
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(invited == 0
-              ? 'No new invites sent — those usernames may already follow this page, be invalid, or already invited.'
-              : 'Invited $invited ${invited == 1 ? 'person' : 'people'} to follow this page.'),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              invited == 0
+                  ? 'No new invites sent — those usernames may already follow this page, be invalid, or already invited.'
+                  : 'Invited $invited ${invited == 1 ? 'person' : 'people'} to follow this page.',
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
@@ -211,7 +355,12 @@ class _InviteFollowersSheetState extends State<_InviteFollowersSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,12 +377,19 @@ class _InviteFollowersSheetState extends State<_InviteFollowersSheet> {
             autofocus: true,
             minLines: 1,
             maxLines: 3,
-            decoration: pageFieldDecoration(context, labelText: 'Usernames', hintText: '@amita, @rajesh123'),
+            decoration: pageFieldDecoration(
+              context,
+              labelText: 'Usernames',
+              hintText: '@amita, @rajesh123',
+            ),
             onSubmitted: (_) => _submit(),
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
           ],
           const SizedBox(height: 20),
           SizedBox(
@@ -244,11 +400,23 @@ class _InviteFollowersSheetState extends State<_InviteFollowersSheet> {
                 backgroundColor: AppColors.brandTeal,
                 foregroundColor: AppColors.onBrandTeal,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PageTokens.radiusPill)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(PageTokens.radiusPill),
+                ),
               ),
               child: _sending
-                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal))
-                  : const Text('Send invites', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.onBrandTeal,
+                      ),
+                    )
+                  : const Text(
+                      'Send invites',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
             ),
           ),
         ],
