@@ -48,10 +48,7 @@ class PageVisitorPostHomeCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        authorName,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
+                      Text(authorName, style: const TextStyle(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 2),
                       Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
@@ -78,29 +75,17 @@ class PageVisitorPostHomeCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              post.textContent,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
+            Text(post.textContent, style: Theme.of(context).textTheme.bodyLarge),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                OutlinedButton.icon(
-                  onPressed: pageId == null || pageId!.isEmpty
-                      ? null
-                      : () => context.push('/page-profile?id=$pageId'),
-                  icon: const Icon(Icons.open_in_new, size: 18),
-                  label: const Text('View Page'),
-                ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: pageId == null || pageId!.isEmpty
-                      ? null
-                      : () => context.push('/page-profile?id=$pageId'),
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: const Text('Post on Page'),
-                ),
-              ],
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: pageId == null || pageId!.isEmpty
+                    ? null
+                    : () => context.push('/page-profile?id=$pageId'),
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: const Text('View Page & post'),
+              ),
             ),
           ],
         ),
