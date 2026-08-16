@@ -280,8 +280,9 @@ class _PageManageScreenState extends State<PageManageScreen> {
         ]));
       }
 
+      final audienceRows = <Widget>[];
       if (_canManageVisitorPosts) {
-        children.add(_section('Audience', [
+        audienceRows.addAll([
           _manageRow(
             icon: Icons.forum_outlined,
             title: 'Visitor posts',
@@ -302,11 +303,11 @@ class _PageManageScreenState extends State<PageManageScreen> {
             subtitle: 'Tell visitors what is welcome on this Page',
             onTap: _openRules,
           ),
-        ]));
+        ]);
       }
 
       if (_canViewAnalytics) {
-        children.add(_section('Audience', [
+        audienceRows.add(
           _manageRow(
             icon: Icons.people_alt_outlined,
             title: 'Followers',
@@ -317,7 +318,11 @@ class _PageManageScreenState extends State<PageManageScreen> {
               ),
             ),
           ),
-        ]));
+        );
+      }
+
+      if (audienceRows.isNotEmpty) {
+        children.add(_section('Audience', audienceRows));
       }
 
       if (_canManageMessages) {
