@@ -65,7 +65,6 @@ class FeedOfflineCache {
         'visibility': p.visibility,
         'content_type': p.contentType,
         'is_pinned': p.isPinned,
-        'page_id': p.contentType == 'page_visitor' ? p.communityId : null,
       };
 }
 
