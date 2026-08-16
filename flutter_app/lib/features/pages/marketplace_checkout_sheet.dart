@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/theme/app_theme.dart';
 import '../data/repositories.dart';
 import 'esewa_launcher.dart';
 import 'pages_theme.dart';

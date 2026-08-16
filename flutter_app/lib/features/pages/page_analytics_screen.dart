@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../data/repositories.dart';
-import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/reusables.dart';
 import 'pages_theme.dart';
 

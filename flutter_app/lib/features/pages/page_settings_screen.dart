@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../core/theme/app_theme.dart';
 import '../../shared/services/media/web_safe_pick.dart';
 import '../../shared/widgets/profile_view.dart' show PickedImagePreview;
 import '../../shared/widgets/reusables.dart';
