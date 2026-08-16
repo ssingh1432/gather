@@ -24,6 +24,7 @@ import '../../shared/widgets/feed_ad_card.dart';
 import '../../shared/widgets/story_bar.dart';
 import '../../shared/widgets/top_bar_profile_link.dart';
 import '../../shared/widgets/notification_bell.dart';
+import '../pages/page_visitor_post_home_card.dart';
 import '../../shared/providers/app_providers.dart';
 import '../../shared/services/remote_config_service.dart';
 
@@ -444,6 +445,19 @@ class _S extends ConsumerState<HomeFeedScreen> {
                           if (rowPost is _SuggestedPagesSlot) return const SuggestedPages(key: ValueKey('suggested-pages'));
                           if (rowPost is _AdSlot) return FeedAdCard(key: ValueKey('ad-${rowPost.postId}'), postId: rowPost.postId);
                           final p = rowPost as PostModel;
+                          if (p.contentType == 'page_visitor') {
+                            final location = p.location ?? '';
+                            final prefix = 'Posted on ';
+                            final pageName = location.startsWith(prefix)
+                                ? location.substring(prefix.length)
+                                : 'Page';
+                            return PageVisitorPostHomeCard(
+                              key: ValueKey('page-visitor-${p.id}'),
+                              post: p,
+                              pageId: p.communityId,
+                              pageName: pageName,
+                            );
+                          }
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
