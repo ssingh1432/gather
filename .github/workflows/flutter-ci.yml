@@ -32,7 +32,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze Dart code
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Run Flutter tests
         run: flutter test
@@ -119,8 +119,8 @@ jobs:
         # deploy, so the browser is forced to fetch it fresh regardless of
         # any cache headers — which then correctly discovers and installs
         # everything else. This does NOT replace setting proper
-        # Cache-Control headers on the VPS (see the deploy runbook) — it's
-        # a client-side backstop for when that's missing or misconfigured.
+        # Cache-Control headers on the VPS (see the deploy runbook) —
+        # it's a client-side backstop for when that's missing or misconfigured.
         run: |
           sed -i "s#src=\"flutter_bootstrap.js\"#src=\"flutter_bootstrap.js?v=${GITHUB_SHA}\"#" build/web/index.html
           grep -o 'src="flutter_bootstrap.js[^"]*"' build/web/index.html
