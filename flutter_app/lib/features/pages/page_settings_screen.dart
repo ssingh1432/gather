@@ -10,22 +10,10 @@ import 'pages_theme.dart';
 
 /// Page Settings — edit a page's core info after creation.
 ///
-/// This screen didn't exist before: `manage_settings` was already defined
-/// as a page permission (migration 072, "Edit page info, category, contact
-/// details, business hours") and already gates the `pages` UPDATE RLS
-/// policy, but no screen ever called `updatePage` with anything beyond the
-/// create flow's initial insert, the publish-status flip, or the
-/// monetization toggle. In practice that meant a page's name, description,
-/// category, contact details, and business hours were frozen forever once
-/// created. This screen is that missing piece — it uses the same
-/// `PageRepository.updatePage` the create flow already relies on, so no
-/// backend/RLS changes were needed.
-///
-/// Username is intentionally read-only here: it's part of the page's
-/// public URL/identity and changing it is a bigger decision (broken links,
-/// confusion for existing followers) than a settings-screen text field
-/// should casually allow. If page owners need that later, it deserves its
-/// own explicit, confirmed flow — not bundled into this one.
+/// The settings screen is the owner/team control for the public Page identity.
+/// Username remains read-only because changing it affects the Page URL/identity.
+/// Social links are editable here as part of the same public-profile settings
+/// surface so owners do not have to discover an unsupported field elsewhere.
 class PageSettingsScreen extends StatefulWidget {
   const PageSettingsScreen({super.key, required this.pageId});
   final String pageId;
@@ -47,6 +35,11 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
   final location = TextEditingController();
   final country = TextEditingController();
   final businessHoursNote = TextEditingController();
+  final facebook = TextEditingController();
+  final instagram = TextEditingController();
+  final x = TextEditingController();
+  final youtube = TextEditingController();
+  final tiktok = TextEditingController();
 
   String pageType = 'business';
   String language = 'en';
@@ -80,6 +73,11 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
     location.dispose();
     country.dispose();
     businessHoursNote.dispose();
+    facebook.dispose();
+    instagram.dispose();
+    x.dispose();
+    youtube.dispose();
+    tiktok.dispose();
     super.dispose();
   }
 
@@ -98,10 +96,17 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
       final canEdit = results[1] as bool;
       final cats = results[2] as List<Map<String, dynamic>>;
       if (page == null) {
-        if (mounted) setState(() { _error = 'Page not found.'; _loading = false; });
+        if (mounted) {
+          setState(() {
+            _error = 'Page not found.';
+            _loading = false;
+          });
+        }
         return;
       }
       final hours = page['business_hours'];
+      final links = page['social_links'];
+      final social = links is Map ? Map<String, dynamic>.from(links) : <String, dynamic>{};
       if (!mounted) return;
       setState(() {
         name.text = page['name'] as String? ?? '';
@@ -113,6 +118,11 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
         location.text = page['location'] as String? ?? '';
         country.text = page['country'] as String? ?? '';
         businessHoursNote.text = (hours is Map && hours['note'] is String) ? hours['note'] as String : '';
+        facebook.text = social['facebook'] as String? ?? '';
+        instagram.text = social['instagram'] as String? ?? '';
+        x.text = social['x'] as String? ?? social['twitter'] as String? ?? '';
+        youtube.text = social['youtube'] as String? ?? '';
+        tiktok.text = social['tiktok'] as String? ?? '';
         pageType = page['page_type'] as String? ?? 'business';
         language = page['language'] as String? ?? 'en';
         categoryId = page['category_id'] as String?;
@@ -150,7 +160,17 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
       if (_coverPick != null) newCoverUrl = await _repo.uploadCover(widget.pageId, _coverPick!);
 
       final Map<String, dynamic> businessHours =
-          businessHoursNote.text.trim().isEmpty ? <String, dynamic>{} : <String, dynamic>{'note': businessHoursNote.text.trim()};
+          businessHoursNote.text.trim().isEmpty
+              ? <String, dynamic>{}
+              : <String, dynamic>{'note': businessHoursNote.text.trim()};
+
+      final socialLinks = <String, String>{
+        if (facebook.text.trim().isNotEmpty) 'facebook': facebook.text.trim(),
+        if (instagram.text.trim().isNotEmpty) 'instagram': instagram.text.trim(),
+        if (x.text.trim().isNotEmpty) 'x': x.text.trim(),
+        if (youtube.text.trim().isNotEmpty) 'youtube': youtube.text.trim(),
+        if (tiktok.text.trim().isNotEmpty) 'tiktok': tiktok.text.trim(),
+      };
 
       await _repo.updatePage(widget.pageId, {
         'name': name.text.trim(),
@@ -164,6 +184,7 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
         'country': country.text.trim().isEmpty ? null : country.text.trim(),
         'business_hours': businessHours,
         'language': language,
+        'social_links': socialLinks,
         if (newLogoUrl != null) 'logo_url': newLogoUrl,
         if (newCoverUrl != null) 'cover_url': newCoverUrl,
       });
@@ -321,6 +342,44 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
                                     DropdownMenuItem(value: 'ne', child: Text('नेपाली')),
                                   ],
                                   onChanged: (v) => setState(() => language = v ?? 'en'),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: PageTokens.spaceMd),
+                          const PageSectionHeader(title: 'Social links'),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg),
+                            child: Column(
+                              children: [
+                                TextFormField(
+                                  controller: facebook,
+                                  keyboardType: TextInputType.url,
+                                  decoration: pageFieldDecoration(context, labelText: 'Facebook', hintText: 'https://facebook.com/...'),
+                                ),
+                                const SizedBox(height: PageTokens.spaceSm),
+                                TextFormField(
+                                  controller: instagram,
+                                  keyboardType: TextInputType.url,
+                                  decoration: pageFieldDecoration(context, labelText: 'Instagram', hintText: 'https://instagram.com/...'),
+                                ),
+                                const SizedBox(height: PageTokens.spaceSm),
+                                TextFormField(
+                                  controller: x,
+                                  keyboardType: TextInputType.url,
+                                  decoration: pageFieldDecoration(context, labelText: 'X / Twitter', hintText: 'https://x.com/...'),
+                                ),
+                                const SizedBox(height: PageTokens.spaceSm),
+                                TextFormField(
+                                  controller: youtube,
+                                  keyboardType: TextInputType.url,
+                                  decoration: pageFieldDecoration(context, labelText: 'YouTube', hintText: 'https://youtube.com/...'),
+                                ),
+                                const SizedBox(height: PageTokens.spaceSm),
+                                TextFormField(
+                                  controller: tiktok,
+                                  keyboardType: TextInputType.url,
+                                  decoration: pageFieldDecoration(context, labelText: 'TikTok', hintText: 'https://tiktok.com/@...'),
                                 ),
                               ],
                             ),
