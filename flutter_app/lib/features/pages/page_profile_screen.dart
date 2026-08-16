@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/supabase_client.dart';
-import '../../core/theme/app_theme.dart';
 import '../../shared/utils/external_link.dart';
 import '../../shared/utils/time_ago.dart';
 import '../../shared/widgets/reusables.dart';
@@ -38,6 +37,7 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
   bool _hasSubscriptionTiers = false;
   bool _hasMarketplaceItems = false;
   bool _allowVisitorPosts = false;
+  bool _visitorPostsRequireApproval = false;
   List<Map<String, dynamic>> _posts = const [];
   List<Map<String, dynamic>> _visitorPosts = const [];
   List<Map<String, dynamic>> _events = const [];
@@ -81,6 +81,7 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
         _hasSubscriptionTiers = hasTiers;
         _hasMarketplaceItems = hasItems;
         _allowVisitorPosts = visitorSettings['allow_visitor_posts'] == true;
+        _visitorPostsRequireApproval = visitorSettings['visitor_posts_require_approval'] == true;
         _posts = posts;
         _visitorPosts = visitorPosts;
         _events = events
@@ -112,17 +113,74 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       final submitted = await showDialog<bool>(
         context: context,
         builder: (dialogContext) {
+          final user = SupabaseConfig.maybeClient?.auth.currentUser;
+          final displayName = user?.userMetadata?['display_name']?.toString().trim();
+          final username = user?.userMetadata?['username']?.toString().trim();
+          final authorLabel = displayName?.isNotEmpty == true
+              ? displayName!
+              : username?.isNotEmpty == true
+                  ? '@$username'
+                  : 'Your Gather account';
+          final pageName = _page?['name']?.toString() ?? 'this Page';
+
           return AlertDialog(
-            title: Text('Post on ${_page?['name'] ?? 'this Page'}'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              maxLines: 6,
-              maxLength: 5000,
-              decoration: const InputDecoration(
-                hintText: 'Write something for this Page…',
-                border: OutlineInputBorder(),
-              ),
+            title: Text('Post on $pageName'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(dialogContext).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.person_outline),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              const TextSpan(text: 'Posting as '),
+                              TextSpan(
+                                text: authorLabel,
+                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const TextSpan(text: ' on '),
+                              TextSpan(
+                                text: pageName,
+                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_visitorPostsRequireApproval) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'This Page reviews visitor posts before they become public.',
+                    style: Theme.of(dialogContext).textTheme.bodySmall,
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLines: 6,
+                  maxLength: 5000,
+                  decoration: const InputDecoration(
+                    hintText: 'Write something for this Page…',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             ),
             actions: [
               TextButton(
@@ -146,7 +204,7 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                     }
                   }
                 },
-                child: const Text('Post'),
+                child: Text(_visitorPostsRequireApproval ? 'Submit for review' : 'Post'),
               ),
             ],
           );
@@ -155,7 +213,13 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
 
       if (submitted == true && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Your post was submitted.')),
+          SnackBar(
+            content: Text(
+              _visitorPostsRequireApproval
+                  ? 'Your post was sent to ${_page?['name'] ?? 'this Page'} for review.'
+                  : 'Your post is now visible on ${_page?['name'] ?? 'this Page'}.',
+            ),
+          ),
         );
         await _load();
       }
