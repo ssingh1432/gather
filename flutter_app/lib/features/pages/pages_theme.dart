@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 
+// Re-export the shared brand palette for Page-local screens that already
+// consume this Page design-token library. This keeps the dependency boundary
+// Page-local while preserving the single source of truth in app_theme.dart.
+export '../../core/theme/app_theme.dart';
+
 /// Design tokens used only by the Professional Page feature.
 ///
 /// Deliberately its own small file (not imported from `features/communities`)
