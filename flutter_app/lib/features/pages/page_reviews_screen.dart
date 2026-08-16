@@ -445,19 +445,20 @@ class _ReviewCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_horiz, size: 20),
-                  onSelected: (v) {
-                    if (v == 'report') onReport();
-                    if (v == 'respond') onRespond();
-                    if (v == 'toggle_hidden') onToggleHidden();
-                  },
-                  itemBuilder: (ctx) => [
-                    if (!isMine) const PopupMenuItem(value: 'report', child: Text('Report review')),
-                    if (canModerate) PopupMenuItem(value: 'respond', child: Text(review['owner_response'] != null ? 'Edit response' : 'Respond')),
-                    if (canModerate) PopupMenuItem(value: 'toggle_hidden', child: Text(hidden ? 'Unhide review' : 'Hide review')),
-                  ],
-                ),
+                if (!isMine || canModerate)
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_horiz, size: 20),
+                    itemBuilder: (ctx) => [
+                      if (!isMine) const PopupMenuItem(value: 'report', child: Text('Report review')),
+                      if (canModerate) PopupMenuItem(value: 'respond', child: Text(review['owner_response'] != null ? 'Edit response' : 'Respond')),
+                      if (canModerate) PopupMenuItem(value: 'toggle_hidden', child: Text(hidden ? 'Unhide review' : 'Hide review')),
+                    ],
+                    onSelected: (v) {
+                      if (v == 'report') onReport();
+                      if (v == 'respond') onRespond();
+                      if (v == 'toggle_hidden') onToggleHidden();
+                    },
+                  ),
               ],
             ),
             if (removed) ...[
@@ -476,7 +477,7 @@ class _ReviewCard extends StatelessWidget {
               ],
               const SizedBox(height: PageTokens.spaceSm),
               InkWell(
-                onTap: onHelpful,
+                onTap: isMine ? null : onHelpful,
                 borderRadius: BorderRadius.circular(PageTokens.radiusPill),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
@@ -486,13 +487,21 @@ class _ReviewCard extends StatelessWidget {
                       Icon(
                         review['voted_helpful'] == true ? Icons.thumb_up : Icons.thumb_up_outlined,
                         size: 16,
-                        color: review['voted_helpful'] == true ? AppColors.brandTeal : Theme.of(context).colorScheme.onSurfaceVariant,
+                        color: isMine
+                            ? Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)
+                            : review['voted_helpful'] == true
+                                ? AppColors.brandTeal
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'Helpful${(review['helpful_count'] as int? ?? 0) > 0 ? ' (${review['helpful_count']})' : ''}',
                         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: review['voted_helpful'] == true ? AppColors.brandTeal : Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: isMine
+                                  ? Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)
+                                  : review['voted_helpful'] == true
+                                      ? AppColors.brandTeal
+                                      : Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                       ),
                     ],
