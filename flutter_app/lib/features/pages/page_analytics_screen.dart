@@ -7,8 +7,9 @@ import 'pages_theme.dart';
 /// Page Analytics (Step 11 of the Professional Page System): reach,
 /// impressions, views, follower growth, engagement, and top posts.
 /// Gated server-side by the `view_analytics` page permission (or owner
-/// role) via migration 084_pages_analytics_step11.sql — a caller without
-/// it gets an access-denied state, not empty charts.
+/// role) via migration 084_pages_analytics_step11.sql, hardened in
+/// migration 106_pages_analytics_access_denied.sql — a caller without it
+/// gets an explicit access-denied error from the RPCs, not empty charts.
 class PageAnalyticsScreen extends StatefulWidget {
   const PageAnalyticsScreen({super.key, required this.pageId, this.pageName});
   final String pageId;
@@ -63,6 +64,15 @@ class _PageAnalyticsScreenState extends State<PageAnalyticsScreen> {
 
   int _sum(String key) => _summary.fold<int>(0, (a, r) => a + ((r[key] as num?)?.toInt() ?? 0));
 
+  /// True once we know the owner has genuinely published nothing / grown no
+  /// audience yet — as opposed to just having a quiet day. Used to show a
+  /// single clear "no analytics yet" empty state instead of a wall of
+  /// zero-value cards and empty charts that could read as a broken page.
+  bool get _hasNoDataAtAll =>
+      _summary.every((r) => (r['reach'] as num? ?? 0) == 0 && (r['impressions'] as num? ?? 0) == 0 && (r['views'] as num? ?? 0) == 0) &&
+      _growth.every((r) => (r['new_followers'] as num? ?? 0) == 0) &&
+      _topPosts.isEmpty;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -83,88 +93,102 @@ class _PageAnalyticsScreenState extends State<PageAnalyticsScreen> {
                 )
               : _error != null
                   ? ErrorRetryState(title: 'Something went wrong', message: _error!, onRetry: _load)
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView(
-                        padding: const EdgeInsets.all(PageTokens.spaceLg),
-                        children: [
-                          _SummaryGrid(
-                            reach: _sum('reach'),
-                            impressions: _sum('impressions'),
-                            views: _sum('views'),
-                            newFollowers: _sum('new_followers'),
-                            engagement: _sum('engagement'),
+                  : _hasNoDataAtAll
+                      ? RefreshIndicator(
+                          onRefresh: _load,
+                          child: ListView(
+                            children: const [
+                              SizedBox(height: 120),
+                              EmptyState(
+                                icon: Icons.insights_outlined,
+                                title: 'No analytics yet',
+                                message: 'Publish content and build an audience to see insights here.',
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: PageTokens.spaceLg),
-                          _SectionCard(
-                            title: 'Audience growth (14 days)',
-                            child: _MiniBarChart(
-                              labels: _growth.map((r) => (r['day'] as String).substring(5)).toList(),
-                              values: _growth.map((r) => (r['new_followers'] as num).toDouble()).toList(),
-                              legendPrimary: 'New followers',
-                            ),
-                          ),
-                          const SizedBox(height: PageTokens.spaceLg),
-                          _SectionCard(
-                            title: 'Reach & views (14 days)',
-                            child: _MiniBarChart(
-                              labels: _summary.map((r) => (r['day'] as String).substring(5)).toList(),
-                              values: _summary.map((r) => (r['reach'] as num).toDouble()).toList(),
-                              secondaryValues: _summary.map((r) => -(r['views'] as num).toDouble()).toList(),
-                              legendPrimary: 'Reach',
-                              legendSecondary: 'Views',
-                            ),
-                          ),
-                          const SizedBox(height: PageTokens.spaceLg),
-                          _SectionCard(
-                            title: 'Top posts (30 days)',
-                            child: _topPosts.isEmpty
-                                ? Padding(
-                                    padding: const EdgeInsets.all(PageTokens.spaceSm),
-                                    child: Text('No posts in this window yet.', style: Theme.of(context).textTheme.bodySmall),
-                                  )
-                                : Column(
-                                    children: [
-                                      for (final p in _topPosts)
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 6),
-                                          child: Row(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      (p['content'] as String?)?.trim().isNotEmpty == true ? p['content'] as String : '(media post)',
-                                                      maxLines: 2,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          child: ListView(
+                            padding: const EdgeInsets.all(PageTokens.spaceLg),
+                            children: [
+                              _SummaryGrid(
+                                reach: _sum('reach'),
+                                impressions: _sum('impressions'),
+                                views: _sum('views'),
+                                newFollowers: _sum('new_followers'),
+                                engagement: _sum('engagement'),
+                              ),
+                              const SizedBox(height: PageTokens.spaceLg),
+                              _SectionCard(
+                                title: 'Audience growth (14 days)',
+                                child: _MiniBarChart(
+                                  labels: _growth.map((r) => (r['day'] as String).substring(5)).toList(),
+                                  values: _growth.map((r) => (r['new_followers'] as num).toDouble()).toList(),
+                                  legendPrimary: 'New followers',
+                                ),
+                              ),
+                              const SizedBox(height: PageTokens.spaceLg),
+                              _SectionCard(
+                                title: 'Reach & views (14 days)',
+                                child: _MiniBarChart(
+                                  labels: _summary.map((r) => (r['day'] as String).substring(5)).toList(),
+                                  values: _summary.map((r) => (r['reach'] as num).toDouble()).toList(),
+                                  secondaryValues: _summary.map((r) => -(r['views'] as num).toDouble()).toList(),
+                                  legendPrimary: 'Reach',
+                                  legendSecondary: 'Views',
+                                ),
+                              ),
+                              const SizedBox(height: PageTokens.spaceLg),
+                              _SectionCard(
+                                title: 'Top posts (30 days)',
+                                child: _topPosts.isEmpty
+                                    ? Padding(
+                                        padding: const EdgeInsets.all(PageTokens.spaceSm),
+                                        child: Text('No posts in this window yet.', style: Theme.of(context).textTheme.bodySmall),
+                                      )
+                                    : Column(
+                                        children: [
+                                          for (final p in _topPosts)
+                                            Padding(
+                                              padding: const EdgeInsets.symmetric(vertical: 6),
+                                              child: Row(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(
+                                                          (p['content'] as String?)?.trim().isNotEmpty == true ? p['content'] as String : '(media post)',
+                                                          maxLines: 2,
+                                                          overflow: TextOverflow.ellipsis,
+                                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                                                        ),
+                                                        const SizedBox(height: 2),
+                                                        Text(
+                                                          '${p['views']} views · ${p['reach']} reach · ${p['impressions']} impressions',
+                                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                                        ),
+                                                      ],
                                                     ),
-                                                    const SizedBox(height: 2),
-                                                    Text(
-                                                      '${p['views']} views · ${p['reach']} reach · ${p['impressions']} impressions',
-                                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                                                    ),
-                                                  ],
-                                                ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  PageStatChip(
+                                                    icon: Icons.trending_up,
+                                                    label: (p['engagement_score'] as num).toStringAsFixed(0),
+                                                    color: AppColors.brandTeal,
+                                                  ),
+                                                ],
                                               ),
-                                              const SizedBox(width: 8),
-                                              PageStatChip(
-                                                icon: Icons.trending_up,
-                                                label: (p['engagement_score'] as num).toStringAsFixed(0),
-                                                color: AppColors.brandTeal,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  ),
+                                            ),
+                                        ],
+                                      ),
+                              ),
+                              const SizedBox(height: PageTokens.spaceXl),
+                            ],
                           ),
-                          const SizedBox(height: PageTokens.spaceXl),
-                        ],
-                      ),
-                    ),
+                        ),
     );
   }
 }
@@ -176,11 +200,11 @@ class _SummaryGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      ('Reach', reach, Icons.public),
-      ('Impressions', impressions, Icons.visibility_outlined),
-      ('Views', views, Icons.remove_red_eye_outlined),
-      ('New followers', newFollowers, Icons.person_add_alt_1_outlined),
-      ('Engagement', engagement, Icons.bolt_outlined),
+      ('Reach', reach, Icons.public, 'People who saw your Page content.'),
+      ('Impressions', impressions, Icons.visibility_outlined, 'Total times your content was displayed.'),
+      ('Views', views, Icons.remove_red_eye_outlined, 'Times a post was opened or scrolled into view.'),
+      ('New followers', newFollowers, Icons.person_add_alt_1_outlined, 'People who followed your Page in this period.'),
+      ('Engagement', engagement, Icons.bolt_outlined, 'Likes, comments, shares, and other reactions.'),
     ];
     return GridView.count(
       crossAxisCount: 2,
@@ -188,26 +212,39 @@ class _SummaryGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: PageTokens.spaceMd,
       crossAxisSpacing: PageTokens.spaceMd,
-      childAspectRatio: 2.2,
+      childAspectRatio: 1.6,
       children: [
-        for (final (label, value, icon) in items)
-          Container(
-            decoration: BoxDecoration(
-              color: PageColors.surfaceCard(context),
-              borderRadius: BorderRadius.circular(PageTokens.radiusMd),
-              border: Border.all(color: PageColors.border(context)),
-              boxShadow: PageTokens.subtleShadow(context),
-            ),
-            padding: const EdgeInsets.all(PageTokens.spaceMd),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 18, color: AppColors.brandTeal),
-                const SizedBox(height: 6),
-                Text('$value', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ],
+        for (final (label, value, icon, description) in items)
+          Tooltip(
+            message: description,
+            child: Container(
+              decoration: BoxDecoration(
+                color: PageColors.surfaceCard(context),
+                borderRadius: BorderRadius.circular(PageTokens.radiusMd),
+                border: Border.all(color: PageColors.border(context)),
+                boxShadow: PageTokens.subtleShadow(context),
+              ),
+              padding: const EdgeInsets.all(PageTokens.spaceMd),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 18, color: AppColors.brandTeal),
+                  const SizedBox(height: 6),
+                  Text('$value', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                          fontSize: 9.5,
+                        ),
+                  ),
+                ],
+              ),
             ),
           ),
       ],
