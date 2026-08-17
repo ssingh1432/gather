@@ -9,27 +9,20 @@ import '../../shared/utils/time_ago.dart';
 import '../../shared/widgets/reusables.dart';
 import 'pages_theme.dart';
 
-/// A single customer-chat thread (Step 9 of the brief).
+/// A single Page messaging thread.
 ///
-/// Dual mode, same screen:
-///  - Customer mode (`otherUserId` null): the current user's own
-///    conversation with the page. Messages are sent as `sender_type: 'user'`.
-///  - Team mode (`otherUserId` set, reached from PageInboxScreen): a
-///    specific customer's thread. Messages are sent as `sender_type: 'page'`
-///    with `sent_by` set to the current user, so the roster (and the
-///    customer) can tell a human reply from an automated one (Step 9:
-///    Quick Replies / Auto Replies / Away Messages, migration 080).
+/// Dual mode:
+///  - Customer mode (`otherUserId` null): the current user's conversation
+///    with the Page.
+///  - Team mode (`otherUserId` set): a customer's thread from the Page inbox.
 ///
-/// Realtime uses a plain `postgres_changes` INSERT subscription (same
-/// pattern as NotificationsScreen) rather than the heavier broadcast-based
-/// CommunityChatRealtimeService — a 1:1 support thread doesn't need typing
-/// indicators or presence.
+/// Page messaging availability is read from the Page itself. The UI is only
+/// a convenience; Supabase RLS independently enforces the same boundary.
 class PageChatScreen extends StatefulWidget {
   const PageChatScreen({super.key, required this.pageId, this.pageName, this.otherUserId, this.otherUsername});
 
   final String pageId;
   final String? pageName;
-  /// Set only in team mode — the customer whose thread this is.
   final String? otherUserId;
   final String? otherUsername;
 
@@ -45,6 +38,7 @@ class _PageChatScreenState extends State<PageChatScreen> {
   List<Map<String, dynamic>> _quickReplies = const [];
   bool _loading = true;
   bool _sending = false;
+  bool _messagingEnabled = true;
   String? _error;
   String? _pageName;
   RealtimeChannel? _channel;
@@ -58,12 +52,6 @@ class _PageChatScreenState extends State<PageChatScreen> {
     _pageName = widget.pageName;
     _load();
     _subscribe();
-    if (_pageName == null) _loadPageName();
-  }
-
-  Future<void> _loadPageName() async {
-    final page = await _repo.getPage(widget.pageId);
-    if (mounted && page != null) setState(() => _pageName = page['name'] as String?);
   }
 
   @override
@@ -101,6 +89,7 @@ class _PageChatScreenState extends State<PageChatScreen> {
       });
     }
     try {
+      final page = await _repo.getPage(widget.pageId);
       final messages = await _repo.listPageMessages(widget.pageId, otherUserId: widget.otherUserId);
       final quickReplies = _isTeamMode ? await _repo.listQuickReplies(widget.pageId) : const <Map<String, dynamic>>[];
       if (_isTeamMode && widget.otherUserId != null) {
@@ -110,10 +99,18 @@ class _PageChatScreenState extends State<PageChatScreen> {
       setState(() {
         _messages = messages;
         _quickReplies = quickReplies;
+        _messagingEnabled = page?['messaging_enabled'] as bool? ?? true;
+        _pageName = _pageName ?? page?['name'] as String?;
         _loading = false;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollCtrl.hasClients) _scrollCtrl.animateTo(_scrollCtrl.position.maxScrollExtent, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+        if (_scrollCtrl.hasClients) {
+          _scrollCtrl.animateTo(
+            _scrollCtrl.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        }
       });
     } catch (e) {
       if (mounted) {
@@ -126,6 +123,14 @@ class _PageChatScreenState extends State<PageChatScreen> {
   }
 
   Future<void> _send([String? textOverride]) async {
+    if (!_messagingEnabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Messaging is currently disabled for this Page.')),
+        );
+      }
+      return;
+    }
     final text = (textOverride ?? _composerCtrl.text).trim();
     if (text.isEmpty || _sending) return;
     setState(() => _sending = true);
@@ -141,10 +146,16 @@ class _PageChatScreenState extends State<PageChatScreen> {
   }
 
   Future<void> _openQuickReplies() async {
+    if (!_messagingEnabled) return;
     final picked = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => _QuickRepliesSheet(pageId: widget.pageId, repo: _repo, replies: _quickReplies, onChanged: () => _load(silent: true)),
+      builder: (ctx) => _QuickRepliesSheet(
+        pageId: widget.pageId,
+        repo: _repo,
+        replies: _quickReplies,
+        onChanged: () => _load(silent: true),
+      ),
     );
     if (picked != null) _send(picked);
   }
@@ -153,17 +164,49 @@ class _PageChatScreenState extends State<PageChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isTeamMode ? '@${widget.otherUsername ?? 'Customer'}' : (_pageName ?? 'Page'), style: const TextStyle(fontWeight: FontWeight.w700)),
+        title: Text(
+          _isTeamMode ? '@${widget.otherUsername ?? 'Customer'}' : (_pageName ?? 'Page'),
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(18),
           child: Padding(
             padding: const EdgeInsets.only(bottom: 6),
-            child: Text(_isTeamMode ? 'Replying as ${_pageName ?? 'the page'}' : 'Message request', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            child: Text(
+              _isTeamMode
+                  ? 'Replying as ${_pageName ?? 'the Page'}'
+                  : (_messagingEnabled ? 'Message this Page' : 'Messaging is currently unavailable'),
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
           ),
         ),
       ),
       body: Column(
         children: [
+          if (!_messagingEnabled)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(PageTokens.spaceLg, PageTokens.spaceMd, PageTokens.spaceLg, 0),
+              padding: const EdgeInsets.all(PageTokens.spaceMd),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(PageTokens.radiusMd),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.info_outline),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _isTeamMode
+                          ? 'Messaging is disabled for this Page. You can read this conversation, but new replies are unavailable until messaging is enabled.'
+                          : 'This Page is not accepting messages right now. You can read your previous conversation, but you cannot send a new message.',
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: _loading
                 ? const FeedSkeletonList()
@@ -172,8 +215,12 @@ class _PageChatScreenState extends State<PageChatScreen> {
                     : _messages.isEmpty
                         ? EmptyState(
                             icon: Icons.chat_bubble_outline,
-                            title: 'Say hello',
-                            message: _isTeamMode ? 'No messages yet in this thread.' : 'Send ${_pageName ?? 'this page'} a message and their team will get back to you.',
+                            title: _messagingEnabled ? 'Say hello' : 'No messages yet',
+                            message: _messagingEnabled
+                                ? (_isTeamMode
+                                    ? 'No messages yet in this thread.'
+                                    : 'Send ${_pageName ?? 'this Page'} a message and their team will get back to you.')
+                                : 'Messaging is currently disabled for this Page.',
                           )
                         : ListView.builder(
                             controller: _scrollCtrl,
@@ -182,36 +229,37 @@ class _PageChatScreenState extends State<PageChatScreen> {
                             itemBuilder: (_, i) => _MessageBubble(message: _messages[i], mine: _isMine(_messages[i])),
                           ),
           ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.all(PageTokens.spaceSm),
-              child: Row(
-                children: [
-                  if (_isTeamMode)
-                    IconButton(icon: const Icon(Icons.flash_on_outlined), tooltip: 'Quick replies', onPressed: _openQuickReplies),
-                  Expanded(
-                    child: TextField(
-                      controller: _composerCtrl,
-                      minLines: 1,
-                      maxLines: 4,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _send(),
-                      decoration: pageFieldDecoration(context, labelText: '', hintText: 'Type a message'),
+          if (_messagingEnabled)
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.all(PageTokens.spaceSm),
+                child: Row(
+                  children: [
+                    if (_isTeamMode)
+                      IconButton(icon: const Icon(Icons.flash_on_outlined), tooltip: 'Quick replies', onPressed: _openQuickReplies),
+                    Expanded(
+                      child: TextField(
+                        controller: _composerCtrl,
+                        minLines: 1,
+                        maxLines: 4,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _send(),
+                        decoration: pageFieldDecoration(context, labelText: '', hintText: 'Type a message'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  IconButton.filled(
-                    onPressed: _sending ? null : () => _send(),
-                    style: IconButton.styleFrom(backgroundColor: AppColors.brandTeal, foregroundColor: AppColors.onBrandTeal),
-                    icon: _sending
-                        ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal))
-                        : const Icon(Icons.send, size: 18),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    IconButton.filled(
+                      onPressed: _sending ? null : () => _send(),
+                      style: IconButton.styleFrom(backgroundColor: AppColors.brandTeal, foregroundColor: AppColors.onBrandTeal),
+                      icon: _sending
+                          ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal))
+                          : const Icon(Icons.send, size: 18),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
