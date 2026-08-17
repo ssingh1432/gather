@@ -5,8 +5,8 @@ import '../data/repositories.dart';
 import '../../shared/widgets/reusables.dart';
 import 'pages_theme.dart';
 
-/// Pages the current user follows (Step 8 of the brief: Favorite +
-/// per-follow notification preference). Favorites are pinned to the top.
+/// Pages the current user follows. Favorites and per-follow notification
+/// preferences are managed here; unfollowing is also available explicitly.
 class FollowedPagesScreen extends StatefulWidget {
   const FollowedPagesScreen({super.key});
 
@@ -77,6 +77,46 @@ class _FollowedPagesScreenState extends State<FollowedPagesScreen> {
     }
   }
 
+  Future<void> _unfollow(Map<String, dynamic> row) async {
+    final page = row['pages'] as Map<String, dynamic>;
+    final pageName = page['name'] as String? ?? 'this Page';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Unfollow Page?'),
+        content: Text('You will stop seeing $pageName in your followed Pages list. You can follow it again later.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Unfollow'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _repo.unfollowPage(page['id'] as String);
+      if (!mounted) return;
+      setState(() {
+        _rows = _rows.where((r) => (r['pages'] as Map<String, dynamic>)['id'] != page['id']).toList();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You unfollowed $pageName.')),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not unfollow this Page. Please try again.')),
+        );
+      }
+    }
+  }
+
   void _discoverPages() => context.push('/discover-pages');
 
   @override
@@ -108,6 +148,7 @@ class _FollowedPagesScreenState extends State<FollowedPagesScreen> {
                           row: _rows[i],
                           onToggleFavorite: () => _toggleFavorite(_rows[i]),
                           onToggleNotify: () => _toggleNotify(_rows[i]),
+                          onUnfollow: () => _unfollow(_rows[i]),
                         ),
                       ),
                     ),
@@ -149,7 +190,7 @@ class _FollowedPagesEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: PageTokens.spaceSm),
             Text(
-              'Discover Pages you care about and follow them to keep them here. You can also favorite Pages or turn notifications on later.',
+              'Discover Pages you care about and follow them to keep them here. You can favorite Pages, manage notifications, or unfollow them at any time.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
@@ -167,10 +208,16 @@ class _FollowedPagesEmptyState extends StatelessWidget {
 }
 
 class _FollowedPageRow extends StatelessWidget {
-  const _FollowedPageRow({required this.row, required this.onToggleFavorite, required this.onToggleNotify});
+  const _FollowedPageRow({
+    required this.row,
+    required this.onToggleFavorite,
+    required this.onToggleNotify,
+    required this.onUnfollow,
+  });
   final Map<String, dynamic> row;
   final VoidCallback onToggleFavorite;
   final VoidCallback onToggleNotify;
+  final VoidCallback onUnfollow;
 
   @override
   Widget build(BuildContext context) {
@@ -219,6 +266,18 @@ class _FollowedPageRow extends StatelessWidget {
                 color: favorite ? Colors.amber[700] : Theme.of(context).colorScheme.onSurfaceVariant,
                 tooltip: favorite ? 'Unfavorite' : 'Favorite',
                 onPressed: onToggleFavorite,
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Follow options',
+                onSelected: (value) {
+                  if (value == 'unfollow') onUnfollow();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'unfollow',
+                    child: Text('Unfollow Page'),
+                  ),
+                ],
               ),
             ],
           ),
