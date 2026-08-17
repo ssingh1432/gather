@@ -59,6 +59,55 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
   bool _isDeactivated = false;
   String? _error;
 
+  /// Snapshot of every editable field right after load, used to detect
+  /// unsaved changes so a back-navigation doesn't silently discard edits.
+  Map<String, dynamic> _initialSnapshot = const {};
+
+  Map<String, dynamic> _currentSnapshot() => {
+        'name': name.text,
+        'description': description.text,
+        'website': website.text,
+        'phone': phone.text,
+        'email': email.text,
+        'location': location.text,
+        'country': country.text,
+        'businessHoursNote': businessHoursNote.text,
+        'facebook': facebook.text,
+        'instagram': instagram.text,
+        'x': x.text,
+        'youtube': youtube.text,
+        'tiktok': tiktok.text,
+        'pageType': pageType,
+        'language': language,
+        'categoryId': categoryId,
+        'hasLogoPick': _logoPick != null,
+        'hasCoverPick': _coverPick != null,
+      };
+
+  bool get _isDirty {
+    final current = _currentSnapshot();
+    for (final key in current.keys) {
+      if (current[key] != _initialSnapshot[key]) return true;
+    }
+    return false;
+  }
+
+  Future<bool> _confirmDiscardIfDirty() async {
+    if (!_isDirty || _saving) return true;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text("You have unsaved changes to this Page's settings. Leaving now will discard them."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep editing')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Discard')),
+        ],
+      ),
+    );
+    return discard == true;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -139,6 +188,7 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
         _isDeactivated = page['deactivated_at'] != null;
         _loading = false;
       });
+      _initialSnapshot = _currentSnapshot();
     } catch (e) {
       if (mounted) setState(() { _error = 'Could not load settings. $e'; _loading = false; });
     }
@@ -204,6 +254,7 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
         _coverPick = null;
         _saving = false;
       });
+      _initialSnapshot = _currentSnapshot();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Page settings saved.')));
     } catch (e) {
       if (mounted) {
@@ -380,171 +431,205 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Page settings', style: TextStyle(fontWeight: FontWeight.w700))),
-      body: _loading
-          ? const FeedSkeletonList()
-          : _error != null && name.text.isEmpty
-              ? ErrorRetryState(title: 'Unable to load settings', message: _error!, onRetry: _load)
-              : !_canEdit
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(PageTokens.spaceXl),
-                        child: Text("You don't have permission to edit this page's settings."),
-                      ),
-                    )
-                  : Form(
-                      key: _formKey,
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(PageTokens.spaceLg, PageTokens.spaceLg, PageTokens.spaceLg, PageTokens.spaceXxl),
-                        children: [
-                          PageImagePickerFrame(
-                            label: 'Cover image',
-                            aspect: 3,
-                            circular: false,
-                            hasImage: _coverPick != null || _coverUrl != null,
-                            preview: _coverPick != null
-                                ? PickedImagePreview(bytesFuture: _coverPick!.readAsBytes())
-                                : _coverUrl != null
-                                    ? Image.network(_coverUrl!, fit: BoxFit.cover)
-                                    : null,
-                            onTap: () => _pickImage(cover: true),
-                            placeholderIcon: Icons.image_outlined,
-                          ),
-                          const SizedBox(height: PageTokens.spaceMd),
-                          PageImagePickerFrame(
-                            label: 'Logo',
-                            aspect: 1,
-                            circular: true,
-                            hasImage: _logoPick != null || _logoUrl != null,
-                            preview: _logoPick != null
-                                ? PickedImagePreview(bytesFuture: _logoPick!.readAsBytes())
-                                : _logoUrl != null
-                                    ? Image.network(_logoUrl!, fit: BoxFit.cover)
-                                    : null,
-                            onTap: () => _pickImage(cover: false),
-                            placeholderIcon: Icons.storefront,
-                          ),
-                          const SizedBox(height: PageTokens.spaceXl),
-                          TextFormField(
-                            controller: name,
-                            maxLength: 100,
-                            decoration: pageFieldDecoration(context, labelText: 'Page name'),
-                            validator: (v) => (v == null || v.trim().length < 2) ? 'Name must be at least 2 characters' : null,
-                          ),
-                          const SizedBox(height: PageTokens.spaceSm),
-                          TextFormField(
-                            controller: username,
-                            enabled: false,
-                            decoration: pageFieldDecoration(
-                              context,
-                              labelText: 'Username',
-                              prefixIcon: const Padding(padding: EdgeInsets.only(left: 12, right: 4), child: Text('@', style: TextStyle(fontWeight: FontWeight.w600))),
-                              helperText: "Usernames can't be changed here. Contact support if you need this updated.",
+    final showForm = !_loading && !(_error != null && name.text.isEmpty) && _canEdit;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldPop = await _confirmDiscardIfDirty();
+        if (shouldPop && mounted) Navigator.of(context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Page settings', style: TextStyle(fontWeight: FontWeight.w700))),
+        body: _loading
+            ? const FeedSkeletonList()
+            : _error != null && name.text.isEmpty
+                ? ErrorRetryState(title: 'Unable to load settings', message: _error!, onRetry: _load)
+                : !_canEdit
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(PageTokens.spaceXl),
+                          child: Text("You don't have permission to edit this page's settings."),
+                        ),
+                      )
+                    : Form(
+                        key: _formKey,
+                        child: ListView(
+                          padding: const EdgeInsets.fromLTRB(PageTokens.spaceLg, PageTokens.spaceLg, PageTokens.spaceLg, PageTokens.spaceXxl),
+                          children: [
+                            PageImagePickerFrame(
+                              label: 'Cover image',
+                              aspect: 3,
+                              circular: false,
+                              hasImage: _coverPick != null || _coverUrl != null,
+                              preview: _coverPick != null
+                                  ? PickedImagePreview(bytesFuture: _coverPick!.readAsBytes())
+                                  : _coverUrl != null
+                                      ? Image.network(_coverUrl!, fit: BoxFit.cover)
+                                      : null,
+                              onTap: () => _pickImage(cover: true),
+                              placeholderIcon: Icons.image_outlined,
                             ),
-                          ),
-                          const SizedBox(height: PageTokens.spaceSm),
-                          TextFormField(
-                            controller: description,
-                            maxLength: 500,
-                            maxLines: 3,
-                            decoration: pageFieldDecoration(context, labelText: 'Description'),
-                          ),
-                          const SizedBox(height: PageTokens.spaceSm),
-                          DropdownButtonFormField<String>(
-                            initialValue: pageType,
-                            decoration: pageFieldDecoration(context, labelText: 'Page type'),
-                            items: kPageTypes.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
-                            onChanged: (v) => setState(() => pageType = v ?? 'business'),
-                          ),
-                          const SizedBox(height: PageTokens.spaceSm),
-                          DropdownButtonFormField<String?>(
-                            initialValue: categoryId,
-                            decoration: pageFieldDecoration(context, labelText: 'Category (optional)'),
-                            items: <DropdownMenuItem<String?>>[
-                              const DropdownMenuItem<String?>(value: null, child: Text('None')),
-                              for (final c in categories) DropdownMenuItem<String?>(value: c['id'] as String, child: Text(c['name'] as String)),
-                            ],
-                            onChanged: (v) => setState(() => categoryId = v),
-                          ),
-                          const SizedBox(height: PageTokens.spaceMd),
-                          const PageSectionHeader(title: 'Contact & details'),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg),
-                            child: Column(
-                              children: [
-                                TextFormField(controller: website, keyboardType: TextInputType.url, decoration: pageFieldDecoration(context, labelText: 'Website (optional)', hintText: 'https://...')),
-                                const SizedBox(height: PageTokens.spaceSm),
-                                TextFormField(controller: phone, keyboardType: TextInputType.phone, decoration: pageFieldDecoration(context, labelText: 'Phone (optional)')),
-                                const SizedBox(height: PageTokens.spaceSm),
-                                TextFormField(controller: email, keyboardType: TextInputType.emailAddress, decoration: pageFieldDecoration(context, labelText: 'Email (optional)')),
-                                const SizedBox(height: PageTokens.spaceSm),
-                                TextFormField(controller: location, decoration: pageFieldDecoration(context, labelText: 'Location (optional)', hintText: 'e.g. Thamel, Kathmandu')),
-                                const SizedBox(height: PageTokens.spaceSm),
-                                TextFormField(controller: country, decoration: pageFieldDecoration(context, labelText: 'Country (optional)', hintText: 'e.g. Nepal')),
-                                const SizedBox(height: PageTokens.spaceSm),
-                                TextFormField(controller: businessHoursNote, maxLines: 2, decoration: pageFieldDecoration(context, labelText: 'Business hours (optional)', hintText: 'e.g. Sun-Fri 9am-7pm, closed Sat')),
-                                const SizedBox(height: PageTokens.spaceSm),
-                                DropdownButtonFormField<String>(
-                                  initialValue: language,
-                                  decoration: pageFieldDecoration(context, labelText: 'Language'),
-                                  items: const [
-                                    DropdownMenuItem(value: 'en', child: Text('English')),
-                                    DropdownMenuItem(value: 'ne', child: Text('नेपाली')),
-                                  ],
-                                  onChanged: (v) => setState(() => language = v ?? 'en'),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: PageTokens.spaceMd),
-                          const PageSectionHeader(title: 'Social links'),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg),
-                            child: Column(
-                              children: [
-                                TextFormField(controller: facebook, keyboardType: TextInputType.url, decoration: pageFieldDecoration(context, labelText: 'Facebook', hintText: 'https://facebook.com/...')),
-                                const SizedBox(height: PageTokens.spaceSm),
-                                TextFormField(controller: instagram, keyboardType: TextInputType.url, decoration: pageFieldDecoration(context, labelText: 'Instagram', hintText: 'https://instagram.com/...')),
-                                const SizedBox(height: PageTokens.spaceSm),
-                                TextFormField(controller: x, keyboardType: TextInputType.url, decoration: pageFieldDecoration(context, labelText: 'X / Twitter', hintText: 'https://x.com/...')),
-                                const SizedBox(height: PageTokens.spaceSm),
-                                TextFormField(controller: youtube, keyboardType: TextInputType.url, decoration: pageFieldDecoration(context, labelText: 'YouTube', hintText: 'https://youtube.com/...')),
-                                const SizedBox(height: PageTokens.spaceSm),
-                                TextFormField(controller: tiktok, keyboardType: TextInputType.url, decoration: pageFieldDecoration(context, labelText: 'TikTok', hintText: 'https://tiktok.com/@...')),
-                              ],
-                            ),
-                          ),
-                          if (_error != null) ...[
                             const SizedBox(height: PageTokens.spaceMd),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg),
-                              child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                            PageImagePickerFrame(
+                              label: 'Logo',
+                              aspect: 1,
+                              circular: true,
+                              hasImage: _logoPick != null || _logoUrl != null,
+                              preview: _logoPick != null
+                                  ? PickedImagePreview(bytesFuture: _logoPick!.readAsBytes())
+                                  : _logoUrl != null
+                                      ? Image.network(_logoUrl!, fit: BoxFit.cover)
+                                      : null,
+                              onTap: () => _pickImage(cover: false),
+                              placeholderIcon: Icons.storefront,
                             ),
-                          ],
-                          const SizedBox(height: PageTokens.spaceLg),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: FilledButton(
-                                onPressed: _saving ? null : _save,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppColors.brandTeal,
-                                  foregroundColor: AppColors.onBrandTeal,
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PageTokens.radiusPill)),
-                                ),
-                                child: _saving
-                                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal))
-                                    : const Text('Save changes', style: TextStyle(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: PageTokens.spaceXl),
+                            TextFormField(
+                              controller: name,
+                              maxLength: 100,
+                              onChanged: (_) => setState(() {}),
+                              decoration: pageFieldDecoration(context, labelText: 'Page name'),
+                              validator: (v) => (v == null || v.trim().length < 2) ? 'Name must be at least 2 characters' : null,
+                            ),
+                            const SizedBox(height: PageTokens.spaceSm),
+                            TextFormField(
+                              controller: username,
+                              enabled: false,
+                              decoration: pageFieldDecoration(
+                                context,
+                                labelText: 'Username',
+                                prefixIcon: const Padding(padding: EdgeInsets.only(left: 12, right: 4), child: Text('@', style: TextStyle(fontWeight: FontWeight.w600))),
+                                helperText: "Usernames can't be changed here. Contact support if you need this updated.",
                               ),
                             ),
-                          ),
-                          _buildLifecycleSection(context),
-                        ],
+                            const SizedBox(height: PageTokens.spaceSm),
+                            TextFormField(
+                              controller: description,
+                              maxLength: 500,
+                              maxLines: 3,
+                              onChanged: (_) => setState(() {}),
+                              decoration: pageFieldDecoration(context, labelText: 'Description'),
+                            ),
+                            const SizedBox(height: PageTokens.spaceSm),
+                            DropdownButtonFormField<String>(
+                              initialValue: pageType,
+                              decoration: pageFieldDecoration(context, labelText: 'Page type'),
+                              items: kPageTypes.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+                              onChanged: (v) => setState(() => pageType = v ?? 'business'),
+                            ),
+                            const SizedBox(height: PageTokens.spaceSm),
+                            DropdownButtonFormField<String?>(
+                              initialValue: categoryId,
+                              decoration: pageFieldDecoration(context, labelText: 'Category (optional)'),
+                              items: <DropdownMenuItem<String?>>[
+                                const DropdownMenuItem<String?>(value: null, child: Text('None')),
+                                for (final c in categories) DropdownMenuItem<String?>(value: c['id'] as String, child: Text(c['name'] as String)),
+                              ],
+                              onChanged: (v) => setState(() => categoryId = v),
+                            ),
+                            const SizedBox(height: PageTokens.spaceMd),
+                            const PageSectionHeader(title: 'Contact & details'),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg),
+                              child: Column(
+                                children: [
+                                  TextFormField(controller: website, keyboardType: TextInputType.url, onChanged: (_) => setState(() {}), decoration: pageFieldDecoration(context, labelText: 'Website (optional)', hintText: 'https://...')),
+                                  const SizedBox(height: PageTokens.spaceSm),
+                                  TextFormField(controller: phone, keyboardType: TextInputType.phone, onChanged: (_) => setState(() {}), decoration: pageFieldDecoration(context, labelText: 'Phone (optional)')),
+                                  const SizedBox(height: PageTokens.spaceSm),
+                                  TextFormField(controller: email, keyboardType: TextInputType.emailAddress, onChanged: (_) => setState(() {}), decoration: pageFieldDecoration(context, labelText: 'Email (optional)')),
+                                  const SizedBox(height: PageTokens.spaceSm),
+                                  TextFormField(controller: location, onChanged: (_) => setState(() {}), decoration: pageFieldDecoration(context, labelText: 'Location (optional)', hintText: 'e.g. Thamel, Kathmandu')),
+                                  const SizedBox(height: PageTokens.spaceSm),
+                                  TextFormField(controller: country, onChanged: (_) => setState(() {}), decoration: pageFieldDecoration(context, labelText: 'Country (optional)', hintText: 'e.g. Nepal')),
+                                  const SizedBox(height: PageTokens.spaceSm),
+                                  TextFormField(controller: businessHoursNote, maxLines: 2, onChanged: (_) => setState(() {}), decoration: pageFieldDecoration(context, labelText: 'Business hours (optional)', hintText: 'e.g. Sun-Fri 9am-7pm, closed Sat')),
+                                  const SizedBox(height: PageTokens.spaceSm),
+                                  DropdownButtonFormField<String>(
+                                    initialValue: language,
+                                    decoration: pageFieldDecoration(context, labelText: 'Language'),
+                                    items: const [
+                                      DropdownMenuItem(value: 'en', child: Text('English')),
+                                      DropdownMenuItem(value: 'ne', child: Text('नेपाली')),
+                                    ],
+                                    onChanged: (v) => setState(() => language = v ?? 'en'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: PageTokens.spaceMd),
+                            const PageSectionHeader(title: 'Social links'),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg),
+                              child: Column(
+                                children: [
+                                  TextFormField(controller: facebook, keyboardType: TextInputType.url, onChanged: (_) => setState(() {}), decoration: pageFieldDecoration(context, labelText: 'Facebook', hintText: 'https://facebook.com/...')),
+                                  const SizedBox(height: PageTokens.spaceSm),
+                                  TextFormField(controller: instagram, keyboardType: TextInputType.url, onChanged: (_) => setState(() {}), decoration: pageFieldDecoration(context, labelText: 'Instagram', hintText: 'https://instagram.com/...')),
+                                  const SizedBox(height: PageTokens.spaceSm),
+                                  TextFormField(controller: x, keyboardType: TextInputType.url, onChanged: (_) => setState(() {}), decoration: pageFieldDecoration(context, labelText: 'X / Twitter', hintText: 'https://x.com/...')),
+                                  const SizedBox(height: PageTokens.spaceSm),
+                                  TextFormField(controller: youtube, keyboardType: TextInputType.url, onChanged: (_) => setState(() {}), decoration: pageFieldDecoration(context, labelText: 'YouTube', hintText: 'https://youtube.com/...')),
+                                  const SizedBox(height: PageTokens.spaceSm),
+                                  TextFormField(controller: tiktok, keyboardType: TextInputType.url, onChanged: (_) => setState(() {}), decoration: pageFieldDecoration(context, labelText: 'TikTok', hintText: 'https://tiktok.com/@...')),
+                                ],
+                              ),
+                            ),
+                            if (_error != null) ...[
+                              const SizedBox(height: PageTokens.spaceMd),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg),
+                                child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                              ),
+                            ],
+                            _buildLifecycleSection(context),
+                          ],
+                        ),
                       ),
-                    ),
+        // Pinned so "Save changes" is always reachable without scrolling to
+        // the bottom of a long form — previously it sat below the social
+        // links section and, on a small screen, below the fold entirely.
+        bottomNavigationBar: showForm
+            ? SafeArea(
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(PageTokens.spaceLg, PageTokens.spaceSm, PageTokens.spaceLg, PageTokens.spaceSm),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    border: Border(top: BorderSide(color: PageColors.border(context))),
+                  ),
+                  child: Row(
+                    children: [
+                      if (_isDirty && !_saving)
+                        Expanded(
+                          child: Text(
+                            'Unsaved changes',
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          ),
+                        )
+                      else
+                        const Spacer(),
+                      SizedBox(
+                        width: 160,
+                        child: FilledButton(
+                          onPressed: _saving ? null : _save,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.brandTeal,
+                            foregroundColor: AppColors.onBrandTeal,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PageTokens.radiusPill)),
+                          ),
+                          child: _saving
+                              ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal))
+                              : const Text('Save changes', style: TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : null,
+      ),
     );
   }
 }
