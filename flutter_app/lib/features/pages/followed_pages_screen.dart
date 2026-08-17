@@ -34,8 +34,13 @@ class _FollowedPagesScreenState extends State<FollowedPagesScreen> {
     try {
       final rows = await _repo.listFollowedPages();
       if (mounted) setState(() { _rows = rows; _loading = false; });
-    } catch (e) {
-      if (mounted) setState(() { _error = 'Could not load followed pages. $e'; _loading = false; });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'We could not load your followed Pages. Please try again.';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -46,10 +51,12 @@ class _FollowedPagesScreenState extends State<FollowedPagesScreen> {
     try {
       await _repo.setPageFavorite(page['id'] as String, !wasFavorite);
       await _load();
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() => row['favorite'] = wasFavorite);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update favorite: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not update favorite. Please try again.')),
+        );
       }
     }
   }
@@ -60,13 +67,17 @@ class _FollowedPagesScreenState extends State<FollowedPagesScreen> {
     setState(() => row['notify'] = !wasNotify);
     try {
       await _repo.setPageFollowNotify(page['id'] as String, !wasNotify);
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() => row['notify'] = wasNotify);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update notifications: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not update notifications. Please try again.')),
+        );
       }
     }
   }
+
+  void _discoverPages() => context.push('/discover-pages');
 
   @override
   Widget build(BuildContext context) {
@@ -76,8 +87,8 @@ class _FollowedPagesScreenState extends State<FollowedPagesScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.explore_outlined),
-            tooltip: 'Discover pages',
-            onPressed: () => context.push('/discover-pages'),
+            tooltip: 'Discover Pages',
+            onPressed: _discoverPages,
           ),
         ],
       ),
@@ -86,11 +97,7 @@ class _FollowedPagesScreenState extends State<FollowedPagesScreen> {
           : _error != null
               ? ErrorRetryState(title: 'Unable to load', message: _error!, onRetry: _load)
               : _rows.isEmpty
-                  ? const EmptyState(
-                      icon: Icons.storefront_outlined,
-                      title: 'Not following any pages yet',
-                      message: 'Pages you follow will show up here.',
-                    )
+                  ? _FollowedPagesEmptyState(onDiscover: _discoverPages)
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView.separated(
@@ -104,6 +111,57 @@ class _FollowedPagesScreenState extends State<FollowedPagesScreen> {
                         ),
                       ),
                     ),
+    );
+  }
+}
+
+class _FollowedPagesEmptyState extends StatelessWidget {
+  const _FollowedPagesEmptyState({required this.onDiscover});
+
+  final VoidCallback onDiscover;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(PageTokens.spaceXl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: PageColors.surfaceMuted(context),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.storefront_outlined,
+                size: 34,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: PageTokens.spaceLg),
+            const Text(
+              'No followed Pages yet',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: PageTokens.spaceSm),
+            Text(
+              'Discover Pages you care about and follow them to keep them here. You can also favorite Pages or turn notifications on later.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: PageTokens.spaceLg),
+            FilledButton.icon(
+              onPressed: onDiscover,
+              icon: const Icon(Icons.explore_outlined),
+              label: const Text('Discover Pages'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
