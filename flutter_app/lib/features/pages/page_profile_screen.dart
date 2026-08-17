@@ -198,8 +198,12 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                     }
                   } catch (e) {
                     if (dialogContext.mounted) {
+                      final message = e.toString().toLowerCase().contains('row-level security') ||
+                              e.toString().toLowerCase().contains('policy')
+                          ? 'Follow this Page to post.'
+                          : 'Could not post: $e';
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(content: Text('Could not post: $e')),
+                        SnackBar(content: Text(message)),
                       );
                     }
                   }
@@ -481,14 +485,20 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                 ),
                                 if (_allowVisitorPosts) ...[
                                   const SizedBox(height: PageTokens.spaceMd),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _createVisitorPost,
-                                      icon: const Icon(Icons.edit_outlined),
-                                      label: const Text('Post on this Page'),
+                                  if (_canManage || _following)
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: _createVisitorPost,
+                                        icon: const Icon(Icons.edit_outlined),
+                                        label: const Text('Post on this Page'),
+                                      ),
+                                    )
+                                  else
+                                    PageVisitorPostFollowGate(
+                                      busy: _followBusy,
+                                      onFollow: _toggleFollow,
                                     ),
-                                  ),
                                 ],
                                 if (_hasSubscriptionTiers || _hasMarketplaceItems) ...[
                                   const SizedBox(height: PageTokens.spaceSm),
@@ -672,6 +682,50 @@ class _CtaRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Shown in place of the visitor-post composer when the current user does
+/// not yet follow this Page. Supabase requires a follow before a
+/// `page_visitor_posts` INSERT succeeds, so the UI surfaces that
+/// requirement up front instead of letting the composer fail silently.
+class PageVisitorPostFollowGate extends StatelessWidget {
+  const PageVisitorPostFollowGate({super.key, required this.busy, required this.onFollow});
+
+  final bool busy;
+  final VoidCallback onFollow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(PageTokens.spaceMd),
+      decoration: BoxDecoration(
+        color: PageColors.surfaceMuted(context),
+        borderRadius: BorderRadius.circular(PageTokens.radiusMd),
+        border: Border.all(color: PageColors.border(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Follow this Page to post',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: PageTokens.spaceSm),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: busy ? null : onFollow,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Follow'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
