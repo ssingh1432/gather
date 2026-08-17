@@ -7,8 +7,9 @@ import 'page_manage_screen.dart';
 import 'pages_theme.dart';
 
 /// Page hub for the current user: owned/team Pages, discovery, followed
-/// Pages, and creation. Published Pages expose an explicit Manage action so
-/// owners do not have to discover a settings icon on the public profile.
+/// Pages, and creation. Published Pages expose explicit View and Manage
+/// actions so owners do not have to infer that tapping the Page identity
+/// opens the public profile.
 class MyPagesScreen extends StatefulWidget {
   const MyPagesScreen({super.key});
   @override
@@ -192,10 +193,19 @@ class _PageRow extends StatelessWidget {
               ),
             ),
             const SizedBox(height: PageTokens.spaceMd),
-            SizedBox(
-              width: double.infinity,
-              child: published
-                  ? FilledButton.icon(
+            if (published)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => context.push('/page-profile?id=${page['id']}'),
+                      icon: const Icon(Icons.visibility_outlined),
+                      label: const Text('View Page'),
+                    ),
+                  ),
+                  const SizedBox(width: PageTokens.spaceSm),
+                  Expanded(
+                    child: FilledButton.icon(
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => PageManageScreen(pageId: page['id'] as String),
@@ -203,13 +213,19 @@ class _PageRow extends StatelessWidget {
                       ),
                       icon: const Icon(Icons.dashboard_customize_outlined),
                       label: const Text('Manage Page'),
-                    )
-                  : OutlinedButton.icon(
-                      onPressed: () => context.push('/page-preview?id=${page['id']}'),
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Continue setup'),
                     ),
-            ),
+                  ),
+                ],
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.push('/page-preview?id=${page['id']}'),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Continue setup'),
+                ),
+              ),
           ],
         ),
       ),
