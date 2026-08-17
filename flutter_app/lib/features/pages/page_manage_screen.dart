@@ -8,6 +8,7 @@ import 'page_followers_screen.dart';
 import 'page_inbox_screen.dart';
 import 'page_marketplace_screen.dart';
 import 'page_local_repository.dart';
+import 'page_profile_screen.dart';
 import 'page_reviews_screen.dart';
 import 'page_settings_screen.dart';
 import 'page_subscriptions_screen.dart';
@@ -252,11 +253,75 @@ class _PageManageScreenState extends State<PageManageScreen> {
               ),
               const SizedBox(width: PageTokens.spaceMd),
               Expanded(
-                child: Text(
-                  pageName,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      pageName,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    Text(
+                      'Manage your Page',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            PageTokens.spaceLg,
+            PageTokens.spaceSm,
+            PageTokens.spaceLg,
+            0,
+          ),
+          child: Text(
+            'Edit the information, content, audience, team, and settings for this Page.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            PageTokens.spaceLg,
+            PageTokens.spaceMd,
+            PageTokens.spaceLg,
+            0,
+          ),
+          child: Row(
+            children: [
+              if (_canEditSettings)
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => PageSettingsScreen(pageId: widget.pageId),
+                        ),
+                      );
+                      if (mounted) _load();
+                    },
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('Edit Page'),
+                  ),
+                ),
+              if (_canEditSettings) const SizedBox(width: PageTokens.spaceMd),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PageProfileScreen(pageId: widget.pageId),
+                    ),
+                  ),
+                  icon: const Icon(Icons.visibility_outlined, size: 18),
+                  label: const Text('View Page'),
                 ),
               ),
             ],
