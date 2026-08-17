@@ -208,6 +208,28 @@ class _CreatePageScreenState extends State<CreatePageScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(PageTokens.spaceLg, PageTokens.spaceLg, PageTokens.spaceLg, PageTokens.spaceXxl),
           children: [
+            Container(
+              padding: const EdgeInsets.all(PageTokens.spaceMd),
+              decoration: BoxDecoration(
+                color: PageColors.surfaceMuted(context),
+                borderRadius: BorderRadius.circular(PageTokens.radiusMd),
+                border: Border.all(color: PageColors.border(context)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, size: 20, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: PageTokens.spaceSm),
+                  Expanded(
+                    child: Text(
+                      'Create your Page, then review it before publishing. You can keep it as a draft while you finish the details.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: PageTokens.spaceLg),
             PageImagePickerFrame(
               label: 'Cover image (optional)',
               aspect: 3,
