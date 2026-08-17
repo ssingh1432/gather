@@ -1,7 +1,7 @@
 name: Apply Pages rich visitor post patch
 on:
-  push:
-    branches: [pages/rich-visitor-posts]
+  pull_request:
+    types: [opened, synchronize]
 permissions:
   contents: write
 jobs:
