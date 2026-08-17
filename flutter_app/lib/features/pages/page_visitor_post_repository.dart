@@ -10,7 +10,9 @@ class PageVisitorPostRepository {
     final rows = await _c
         .from('page_visitor_posts')
         .select('id,page_id,author_id,content,status,content_type,media,event_id,created_at,users!page_visitor_posts_author_id_fkey(username,display_name,profile_photo_url),page_events(id,title,location,start_time)')
-        .eq('page_id', pageId).eq('status', 'published').order('created_at', ascending: false);
+        .eq('page_id', pageId)
+        .eq('status', 'published')
+        .order('created_at', ascending: false);
     final list = (rows as List).cast<Map<String, dynamic>>();
     for (final row in list) {
       row['like_count'] = await _c.from('page_visitor_post_likes').count(CountOption.exact).eq('post_id', row['id']);
@@ -41,7 +43,23 @@ class PageVisitorPostRepository {
   }
 
   Future<void> updateMedia(String postId, List<Map<String, dynamic>> media) => _c.from('page_visitor_posts').update({'media': media}).eq('id', postId);
+
   Future<void> deleteVisitorPost(String postId) => _c.from('page_visitor_posts').delete().eq('id', postId);
+
+  Future<void> deleteVisitorPostWithMedia({required String pageId, required String postId}) async {
+    try {
+      final files = await _c.storage.from(bucket).list(path: '$pageId/$postId');
+      if (files.isNotEmpty) {
+        await _c.storage.from(bucket).remove([
+          for (final file in files) '$pageId/$postId/${file.name}',
+        ]);
+      }
+    } catch (_) {
+      // Cleanup is best-effort; never expose storage details to users.
+    }
+    await deleteVisitorPost(postId);
+  }
+
   Future<bool> getLikeState(String postId, String userId) async => (await _c.from('page_visitor_post_likes').select('post_id').match({'post_id': postId, 'user_id': userId}).maybeSingle()) != null;
 
   Future<void> setLike(String postId, bool liked) async {
