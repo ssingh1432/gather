@@ -755,23 +755,44 @@ class _VisitorPostCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundImage: avatarUrl?.isNotEmpty == true
-                      ? NetworkImage(avatarUrl!)
-                      : null,
-                  child: avatarUrl?.isNotEmpty == true
-                      ? null
-                      : const Icon(Icons.person_outline, size: 18),
-                ),
+                if (avatarUrl?.isNotEmpty == true)
+                  ClipOval(
+                    child: Image.network(
+                      avatarUrl!,
+                      width: 36,
+                      height: 36,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 36,
+                        height: 36,
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.person_outline, size: 18),
+                      ),
+                    ),
+                  )
+                else
+                  CircleAvatar(
+                    radius: 18,
+                    child: const Icon(Icons.person_outline, size: 18),
+                  ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        label,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              label,
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.person_outline, size: 14),
+                        ],
                       ),
                       if (username?.isNotEmpty == true && name?.isNotEmpty == true)
                         Text(
@@ -881,6 +902,26 @@ class _ProfilePostCardState extends State<_ProfilePostCard> {
                 width: double.infinity,
                 height: 180,
                 fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  width: double.infinity,
+                  height: 180,
+                  color: PageColors.surfaceMuted(context),
+                  alignment: Alignment.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.broken_image_outlined,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Image unavailable',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ],
