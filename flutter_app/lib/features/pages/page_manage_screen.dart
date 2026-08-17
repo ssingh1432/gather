@@ -217,6 +217,69 @@ class _PageManageScreenState extends State<PageManageScreen> {
     );
   }
 
+  /// Enables donations for the Page after an eligibility check, or — if
+  /// already enabled — just confirms the current state. Lives here (owner
+  /// area) rather than on the public Page profile: turning a monetization
+  /// feature on is a Manage-Page action, not something that belongs mixed
+  /// into visitor-facing CTAs.
+  Future<void> _manageDonations() async {
+    final monetizationEnabled = (_page?['monetization_enabled'] as bool?) ?? false;
+    if (monetizationEnabled) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Donations enabled'),
+          content: const Text('Visitors can see a "Support this Page" option and send a donation via eSewa.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+          ],
+        ),
+      );
+      return;
+    }
+
+    try {
+      final eligibility = await _repo.checkPageMonetizationEligibility(widget.pageId);
+      if (eligibility['eligible'] != true) {
+        final reasons = (eligibility['reasons'] as List?)?.cast<String>() ?? const ['Not eligible yet'];
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Not eligible yet'),
+            content: Text(reasons.join('\n')),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+            ],
+          ),
+        );
+        return;
+      }
+
+      await _repo.updatePage(widget.pageId, {
+        'monetization_enabled': true,
+        'monetization_status': 'approved',
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _page = {
+          ..._page!,
+          'monetization_enabled': true,
+          'monetization_status': 'approved',
+        };
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Donations enabled for this Page.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not enable donations: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pageName = _page?['name'] as String? ?? 'Page';
@@ -456,7 +519,8 @@ class _PageManageScreenState extends State<PageManageScreen> {
       }
 
       if (_canManageMonetization) {
-        children.add(_section('Business', [
+        final monetizationEnabled = (_page?['monetization_enabled'] as bool?) ?? false;
+        children.add(_section('Business & Monetization', [
           _manageRow(
             icon: Icons.workspace_premium_outlined,
             title: 'Subscriptions',
@@ -482,6 +546,12 @@ class _PageManageScreenState extends State<PageManageScreen> {
                 ),
               ),
             ),
+          ),
+          _manageRow(
+            icon: Icons.volunteer_activism_outlined,
+            title: 'Donations',
+            subtitle: monetizationEnabled ? 'Enabled — visitors can support this Page' : 'Not enabled',
+            onTap: _manageDonations,
           ),
         ]));
       }

@@ -290,50 +290,6 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
     }
   }
 
-  Future<void> _enableMonetization() async {
-    try {
-      final eligibility = await _repo.checkPageMonetizationEligibility(widget.pageId);
-      if (eligibility['eligible'] != true) {
-        final reasons = (eligibility['reasons'] as List?)?.cast<String>() ??
-            const ['Not eligible yet'];
-        if (!mounted) return;
-        await showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Not eligible yet'),
-            content: Text(reasons.join('\n')),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-        return;
-      }
-
-      await _repo.updatePage(widget.pageId, {
-        'monetization_enabled': true,
-        'monetization_status': 'approved',
-      });
-
-      if (!mounted) return;
-      setState(() {
-        _page = {
-          ..._page!,
-          'monetization_enabled': true,
-          'monetization_status': 'approved',
-        };
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not enable donations: $e')),
-      );
-    }
-  }
-
   String get _pageTypeLabel {
     final type = _page?['page_type'] as String?;
     return kPageTypes[type] ?? type ?? 'Other';
@@ -571,13 +527,6 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                       icon: const Icon(Icons.volunteer_activism_outlined, size: 18),
                                       label: const Text('Support this Page'),
                                     ),
-                                  ),
-                                ] else if (page['owner_id'] == SupabaseConfig.currentUserId) ...[
-                                  const SizedBox(height: PageTokens.spaceMd),
-                                  TextButton.icon(
-                                    onPressed: _enableMonetization,
-                                    icon: const Icon(Icons.volunteer_activism_outlined, size: 16),
-                                    label: const Text('Enable donations for this Page'),
                                   ),
                                 ],
                                 if ((page['description'] as String?)?.isNotEmpty ?? false) ...[
