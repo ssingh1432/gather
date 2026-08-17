@@ -14,10 +14,8 @@ const _kWeekdays = <String, String>{
   'sun': 'Sunday',
 };
 
-/// Auto Replies / Away Messages / Business Hours Responses settings
-/// (Step 9 of the brief). Gated by the standard `pages_update` RLS policy
-/// (owner or `manage_settings`) — see migration 080's comment on why this
-/// is settings-level rather than `manage_messages`-level.
+/// Page-level messaging controls. The database enforces owner/manage_settings
+/// authorization; this screen makes the visitor-facing on/off state explicit.
 class PageMessagingSettingsScreen extends StatefulWidget {
   const PageMessagingSettingsScreen({super.key, required this.pageId});
   final String pageId;
@@ -32,6 +30,7 @@ class _PageMessagingSettingsScreenState extends State<PageMessagingSettingsScree
   bool _saving = false;
   String? _error;
 
+  bool _messagingEnabled = true;
   bool _autoReplyEnabled = false;
   final _autoReplyCtrl = TextEditingController();
   bool _awayMessageEnabled = false;
@@ -61,6 +60,7 @@ class _PageMessagingSettingsScreenState extends State<PageMessagingSettingsScree
       if (page == null) throw Exception('Page not found.');
       if (!mounted) return;
       setState(() {
+        _messagingEnabled = page['messaging_enabled'] as bool? ?? true;
         _autoReplyEnabled = page['auto_reply_enabled'] as bool? ?? false;
         _autoReplyCtrl.text = page['auto_reply_message'] as String? ?? '';
         _awayMessageEnabled = page['away_message_enabled'] as bool? ?? false;
@@ -76,14 +76,14 @@ class _PageMessagingSettingsScreenState extends State<PageMessagingSettingsScree
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await _repo.updateMessagingSettings(
-        widget.pageId,
-        autoReplyEnabled: _autoReplyEnabled,
-        autoReplyMessage: _autoReplyCtrl.text.trim().isEmpty ? '' : _autoReplyCtrl.text.trim(),
-        awayMessageEnabled: _awayMessageEnabled,
-        awayMessage: _awayMessageCtrl.text.trim().isEmpty ? '' : _awayMessageCtrl.text.trim(),
-        businessHoursSchedule: _schedule,
-      );
+      await _repo.updatePage(widget.pageId, {
+        'messaging_enabled': _messagingEnabled,
+        'auto_reply_enabled': _autoReplyEnabled,
+        'auto_reply_message': _autoReplyCtrl.text.trim(),
+        'away_message_enabled': _awayMessageEnabled,
+        'away_message': _awayMessageCtrl.text.trim(),
+        'business_hours_schedule': _schedule,
+      });
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Messaging settings saved.')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save: $e')));
@@ -154,7 +154,7 @@ class _PageMessagingSettingsScreenState extends State<PageMessagingSettingsScree
       ),
     );
 
-    if (result == null && !closed) return; // sheet dismissed without pressing Done
+    if (result == null && !closed) return;
     setState(() {
       final next = Map<String, dynamic>.from(_schedule);
       if (result == null) {
@@ -196,8 +196,21 @@ class _PageMessagingSettingsScreenState extends State<PageMessagingSettingsScree
               : ListView(
                   padding: const EdgeInsets.all(PageTokens.spaceLg),
                   children: [
+                    PageSectionHeader(title: 'Page messaging'),
+                    Text(
+                      'Control whether people can start conversations with this Page. This setting applies to new messages; existing conversations remain visible to your team.',
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Allow messages'),
+                      subtitle: Text(_messagingEnabled ? 'Visitors can message this Page.' : 'Visitors cannot start or continue messages with this Page.'),
+                      value: _messagingEnabled,
+                      onChanged: (v) => setState(() => _messagingEnabled = v),
+                    ),
+                    const Divider(height: 32),
                     PageSectionHeader(title: 'Auto reply'),
-                    Text('Sent automatically the first time someone messages this page.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                    Text('Sent automatically the first time someone messages this Page.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Enable auto reply'),
