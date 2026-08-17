@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:gather/features/pages/page_team_screen.dart';
+import 'package:gather_app/features/pages/page_team_screen.dart';
 
 void main() {
   group('Page team screen contract', () {
