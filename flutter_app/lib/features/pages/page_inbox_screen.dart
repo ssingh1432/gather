@@ -7,9 +7,10 @@ import 'page_chat_screen.dart';
 import 'page_messaging_settings_screen.dart';
 import 'pages_theme.dart';
 
-/// Team-facing customer-chat inbox. Messaging settings are intentionally
-/// exposed as a visible action when the user can edit them; they are not
-/// hidden behind an unlabeled/undiscoverable icon.
+/// Team-facing Page customer-chat inbox. Messaging settings are intentionally
+/// exposed as a visible action; they are not hidden behind an undiscoverable
+/// icon. The inbox remains readable when messaging is disabled so staff can
+/// review history and understand why new replies are unavailable.
 class PageInboxScreen extends StatefulWidget {
   const PageInboxScreen({super.key, required this.pageId, this.pageName});
   final String pageId;
@@ -24,6 +25,7 @@ class _PageInboxScreenState extends State<PageInboxScreen> {
   List<Map<String, dynamic>> _threads = const [];
   bool _loading = true;
   bool _canEditSettings = false;
+  bool _messagingEnabled = true;
   String? _error;
   String? _pageName;
 
@@ -33,12 +35,6 @@ class _PageInboxScreenState extends State<PageInboxScreen> {
     _pageName = widget.pageName;
     _load();
     _loadPermission();
-    if (_pageName == null) _loadPageName();
-  }
-
-  Future<void> _loadPageName() async {
-    final page = await _repo.getPage(widget.pageId);
-    if (mounted && page != null) setState(() => _pageName = page['name'] as String?);
   }
 
   Future<void> _loadPermission() async {
@@ -52,8 +48,16 @@ class _PageInboxScreenState extends State<PageInboxScreen> {
       _error = null;
     });
     try {
+      final page = await _repo.getPage(widget.pageId);
       final threads = await _repo.listPageMessageThreads(widget.pageId);
-      if (mounted) setState(() { _threads = threads; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _pageName = _pageName ?? page?['name'] as String?;
+          _messagingEnabled = page?['messaging_enabled'] as bool? ?? true;
+          _threads = threads;
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() { _error = 'Could not load the inbox. $e'; _loading = false; });
     }
@@ -77,7 +81,7 @@ class _PageInboxScreenState extends State<PageInboxScreen> {
         builder: (_) => PageMessagingSettingsScreen(pageId: widget.pageId),
       ),
     );
-    if (mounted) _loadPermission();
+    if (mounted) _load();
   }
 
   @override
@@ -102,6 +106,48 @@ class _PageInboxScreenState extends State<PageInboxScreen> {
                   onRefresh: _load,
                   child: ListView(
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          PageTokens.spaceLg,
+                          PageTokens.spaceLg,
+                          PageTokens.spaceLg,
+                          PageTokens.spaceSm,
+                        ),
+                        child: Text(
+                          'Conversations with people who message ${_pageName ?? 'this Page'}.',
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        ),
+                      ),
+                      if (!_messagingEnabled)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            PageTokens.spaceLg,
+                            PageTokens.spaceSm,
+                            PageTokens.spaceLg,
+                            PageTokens.spaceSm,
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.all(PageTokens.spaceMd),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(PageTokens.radiusMd),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.info_outline),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _canEditSettings
+                                        ? 'Messaging is off. Visitors cannot send new messages. Turn it on in Messaging settings when the Page is ready to receive conversations.'
+                                        : 'Messaging is off. Visitors cannot send new messages.',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       if (_canEditSettings)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(
@@ -121,8 +167,8 @@ class _PageInboxScreenState extends State<PageInboxScreen> {
                           padding: EdgeInsets.only(top: 96),
                           child: EmptyState(
                             icon: Icons.inbox_outlined,
-                            title: 'No messages yet',
-                            message: 'Customer conversations will show up here.',
+                            title: 'No conversations yet',
+                            message: 'Conversations from people who message this Page will show up here.',
                           ),
                         )
                       else
