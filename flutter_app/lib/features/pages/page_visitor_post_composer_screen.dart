@@ -24,7 +24,8 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
   bool _loadingEvents = false;
   bool _submitting = false;
 
-  @override void dispose() { _text.dispose(); super.dispose(); }
+  @override
+  void dispose() { _text.dispose(); super.dispose(); }
 
   String _mimeTypeFor(String name, {String fallback = 'application/octet-stream'}) {
     final extension = name.toLowerCase().split('.').last;
@@ -41,6 +42,16 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
   Future<void> _pickDocument() async { final r = await FilePicker.platform.pickFiles(withData:true, type:FileType.custom, allowedExtensions:['pdf','doc','docx']); final f=r?.files.single; if(f!=null&&mounted)setState((){_type='document';_document=f;_image=null;_video=null;_eventId=null;}); }
   Future<void> _loadEvents() async { setState(()=>_loadingEvents=true); try { final e=await _repo.listEvents(widget.pageId); if(mounted)setState(()=>_events=e); } finally { if(mounted)setState(()=>_loadingEvents=false); } }
 
+  String _userFacingError() {
+    switch (_type) {
+      case 'image': return 'Could not upload the image. Please check the file and try again.';
+      case 'video': return 'Could not upload the video. Please check the file size and try again.';
+      case 'document': return 'Could not upload the document. Please check the file type or size and try again.';
+      case 'event': return 'Could not attach the event. Please try again.';
+      default: return 'Could not create the post. Please try again.';
+    }
+  }
+
   Future<void> _submit() async {
     if (_submitting) return;
     setState(()=>_submitting=true);
@@ -53,13 +64,14 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
       if(_document!=null){final bytes=_document!.bytes;if(bytes==null)throw ArgumentError('Could not read the selected document.');media.add({'type':'document','name':_document!.name,'url':await _repo.uploadMedia(pageId:widget.pageId,postId:postId,bytes:bytes,mimeType:_mimeTypeFor(_document!.name),fileName:_document!.name)});}
       if(media.isNotEmpty)await _repo.updateMedia(postId,media);
       if(mounted){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(widget.requireApproval?'Submitted for Page review.':'Your post was published.')));Navigator.pop(context,true);}
-    } catch(e) {
-      if(postId!=null){try{await _repo.deleteVisitorPost(postId);}catch(_){} }
-      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Could not create post: ${e.toString().replaceFirst('Exception: ','')}')));
+    } catch(_) {
+      if(postId!=null){try{await _repo.deleteVisitorPostWithMedia(pageId:widget.pageId,postId:postId);}catch(_){} }
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(_userFacingError())));
     } finally { if(mounted)setState(()=>_submitting=false); }
   }
 
-  @override Widget build(BuildContext context)=>Scaffold(
+  @override
+  Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text('Post on ${widget.pageName}')),
     body:SafeArea(child:ListView(padding:const EdgeInsets.all(16),children:[
       Text('Posting as you on ${widget.pageName}',style:Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight:FontWeight.w700)),
