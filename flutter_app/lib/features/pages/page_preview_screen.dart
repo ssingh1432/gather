@@ -43,14 +43,38 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
           loading = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          err = 'Could not load page. $e';
+          err = 'Could not load this Page. Please try again.';
           loading = false;
         });
       }
     }
+  }
+
+  Future<void> _confirmPublish() async {
+    if (publishing) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Publish this Page?'),
+        content: const Text(
+          'Your Page will become visible to the public. You can still manage and update it after publishing.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep draft'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Publish Page'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) await _publish();
   }
 
   Future<void> _publish() async {
@@ -60,9 +84,11 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Page published!')));
       context.pushReplacement('/my-pages');
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not publish. $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not publish the Page. Please try again.')),
+        );
       }
     } finally {
       if (mounted) setState(() => publishing = false);
@@ -97,14 +123,28 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
             ),
           TextButton(
             onPressed: () => context.go('/my-pages'),
-            child: const Text('Save as draft'),
+            child: const Text('Back to My Pages'),
           ),
         ],
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : err != null
-              ? Center(child: Text(err!, style: const TextStyle(color: Colors.red)))
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(PageTokens.spaceLg),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline, size: 40),
+                        const SizedBox(height: PageTokens.spaceSm),
+                        Text(err!, textAlign: TextAlign.center),
+                        const SizedBox(height: PageTokens.spaceMd),
+                        OutlinedButton(onPressed: _load, child: const Text('Try again')),
+                      ],
+                    ),
+                  ),
+                )
               : page == null
                   ? const Center(child: Text('Page not found'))
                   : ListView(
@@ -164,7 +204,7 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
                           child: SizedBox(
                             width: double.infinity,
                             child: FilledButton(
-                              onPressed: publishing ? null : _publish,
+                              onPressed: publishing ? null : _confirmPublish,
                               style: FilledButton.styleFrom(
                                 backgroundColor: AppColors.brandTeal,
                                 foregroundColor: AppColors.onBrandTeal,
@@ -173,7 +213,7 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
                               ),
                               child: publishing
                                   ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal))
-                                  : const Text('Publish page', style: TextStyle(fontWeight: FontWeight.w700)),
+                                  : const Text('Publish Page', style: TextStyle(fontWeight: FontWeight.w700)),
                             ),
                           ),
                         ),
