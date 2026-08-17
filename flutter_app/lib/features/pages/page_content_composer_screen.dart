@@ -261,7 +261,7 @@ class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? 'Edit post' : 'New post', style: const TextStyle(fontWeight: FontWeight.w700))),
+      appBar: AppBar(title: Text(_isEditing ? 'Edit Page post' : 'New Page post', style: const TextStyle(fontWeight: FontWeight.w700))),
       body: ListView(
         padding: const EdgeInsets.all(PageTokens.spaceLg),
         children: [

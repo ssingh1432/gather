@@ -103,7 +103,7 @@ class _PageContentScreenState extends State<PageContentScreen> with SingleTicker
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete post'),
+        title: const Text('Delete Page post'),
         content: const Text('This removes the post from the page. This cannot be undone from here.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -164,7 +164,7 @@ class _PageContentScreenState extends State<PageContentScreen> with SingleTicker
           backgroundColor: AppColors.brandTeal,
           foregroundColor: AppColors.onBrandTeal,
           icon: const Icon(Icons.add),
-          label: Text(_tabs.index == 0 ? 'New post' : 'New event'),
+          label: Text(_tabs.index == 0 ? 'New Page post' : 'New event'),
         ),
       ),
       body: TabBarView(
@@ -175,7 +175,7 @@ class _PageContentScreenState extends State<PageContentScreen> with SingleTicker
               : _postsError != null
                   ? ErrorRetryState(title: 'Unable to load posts', message: _postsError!, onRetry: _loadPosts)
                   : _posts.isEmpty
-                      ? const _EmptyTab(icon: Icons.article_outlined, message: 'No posts yet. Create your first post.')
+                      ? const _EmptyTab(icon: Icons.article_outlined, message: 'No Page posts yet. Create your first Page post.')
                       : RefreshIndicator(
                           onRefresh: _loadPosts,
                           child: ListView.separated(
