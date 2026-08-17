@@ -41,6 +41,12 @@ class _PageDiscoveryScreenState extends State<PageDiscoveryScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    _q.dispose();
+    super.dispose();
+  }
+
   Future<List<Map<String, dynamic>>> _load() async {
     final query = _q.text.trim();
     List<Map<String, dynamic>> data;
@@ -52,9 +58,7 @@ class _PageDiscoveryScreenState extends State<PageDiscoveryScreen> {
       case _DiscoverySort.nearby:
         // No lat/lng UI yet (see migration 085's `page_nearby_geo` note),
         // and no reliable per-user location signal in this build, so
-        // "Nearby" defaults to Gather's primary market for now. Once a
-        // profile location or device geolocation is available, swap this
-        // for `_repo.nearbyPagesByGeo(lat, lng)`.
+        // "Nearby" currently uses Gather's Nepal-based directory.
         data = await _repo.nearbyPagesByText(country: 'Nepal');
       case _DiscoverySort.popular:
         data = await _repo.searchPages(query: query.isEmpty ? null : query, categoryId: _selectedCategoryId);
@@ -102,9 +106,37 @@ class _PageDiscoveryScreenState extends State<PageDiscoveryScreen> {
         child: ListView(
           padding: const EdgeInsets.all(PageTokens.spaceLg),
           children: [
+            const Text(
+              'Find Pages to follow',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: PageTokens.spaceXs),
+            Text(
+              'Search, browse categories, or explore what is popular and verified.',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: PageTokens.spaceMd),
             TextField(
               controller: _q,
-              decoration: pageFieldDecoration(context, labelText: 'Search pages', hintText: 'Business, creator, NGO…', prefixIcon: const Icon(Icons.search)),
+              decoration: pageFieldDecoration(
+                context,
+                labelText: 'Search pages',
+                hintText: 'Business, creator, NGO…',
+                prefixIcon: const Icon(Icons.search),
+              ).copyWith(
+                suffixIcon: _q.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        onPressed: () {
+                          _q.clear();
+                          setState(() => _sort = _DiscoverySort.popular);
+                          _reload();
+                        },
+                        icon: const Icon(Icons.clear),
+                      ),
+              ),
+              onChanged: (_) => setState(() {}),
               onSubmitted: (_) {
                 setState(() => _sort = _DiscoverySort.popular);
                 _reload();
@@ -118,7 +150,7 @@ class _PageDiscoveryScreenState extends State<PageDiscoveryScreen> {
                   _sortChip('Popular', _DiscoverySort.popular, Icons.local_fire_department_outlined),
                   _sortChip('Trending', _DiscoverySort.trending, Icons.trending_up),
                   _sortChip('Verified', _DiscoverySort.verified, Icons.verified_outlined),
-                  _sortChip('Nearby', _DiscoverySort.nearby, Icons.place_outlined),
+                  _sortChip('Nearby (Nepal)', _DiscoverySort.nearby, Icons.place_outlined),
                 ],
               ),
             ),
