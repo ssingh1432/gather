@@ -6,6 +6,11 @@ class PageVisitorPostRepository {
   static const bucket = 'page-visitor-media';
   SupabaseClient get _c => SupabaseConfig.client;
 
+  Future<int> _countRows(String table, String postId) async {
+    final rows = await _c.from(table).select('post_id').eq('post_id', postId);
+    return (rows as List).length;
+  }
+
   Future<List<Map<String, dynamic>>> listVisitorPosts(String pageId) async {
     final rows = await _c
         .from('page_visitor_posts')
@@ -15,8 +20,8 @@ class PageVisitorPostRepository {
         .order('created_at', ascending: false);
     final list = (rows as List).cast<Map<String, dynamic>>();
     for (final row in list) {
-      row['like_count'] = await _c.from('page_visitor_post_likes').count(CountOption.exact).eq('post_id', row['id']);
-      row['comment_count'] = await _c.from('page_visitor_post_comments').count(CountOption.exact).eq('post_id', row['id']);
+      row['like_count'] = await _countRows('page_visitor_post_likes', row['id'] as String);
+      row['comment_count'] = await _countRows('page_visitor_post_comments', row['id'] as String);
     }
     return list;
   }
@@ -83,7 +88,7 @@ class PageVisitorPostRepository {
     await _c.from('page_visitor_post_comments').insert({'post_id': postId, 'user_id': uid, 'content': text});
   }
 
-  Future<int> commentCount(String postId) async => await _c.from('page_visitor_post_comments').count(CountOption.exact).eq('post_id', postId);
+  Future<int> commentCount(String postId) async => await _countRows('page_visitor_post_comments', postId);
   Future<void> deleteComment(String commentId) => _c.from('page_visitor_post_comments').delete().eq('id', commentId);
   Future<void> recordShare(String postId, String userId) => _c.from('page_visitor_post_shares').insert({'post_id': postId, 'user_id': userId});
 }
