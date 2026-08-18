@@ -1,0 +1,66 @@
+name: Pages rich visitor PR repair
+on:
+  pull_request:
+    types: [opened, synchronize]
+permissions:
+  contents: write
+jobs:
+  repair:
+    if: github.event.pull_request.head.ref == 'pages/rich-visitor-posts' && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply minimal Pages integration
+        run: |
+          git fetch origin main
+          git checkout origin/main -- flutter_app/lib/features/pages/page_profile_screen.dart
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('flutter_app/lib/features/pages/page_profile_screen.dart')
+          s=p.read_text()
+          s=s.replace("import 'donate_sheet.dart';\n", "import 'donate_sheet.dart';\nimport 'page_visitor_post_card.dart';\nimport 'page_visitor_post_composer_screen.dart';\nimport 'page_visitor_post_repository.dart';\n")
+          s=s.replace("  final _localRepo = PageLocalRepository();\n", "  final _localRepo = PageLocalRepository();\n  final _visitorRepo = PageVisitorPostRepository();\n")
+          s=s.replace("final visitorPosts = await _localRepo.listVisitorPosts(widget.pageId);", "final visitorPosts = await _visitorRepo.listVisitorPosts(widget.pageId);")
+          m=re.search(r"  Future<void> _createVisitorPost\(\) async \{.*?\n  \}\n\n  Future<void> _toggleFollow",s,re.S)
+          if not m: raise SystemExit('visitor composer method not found')
+          method='''  Future<void> _createVisitorPost() async {
+    if (SupabaseConfig.currentUserId == null) {
+      context.push('/login');
+      return;
+    }
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PageVisitorPostComposerScreen(
+          pageId: widget.pageId,
+          pageName: _page?['name']?.toString() ?? 'this Page',
+          requireApproval: _visitorPostsRequireApproval,
+        ),
+      ),
+    );
+    if (created == true && mounted) await _load();
+  }
+
+  Future<void> _toggleFollow'''
+          s=s[:m.start()]+method+s[m.end():]
+          c=re.search(r"class _VisitorPostCard extends StatelessWidget \{.*?\n\}\n\nclass _ProfilePostCard",s,re.S)
+          if not c: raise SystemExit('visitor card class not found')
+          replacement='''class _VisitorPostCard extends StatelessWidget {
+  const _VisitorPostCard({required this.post, required this.page});
+  final Map<String, dynamic> post;
+  final Map<String, dynamic> page;
+  @override
+  Widget build(BuildContext context) => PageVisitorPostCard(post: post, page: page);
+}
+
+class _ProfilePostCard'''
+          s=s[:c.start()]+replacement+s[c.end():]
+          p.write_text(s)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add flutter_app/lib/features/pages/page_profile_screen.dart
+          git commit -m 'fix(Pages): wire rich visitor posts into Page profile'
+          git push origin HEAD:pages/rich-visitor-posts
