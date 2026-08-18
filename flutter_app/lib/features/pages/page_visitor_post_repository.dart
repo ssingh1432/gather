@@ -4,6 +4,7 @@ import '../../core/supabase_client.dart';
 
 class PageVisitorPostRepository {
   static const bucket = 'page-visitor-media';
+  static const maxBytes = 25 * 1024 * 1024;
   SupabaseClient get _c => SupabaseConfig.client;
 
   Future<int> _countRows(String table, String postId) async {
@@ -40,11 +41,19 @@ class PageVisitorPostRepository {
   }
 
   Future<String> uploadMedia({required String pageId, required String postId, required List<int> bytes, required String mimeType, required String fileName}) async {
-    if (bytes.length > 25 * 1024 * 1024) throw ArgumentError('File must be 25 MB or smaller.');
+    if (bytes.length > maxBytes) throw const PageVisitorMediaException('File must be 25 MB or smaller.');
     final safe = fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     final path = '$pageId/$postId/$safe';
-    await _c.storage.from(bucket).uploadBinary(path, Uint8List.fromList(bytes), fileOptions: FileOptions(contentType: mimeType, cacheControl: '31536000', upsert: true));
-    return _c.storage.from(bucket).getPublicUrl(path);
+    try {
+      await _c.storage.from(bucket).uploadBinary(
+        path,
+        Uint8List.fromList(bytes),
+        fileOptions: FileOptions(contentType: mimeType, cacheControl: '31536000', upsert: false),
+      );
+      return _c.storage.from(bucket).getPublicUrl(path);
+    } on StorageException catch (e) {
+      throw PageVisitorMediaException(_friendlyStorageError(e));
+    }
   }
 
   Future<void> updateMedia(String postId, List<Map<String, dynamic>> media) => _c.from('page_visitor_posts').update({'media': media}).eq('id', postId);
@@ -91,4 +100,26 @@ class PageVisitorPostRepository {
   Future<int> commentCount(String postId) async => await _countRows('page_visitor_post_comments', postId);
   Future<void> deleteComment(String commentId) => _c.from('page_visitor_post_comments').delete().eq('id', commentId);
   Future<void> recordShare(String postId, String userId) => _c.from('page_visitor_post_shares').insert({'post_id': postId, 'user_id': userId});
+
+  static String _friendlyStorageError(StorageException e) {
+    final message = e.message.toLowerCase();
+    if (message.contains('row-level') || message.contains('permission') || message.contains('unauthorized') || message.contains('forbidden')) {
+      return 'You do not have permission to upload media to this Page. Make sure you follow the Page.';
+    }
+    if (message.contains('too large') || message.contains('entitytoolarge') || message.contains('size')) {
+      return 'This file is larger than the 25 MB limit.';
+    }
+    if (message.contains('mime') || message.contains('type')) {
+      return 'This file type is not supported.';
+    }
+    return 'The media upload failed. Please try again.';
+  }
+}
+
+class PageVisitorMediaException implements Exception {
+  const PageVisitorMediaException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
 }
