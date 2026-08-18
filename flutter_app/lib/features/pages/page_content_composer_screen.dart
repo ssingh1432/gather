@@ -330,10 +330,17 @@ class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
       }
       createdPostId = post['id'] as String;
 
-      final media = <Map<String, dynamic>>[];
-      if (_existingMedia.isNotEmpty && _pickedFiles.isEmpty) media.addAll(_existingMedia);
+      // Preserve all existing media unless the user explicitly removed it.
+      // Previously, adding any new file replaced the entire existing media
+      // array, which silently orphaned the old Storage objects.
+      final oldPaths = _existingMedia
+          .map((item) => item['path']?.toString())
+          .whereType<String>()
+          .where((path) => path.isNotEmpty)
+          .toSet();
+      final media = <Map<String, dynamic>>[..._existingMedia.where((item) => item['type'] != 'event')];
+
       if (_selectedEvent != null) {
-        media.removeWhere((item) => item['type'] == 'event');
         media.add({
           'type': 'event',
           'event_id': _selectedEvent!['id'],
@@ -367,6 +374,13 @@ class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
         });
       }
 
+      final newPaths = media
+          .map((item) => item['path']?.toString())
+          .whereType<String>()
+          .where((path) => path.isNotEmpty)
+          .toSet();
+      final stalePaths = oldPaths.difference(newPaths).toList();
+
       await _repo.updatePagePost(createdPostId, {
         'post_type': _postType,
         'content': text,
@@ -375,6 +389,18 @@ class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
         'scheduled_at': status == 'scheduled' ? _scheduledAt!.toIso8601String() : null,
         'mention_ids': _mentionedUsers.values.toList(),
       });
+
+      // Database state is authoritative. Storage cleanup happens only after
+      // the post update succeeds so an update failure cannot destroy media
+      // still referenced by the old post state.
+      if (stalePaths.isNotEmpty) {
+        try {
+          await _mediaRepo.deletePaths(stalePaths);
+        } catch (_) {
+          // Do not roll back a successful post update because Storage cleanup
+          // is best-effort. The media lifecycle repository can retry it later.
+        }
+      }
 
       if (mounted) Navigator.of(context).pop(true);
     } on PagePostMediaException catch (e) {
@@ -443,15 +469,24 @@ class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
                   trailing: IconButton(icon: const Icon(Icons.close), onPressed: _saving ? null : () => setState(() => _pickedFiles.remove(file))),
                 )),
           ],
-          if (_existingMedia.isNotEmpty && _pickedFiles.isEmpty) ...[
+          if (_existingMedia.isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(border: Border.all(color: Theme.of(context).dividerColor), borderRadius: BorderRadius.circular(PageTokens.radiusMd)),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('Existing attachments', style: TextStyle(fontWeight: FontWeight.w600)),
-                ..._existingMedia.where((m) => m['type'] != 'event').map((m) => ListTile(dense: true, leading: Icon(_fileIcon(m['mime_type']?.toString() ?? '')), title: Text(m['name']?.toString() ?? m['type']?.toString() ?? 'Attachment'), subtitle: Text(m['mime_type']?.toString() ?? ''))),
-                TextButton.icon(onPressed: _saving ? null : () => setState(() => _existingMedia.clear()), icon: const Icon(Icons.delete_outline), label: const Text('Remove existing attachments')),
+                ..._existingMedia.where((m) => m['type'] != 'event').map((m) => ListTile(
+                  dense: true,
+                  leading: Icon(_fileIcon(m['mime_type']?.toString() ?? '')),
+                  title: Text(m['name']?.toString() ?? m['type']?.toString() ?? 'Attachment'),
+                  subtitle: Text(m['mime_type']?.toString() ?? ''),
+                )),
+                TextButton.icon(
+                  onPressed: _saving ? null : () => setState(() => _existingMedia.clear()),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Remove existing attachments'),
+                ),
               ]),
             ),
           ],
