@@ -10,6 +10,9 @@ import '../data/repositories.dart';
 import 'donate_sheet.dart';
 import 'page_chat_screen.dart';
 import 'page_local_repository.dart';
+import 'page_visitor_post_card.dart';
+import 'page_visitor_post_composer_screen.dart';
+import 'page_visitor_post_repository.dart';
 import 'page_manage_screen.dart';
 import 'page_preview_screen.dart' show PageInfoRow;
 import 'pages_theme.dart';
@@ -26,6 +29,7 @@ class PageProfileScreen extends StatefulWidget {
 class _PageProfileScreenState extends State<PageProfileScreen> {
   final _repo = PageRepository();
   final _localRepo = PageLocalRepository();
+  final _visitorRepo = PageVisitorPostRepository();
 
   Map<String, dynamic>? _page;
   bool _loading = true;
@@ -68,7 +72,7 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       final hasTiers = await _repo.hasVisibleSubscriptionTiers(widget.pageId);
       final hasItems = await _repo.hasVisibleMarketplaceItems(widget.pageId);
       final visitorSettings = await _localRepo.getVisitorPostingSettings(widget.pageId);
-      final visitorPosts = await _localRepo.listVisitorPosts(widget.pageId);
+      final visitorPosts = await _visitorRepo.listVisitorPosts(widget.pageId);
 
       if (!mounted) return;
 
@@ -107,129 +111,16 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       context.push('/login');
       return;
     }
-
-    final controller = TextEditingController();
-    try {
-      final submitted = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) {
-          final user = SupabaseConfig.maybeClient?.auth.currentUser;
-          final displayName = user?.userMetadata?['display_name']?.toString().trim();
-          final username = user?.userMetadata?['username']?.toString().trim();
-          final authorLabel = displayName?.isNotEmpty == true
-              ? displayName!
-              : username?.isNotEmpty == true
-                  ? '@$username'
-                  : 'Your Gather account';
-          final pageName = _page?['name']?.toString() ?? 'this Page';
-
-          return AlertDialog(
-            title: Text('Post on $pageName'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(dialogContext).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.person_outline),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text.rich(
-                          TextSpan(
-                            children: [
-                              const TextSpan(text: 'Posting as '),
-                              TextSpan(
-                                text: authorLabel,
-                                style: const TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              const TextSpan(text: ' on '),
-                              TextSpan(
-                                text: pageName,
-                                style: const TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_visitorPostsRequireApproval) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'This Page reviews visitor posts before they become public.',
-                    style: Theme.of(dialogContext).textTheme.bodySmall,
-                  ),
-                ],
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  maxLines: 6,
-                  maxLength: 5000,
-                  decoration: const InputDecoration(
-                    hintText: 'Write something for this Page…',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  final content = controller.text.trim();
-                  if (content.isEmpty) return;
-                  try {
-                    await _localRepo.createVisitorPost(widget.pageId, content);
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext, true);
-                    }
-                  } catch (e) {
-                    if (dialogContext.mounted) {
-                      final message = e.toString().toLowerCase().contains('row-level security') ||
-                              e.toString().toLowerCase().contains('policy')
-                          ? 'Follow this Page to post.'
-                          : 'Could not post: $e';
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(content: Text(message)),
-                      );
-                    }
-                  }
-                },
-                child: Text(_visitorPostsRequireApproval ? 'Submit for review' : 'Post'),
-              ),
-            ],
-          );
-        },
-      );
-
-      if (submitted == true && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _visitorPostsRequireApproval
-                  ? 'Your post was sent to ${_page?['name'] ?? 'this Page'} for review.'
-                  : 'Your post is now visible on ${_page?['name'] ?? 'this Page'}.',
-            ),
-          ),
-        );
-        await _load();
-      }
-    } finally {
-      controller.dispose();
-    }
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PageVisitorPostComposerScreen(
+          pageId: widget.pageId,
+          pageName: _page?['name']?.toString() ?? 'this Page',
+          requireApproval: _visitorPostsRequireApproval,
+        ),
+      ),
+    );
+    if (created == true && mounted) await _load();
   }
 
   Future<void> _toggleFollow() async {
@@ -621,7 +512,7 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                   horizontal: PageTokens.spaceLg,
                                   vertical: 4,
                                 ),
-                                child: _VisitorPostCard(post: post),
+                                child: _VisitorPostCard(post: post, page: page),
                               ),
                           ],
                         ],
@@ -731,100 +622,13 @@ class PageVisitorPostFollowGate extends StatelessWidget {
 }
 
 class _VisitorPostCard extends StatelessWidget {
-  const _VisitorPostCard({required this.post});
+  const _VisitorPostCard({required this.post, required this.page});
 
   final Map<String, dynamic> post;
+  final Map<String, dynamic> page;
 
   @override
-  Widget build(BuildContext context) {
-    final author = post['users'] is Map
-        ? Map<String, dynamic>.from(post['users'] as Map)
-        : <String, dynamic>{};
-    final name = (author['display_name'] as String?)?.trim();
-    final username = (author['username'] as String?)?.trim();
-    final label = name?.isNotEmpty == true
-        ? name!
-        : username?.isNotEmpty == true
-            ? '@$username'
-            : 'Gather user';
-    final created = post['created_at'] as String?;
-    final avatarUrl = author['profile_photo_url'] as String?;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                if (avatarUrl?.isNotEmpty == true)
-                  ClipOval(
-                    child: Image.network(
-                      avatarUrl!,
-                      width: 36,
-                      height: 36,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 36,
-                        height: 36,
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.person_outline, size: 18),
-                      ),
-                    ),
-                  )
-                else
-                  CircleAvatar(
-                    radius: 18,
-                    child: const Icon(Icons.person_outline, size: 18),
-                  ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              label,
-                              style: const TextStyle(fontWeight: FontWeight.w700),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          const Icon(Icons.person_outline, size: 14),
-                        ],
-                      ),
-                      if (username?.isNotEmpty == true && name?.isNotEmpty == true)
-                        Text(
-                          '@$username',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                if (created != null)
-                  Text(
-                    timeAgo(DateTime.parse(created)),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(post['content'] as String? ?? ''),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => PageVisitorPostCard(post: post, page: page);
 }
 
 class _ProfilePostCard extends StatefulWidget {
