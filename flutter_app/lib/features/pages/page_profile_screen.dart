@@ -1,5 +1,11 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/supabase_client.dart';
@@ -21,6 +27,64 @@ class PageProfileScreen extends StatefulWidget {
 
   @override
   State<PageProfileScreen> createState() => _PageProfileScreenState();
+}
+
+/// A single visitor-post media attachment picked on-device but not yet
+/// uploaded. `mediaType` matches the values `VisitorPostMediaUpload`
+/// accepts on the repository side (image/video/document).
+class _PickedVisitorMedia {
+  _PickedVisitorMedia({required this.bytes, required this.filename, required this.mimeType, required this.mediaType});
+
+  final Uint8List bytes;
+  final String filename;
+  final String mimeType;
+  final String mediaType;
+}
+
+/// A small removable thumbnail/chip for a picked-but-not-yet-uploaded
+/// attachment in the visitor-post composer.
+class _PickedMediaChip extends StatelessWidget {
+  const _PickedMediaChip({required this.item, required this.onRemove});
+
+  final _PickedVisitorMedia item;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          ),
+          child: item.mediaType == 'image'
+              ? Image.memory(item.bytes, fit: BoxFit.cover)
+              : Center(
+                  child: Icon(
+                    item.mediaType == 'video' ? Icons.videocam_outlined : Icons.description_outlined,
+                    size: 28,
+                  ),
+                ),
+        ),
+        Positioned(
+          top: 2,
+          right: 2,
+          child: GestureDetector(
+            onTap: onRemove,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+              child: const Icon(Icons.close, size: 14, color: Colors.white),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _PageProfileScreenState extends State<PageProfileScreen> {
@@ -109,108 +173,279 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
     }
 
     final controller = TextEditingController();
-    try {
-      final submitted = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) {
-          final user = SupabaseConfig.maybeClient?.auth.currentUser;
-          final displayName = user?.userMetadata?['display_name']?.toString().trim();
-          final username = user?.userMetadata?['username']?.toString().trim();
-          final authorLabel = displayName?.isNotEmpty == true
-              ? displayName!
-              : username?.isNotEmpty == true
-                  ? '@$username'
-                  : 'Your Gather account';
-          final pageName = _page?['name']?.toString() ?? 'this Page';
+    final media = <_PickedVisitorMedia>[];
+    Map<String, dynamic>? selectedEvent;
 
-          return AlertDialog(
-            title: Text('Post on $pageName'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(dialogContext).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
+    try {
+      final submitted = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) {
+          return StatefulBuilder(
+            builder: (sheetContext, setSheetState) {
+              final user = SupabaseConfig.maybeClient?.auth.currentUser;
+              final displayName = user?.userMetadata?['display_name']?.toString().trim();
+              final username = user?.userMetadata?['username']?.toString().trim();
+              final authorLabel = displayName?.isNotEmpty == true
+                  ? displayName!
+                  : username?.isNotEmpty == true
+                      ? '@$username'
+                      : 'Your Gather account';
+              final pageName = _page?['name']?.toString() ?? 'this Page';
+              final hasMedia = media.isNotEmpty;
+              final hasEvent = selectedEvent != null;
+
+              Future<void> pickImages() async {
+                final picked = await ImagePicker().pickMultiImage(imageQuality: 90, limit: 10 - media.length);
+                if (picked.isEmpty) return;
+                for (final file in picked) {
+                  final bytes = await file.readAsBytes();
+                  media.add(_PickedVisitorMedia(
+                    bytes: bytes,
+                    filename: file.name,
+                    mimeType: file.mimeType ?? 'image/jpeg',
+                    mediaType: 'image',
+                  ));
+                }
+                setSheetState(() {});
+              }
+
+              Future<void> pickVideo() async {
+                final picked = await ImagePicker().pickVideo(source: ImageSource.gallery, maxDuration: const Duration(minutes: 5));
+                if (picked == null) return;
+                final bytes = await picked.readAsBytes();
+                media
+                  ..clear()
+                  ..add(_PickedVisitorMedia(bytes: bytes, filename: picked.name, mimeType: picked.mimeType ?? 'video/mp4', mediaType: 'video'));
+                setSheetState(() {});
+              }
+
+              Future<void> pickDocument() async {
+                final result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: const ['pdf', 'doc', 'docx'],
+                  withData: true,
+                );
+                final picked = result?.files.single;
+                if (picked == null || picked.bytes == null) return;
+                media
+                  ..clear()
+                  ..add(_PickedVisitorMedia(
+                    bytes: picked.bytes!,
+                    filename: picked.name,
+                    mimeType: picked.extension == 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    mediaType: 'document',
+                  ));
+                setSheetState(() {});
+              }
+
+              Future<void> pickEvent() async {
+                if (_events.isEmpty) {
+                  ScaffoldMessenger.of(sheetContext).showSnackBar(
+                    const SnackBar(content: Text('This Page has no upcoming events to attach.')),
+                  );
+                  return;
+                }
+                final chosen = await showModalBottomSheet<Map<String, dynamic>>(
+                  context: sheetContext,
+                  showDragHandle: true,
+                  builder: (eventSheetContext) => SafeArea(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final event in _events)
+                          ListTile(
+                            leading: const Icon(Icons.event_outlined),
+                            title: Text(event['title'] as String? ?? 'Event'),
+                            subtitle: event['start_time'] != null ? Text(timeAgo(DateTime.parse(event['start_time'] as String))) : null,
+                            onTap: () => Navigator.pop(eventSheetContext, event),
+                          ),
+                      ],
+                    ),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.person_outline),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text.rich(
-                          TextSpan(
+                );
+                if (chosen != null) {
+                  selectedEvent = chosen;
+                  setSheetState(() {});
+                }
+              }
+
+              return Padding(
+                padding: EdgeInsets.only(bottom: MediaQuery.of(sheetContext).viewInsets.bottom),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Post on $pageName', style: Theme.of(sheetContext).textTheme.titleMedium),
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(sheetContext).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const TextSpan(text: 'Posting as '),
-                              TextSpan(
-                                text: authorLabel,
-                                style: const TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              const TextSpan(text: ' on '),
-                              TextSpan(
-                                text: pageName,
-                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              const Icon(Icons.person_outline),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      const TextSpan(text: 'Posting as '),
+                                      TextSpan(text: authorLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                      const TextSpan(text: ' on '),
+                                      TextSpan(text: pageName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ],
                           ),
                         ),
-                      ),
-                    ],
+                        if (_visitorPostsRequireApproval) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            'This Page reviews visitor posts before they become public.',
+                            style: Theme.of(sheetContext).textTheme.bodySmall,
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: controller,
+                          autofocus: true,
+                          maxLines: 6,
+                          minLines: 3,
+                          maxLength: 5000,
+                          decoration: const InputDecoration(
+                            hintText: 'Write something for this Page…',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        if (hasMedia) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (var i = 0; i < media.length; i++)
+                                _PickedMediaChip(
+                                  item: media[i],
+                                  onRemove: () {
+                                    media.removeAt(i);
+                                    setSheetState(() {});
+                                  },
+                                ),
+                            ],
+                          ),
+                        ],
+                        if (hasEvent) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: PageColors.border(sheetContext)),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.event_outlined, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    selectedEvent!['title'] as String? ?? 'Event',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.close, size: 18),
+                                  onPressed: () {
+                                    selectedEvent = null;
+                                    setSheetState(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            IconButton(
+                              tooltip: 'Add photos',
+                              onPressed: hasEvent || media.any((m) => m.mediaType != 'image') ? null : pickImages,
+                              icon: const Icon(Icons.image_outlined),
+                            ),
+                            IconButton(
+                              tooltip: 'Add a video',
+                              onPressed: hasEvent || hasMedia ? null : pickVideo,
+                              icon: const Icon(Icons.videocam_outlined),
+                            ),
+                            IconButton(
+                              tooltip: 'Add a document',
+                              onPressed: hasEvent || hasMedia ? null : pickDocument,
+                              icon: const Icon(Icons.description_outlined),
+                            ),
+                            IconButton(
+                              tooltip: 'Attach an event',
+                              onPressed: hasMedia ? null : pickEvent,
+                              icon: const Icon(Icons.event_outlined),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () => Navigator.pop(sheetContext, false),
+                                child: const Text('Cancel'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: () async {
+                                  final content = controller.text.trim();
+                                  if (content.isEmpty && media.isEmpty && selectedEvent == null) return;
+                                  try {
+                                    await _localRepo.createVisitorPost(
+                                      widget.pageId,
+                                      content,
+                                      media: media
+                                          .map((m) => VisitorPostMediaUpload(bytes: m.bytes, filename: m.filename, mimeType: m.mimeType, mediaType: m.mediaType))
+                                          .toList(),
+                                      eventId: selectedEvent?['id'] as String?,
+                                    );
+                                    if (sheetContext.mounted) Navigator.pop(sheetContext, true);
+                                  } catch (e) {
+                                    if (sheetContext.mounted) {
+                                      final message = e.toString().toLowerCase().contains('row-level security') ||
+                                              e.toString().toLowerCase().contains('policy')
+                                          ? 'Follow this Page to post.'
+                                          : 'Could not post: $e';
+                                      ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text(message)));
+                                    }
+                                  }
+                                },
+                                child: Text(_visitorPostsRequireApproval ? 'Submit for review' : 'Post'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                if (_visitorPostsRequireApproval) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'This Page reviews visitor posts before they become public.',
-                    style: Theme.of(dialogContext).textTheme.bodySmall,
-                  ),
-                ],
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  maxLines: 6,
-                  maxLength: 5000,
-                  decoration: const InputDecoration(
-                    hintText: 'Write something for this Page…',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  final content = controller.text.trim();
-                  if (content.isEmpty) return;
-                  try {
-                    await _localRepo.createVisitorPost(widget.pageId, content);
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext, true);
-                    }
-                  } catch (e) {
-                    if (dialogContext.mounted) {
-                      final message = e.toString().toLowerCase().contains('row-level security') ||
-                              e.toString().toLowerCase().contains('policy')
-                          ? 'Follow this Page to post.'
-                          : 'Could not post: $e';
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(content: Text(message)),
-                      );
-                    }
-                  }
-                },
-                child: Text(_visitorPostsRequireApproval ? 'Submit for review' : 'Post'),
-              ),
-            ],
+              );
+            },
           );
         },
       );
@@ -730,16 +965,136 @@ class PageVisitorPostFollowGate extends StatelessWidget {
   }
 }
 
-class _VisitorPostCard extends StatelessWidget {
+int _pgCount(dynamic value) {
+  if (value is List && value.isNotEmpty) {
+    final c = (value.first as Map)['count'];
+    if (c is num) return c.toInt();
+  }
+  return 0;
+}
+
+class _VisitorPostCard extends StatefulWidget {
   const _VisitorPostCard({required this.post});
 
   final Map<String, dynamic> post;
 
   @override
+  State<_VisitorPostCard> createState() => _VisitorPostCardState();
+}
+
+class _VisitorPostCardState extends State<_VisitorPostCard> {
+  final _localRepo = PageLocalRepository();
+
+  late bool _liked;
+  late int _likeCount;
+  late int _commentCount;
+  late int _shareCount;
+  bool _likeBusy = false;
+
+  Map<String, dynamic> get post => widget.post;
+
+  @override
+  void initState() {
+    super.initState();
+    _liked = post['liked_by_me'] == true;
+    _likeCount = _pgCount(post['like_count']);
+    _commentCount = _pgCount(post['comment_count']);
+    _shareCount = _pgCount(post['share_count']);
+  }
+
+  Future<void> _toggleLike() async {
+    if (SupabaseConfig.currentUserId == null) {
+      context.push('/login');
+      return;
+    }
+    if (_likeBusy) return;
+    setState(() {
+      _likeBusy = true;
+      _liked = !_liked;
+      _likeCount += _liked ? 1 : -1;
+    });
+    try {
+      await _localRepo.toggleVisitorPostLike(post['id'] as String, currentlyLiked: !_liked);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _liked = !_liked;
+        _likeCount += _liked ? 1 : -1;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update like: $e')));
+    } finally {
+      if (mounted) setState(() => _likeBusy = false);
+    }
+  }
+
+  Future<void> _openComments() async {
+    if (SupabaseConfig.currentUserId == null) {
+      context.push('/login');
+      return;
+    }
+    final postId = post['id'] as String;
+    final added = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => _VisitorPostCommentsSheet(postId: postId),
+    );
+    if (added == true && mounted) setState(() => _commentCount += 1);
+  }
+
+  Future<void> _openShareSheet() async {
+    final postId = post['id'] as String;
+    final pageId = post['page_id'] as String;
+    final shareUrl = 'https://eiquoab.xyz/page?id=$pageId';
+    final shareText = (post['content'] as String?)?.trim().isNotEmpty == true ? (post['content'] as String).trim() : 'Check out this post on Gather';
+
+    Future<void> recordShare() async {
+      try {
+        await _localRepo.recordVisitorPostShare(postId);
+        if (mounted) setState(() => _shareCount += 1);
+      } catch (_) {
+        // Sharing already happened from the user's point of view; a failed
+        // share-count write shouldn't surface as an error.
+      }
+    }
+
+    await showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: const Text('Copy link'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await Clipboard.setData(ClipboardData(text: shareUrl));
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied.')));
+                await recordShare();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.more_horiz),
+              title: const Text('More apps'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await Share.share('$shareText\n\n$shareUrl');
+                await recordShare();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final author = post['users'] is Map
-        ? Map<String, dynamic>.from(post['users'] as Map)
-        : <String, dynamic>{};
+    final author = post['users'] is Map ? Map<String, dynamic>.from(post['users'] as Map) : <String, dynamic>{};
+    final pageInfo = post['pages'] is Map ? Map<String, dynamic>.from(post['pages'] as Map) : <String, dynamic>{};
+    final eventInfo = post['page_events'] is Map ? Map<String, dynamic>.from(post['page_events'] as Map) : null;
     final name = (author['display_name'] as String?)?.trim();
     final username = (author['username'] as String?)?.trim();
     final label = name?.isNotEmpty == true
@@ -749,6 +1104,8 @@ class _VisitorPostCard extends StatelessWidget {
             : 'Gather user';
     final created = post['created_at'] as String?;
     final avatarUrl = author['profile_photo_url'] as String?;
+    final pageLogoUrl = pageInfo['logo_url'] as String?;
+    final media = (post['media'] is List) ? List<Map<String, dynamic>>.from((post['media'] as List).map((m) => Map<String, dynamic>.from(m as Map))) : const <Map<String, dynamic>>[];
 
     return Card(
       child: Padding(
@@ -758,27 +1115,58 @@ class _VisitorPostCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                if (avatarUrl?.isNotEmpty == true)
-                  ClipOval(
-                    child: Image.network(
-                      avatarUrl!,
-                      width: 36,
-                      height: 36,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 36,
-                        height: 36,
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.person_outline, size: 18),
-                      ),
+                // Both the poster's own avatar and this Page's avatar are shown
+                // together — this is a post made by a follower, not the Page
+                // owner, so it's important both identities stay visible.
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ClipOval(
+                      child: avatarUrl?.isNotEmpty == true
+                          ? Image.network(
+                              avatarUrl!,
+                              width: 36,
+                              height: 36,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                width: 36,
+                                height: 36,
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                alignment: Alignment.center,
+                                child: const Icon(Icons.person_outline, size: 18),
+                              ),
+                            )
+                          : Container(
+                              width: 36,
+                              height: 36,
+                              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                              alignment: Alignment.center,
+                              child: const Icon(Icons.person_outline, size: 18),
+                            ),
                     ),
-                  )
-                else
-                  CircleAvatar(
-                    radius: 18,
-                    child: const Icon(Icons.person_outline, size: 18),
-                  ),
+                    if (pageLogoUrl?.isNotEmpty == true)
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: Container(
+                          padding: const EdgeInsets.all(1.5),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            shape: BoxShape.circle,
+                          ),
+                          child: ClipOval(
+                            child: Image.network(
+                              pageLogoUrl!,
+                              width: 16,
+                              height: 16,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const SizedBox(width: 16, height: 16),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -800,10 +1188,7 @@ class _VisitorPostCard extends StatelessWidget {
                       if (username?.isNotEmpty == true && name?.isNotEmpty == true)
                         Text(
                           '@$username',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
+                          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                         ),
                     ],
                   ),
@@ -811,19 +1196,353 @@ class _VisitorPostCard extends StatelessWidget {
                 if (created != null)
                   Text(
                     timeAgo(DateTime.parse(created)),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                    style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
               ],
             ),
-            const SizedBox(height: 10),
-            Text(post['content'] as String? ?? ''),
+            if ((post['content'] as String?)?.isNotEmpty == true) ...[
+              const SizedBox(height: 10),
+              Text(post['content'] as String? ?? ''),
+            ],
+            if (media.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _VisitorPostMediaGrid(media: media),
+            ],
+            if (eventInfo != null) ...[
+              const SizedBox(height: 10),
+              _VisitorPostEventChip(event: eventInfo),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _VisitorPostAction(
+                  icon: _liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  iconColor: _liked ? Colors.redAccent : null,
+                  count: _likeCount,
+                  onTap: _toggleLike,
+                ),
+                const SizedBox(width: 16),
+                _VisitorPostAction(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  count: _commentCount,
+                  onTap: _openComments,
+                ),
+                const SizedBox(width: 16),
+                _VisitorPostAction(
+                  icon: Icons.send_outlined,
+                  count: _shareCount,
+                  onTap: _openShareSheet,
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
+  }
+}
+
+/// Icon + count as one tappable unit, matching the visual language of the
+/// main feed's post action bar (see `_CountedAction` in reusables.dart).
+class _VisitorPostAction extends StatelessWidget {
+  const _VisitorPostAction({required this.icon, required this.count, required this.onTap, this.iconColor});
+
+  final IconData icon;
+  final int count;
+  final VoidCallback onTap;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20, color: iconColor),
+            if (count > 0) ...[
+              const SizedBox(width: 4),
+              Text('$count', style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VisitorPostMediaGrid extends StatelessWidget {
+  const _VisitorPostMediaGrid({required this.media});
+
+  final List<Map<String, dynamic>> media;
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final images = media.where((m) => m['type'] == 'image').toList();
+    if (images.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          itemCount: images.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: images.length == 1 ? 1 : 2,
+            crossAxisSpacing: 4,
+            mainAxisSpacing: 4,
+            childAspectRatio: images.length == 1 ? 16 / 10 : 1,
+          ),
+          itemBuilder: (_, i) => Image.network(
+            images[i]['url'] as String,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              alignment: Alignment.center,
+              child: const Icon(Icons.broken_image_outlined),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final video = media.firstWhere((m) => m['type'] == 'video', orElse: () => const {});
+    if (video.isNotEmpty) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _openUrl(video['url'] as String),
+        child: Container(
+          height: 160,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          alignment: Alignment.center,
+          child: const Icon(Icons.play_circle_fill_rounded, size: 48),
+        ),
+      );
+    }
+
+    final doc = media.firstWhere((m) => m['type'] == 'document', orElse: () => const {});
+    if (doc.isNotEmpty) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _openUrl(doc['url'] as String),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            border: Border.all(color: PageColors.border(context)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: const [
+              Icon(Icons.description_outlined),
+              SizedBox(width: 8),
+              Expanded(child: Text('Open attached document', overflow: TextOverflow.ellipsis)),
+              Icon(Icons.open_in_new, size: 16),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+}
+
+class _VisitorPostEventChip extends StatelessWidget {
+  const _VisitorPostEventChip({required this.event});
+
+  final Map<String, dynamic> event;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = event['start_time'] as String?;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        border: Border.all(color: PageColors.border(context)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.event_outlined),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(event['title'] as String? ?? 'Event', style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (start != null)
+                  Text(
+                    timeAgo(DateTime.parse(start)),
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                if ((event['location'] as String?)?.isNotEmpty == true)
+                  Text(
+                    event['location'] as String,
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VisitorPostCommentsSheet extends StatefulWidget {
+  const _VisitorPostCommentsSheet({required this.postId});
+
+  final String postId;
+
+  @override
+  State<_VisitorPostCommentsSheet> createState() => _VisitorPostCommentsSheetState();
+}
+
+class _VisitorPostCommentsSheetState extends State<_VisitorPostCommentsSheet> {
+  final _localRepo = PageLocalRepository();
+  final _controller = TextEditingController();
+  List<Map<String, dynamic>> _comments = const [];
+  bool _loading = true;
+  bool _sending = false;
+  bool _added = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final comments = await _localRepo.listVisitorPostComments(widget.postId);
+      if (!mounted) return;
+      setState(() {
+        _comments = comments;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not load comments: $e')));
+    }
+  }
+
+  Future<void> _send() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      await _localRepo.addVisitorPostComment(widget.postId, text);
+      _controller.clear();
+      _added = true;
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not comment: $e')));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.7,
+          child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  child: Align(alignment: Alignment.centerLeft, child: Text('Comments', style: TextStyle(fontWeight: FontWeight.w700))),
+                ),
+                Expanded(
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _comments.isEmpty
+                          ? const Center(child: Text('No comments yet.'))
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              itemCount: _comments.length,
+                              itemBuilder: (_, i) {
+                                final c = _comments[i];
+                                final author = c['users'] is Map ? Map<String, dynamic>.from(c['users'] as Map) : <String, dynamic>{};
+                                final name = (author['display_name'] as String?)?.trim();
+                                final username = (author['username'] as String?)?.trim();
+                                final label = name?.isNotEmpty == true ? name! : (username?.isNotEmpty == true ? '@$username' : 'Gather user');
+                                final avatarUrl = author['profile_photo_url'] as String?;
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 6),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      ClipOval(
+                                        child: avatarUrl?.isNotEmpty == true
+                                            ? Image.network(avatarUrl!, width: 28, height: 28, fit: BoxFit.cover)
+                                            : Container(
+                                                width: 28,
+                                                height: 28,
+                                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                                child: const Icon(Icons.person_outline, size: 14),
+                                              ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                            Text(c['content'] as String? ?? ''),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _controller,
+                          decoration: const InputDecoration(hintText: 'Write a comment…', border: OutlineInputBorder()),
+                          minLines: 1,
+                          maxLines: 4,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _sending ? null : _send,
+                        icon: const Icon(Icons.send_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
   }
 }
 
