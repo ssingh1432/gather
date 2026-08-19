@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/supabase_client.dart';
 import '../../shared/models/models.dart';
 import '../../shared/utils/time_ago.dart';
 import '../../shared/widgets/reusables.dart';
 import 'page_visitor_post_repository.dart';
 
-/// Page-only Home presentation. Normal post cards and shared engagement
-/// infrastructure remain unchanged.
 class PageVisitorPostHomeCard extends StatefulWidget {
   const PageVisitorPostHomeCard({super.key, required this.post, required this.pageId, required this.pageName});
   final PostModel post;
   final String? pageId;
   final String pageName;
-
   @override
   State<PageVisitorPostHomeCard> createState() => _PageVisitorPostHomeCardState();
 }
@@ -32,7 +30,7 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
   }
 
   Future<void> _loadLikeState() async {
-    final uid = _currentUserId;
+    final uid = SupabaseConfig.currentUserId;
     if (uid == null) return;
     try {
       final liked = await _repo.getLikeState(widget.post.id, uid);
@@ -40,10 +38,8 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
     } catch (_) {}
   }
 
-  String? get _currentUserId => SupabaseConfig.currentUserId;
-
   Future<void> _toggleLike() async {
-    final uid = _currentUserId;
+    final uid = SupabaseConfig.currentUserId;
     if (uid == null) {
       if (mounted) context.push('/login');
       return;
@@ -114,7 +110,6 @@ class _PageAction extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
   final bool active;
-
   @override
   Widget build(BuildContext context) => TextButton.icon(
     onPressed: onTap,
@@ -126,24 +121,14 @@ class _PageAction extends StatelessWidget {
 class _PageVisitorMedia extends StatelessWidget {
   const _PageVisitorMedia({required this.items});
   final List<PostMediaItem> items;
-
   @override
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(12),
     child: Column(children: items.map((item) {
       final isImage = item.mediaType == 'image' || item.mediaType == 'gif';
-      if (!isImage) {
-        return Container(width: double.infinity, padding: const EdgeInsets.all(16), color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: Row(children: [Icon(_iconFor(item.mediaType)), const SizedBox(width: 10), Expanded(child: Text(item.mediaType.toUpperCase()))]));
-      }
-      return Padding(padding: const EdgeInsets.only(bottom: 4), child: Image.network(item.mediaUrl, width: double.infinity, fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const SizedBox(height: 120, child: Center(child: Icon(Icons.broken_image_outlined)))));
+      if (!isImage) return Container(width: double.infinity, padding: const EdgeInsets.all(16), color: Theme.of(context).colorScheme.surfaceContainerHighest, child: Row(children: [Icon(_iconFor(item.mediaType)), const SizedBox(width: 10), Expanded(child: Text(item.mediaType.toUpperCase()))]));
+      return Padding(padding: const EdgeInsets.only(bottom: 4), child: Image.network(item.mediaUrl, width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(height: 120, child: Center(child: Icon(Icons.broken_image_outlined)))));
     }).toList()),
   );
-
-  IconData _iconFor(String type) => switch (type) {
-    'video' => Icons.play_circle_outline,
-    'document' => Icons.description_outlined,
-    _ => Icons.attach_file,
-  };
+  IconData _iconFor(String type) => switch (type) { 'video' => Icons.play_circle_outline, 'document' => Icons.description_outlined, _ => Icons.attach_file };
 }
