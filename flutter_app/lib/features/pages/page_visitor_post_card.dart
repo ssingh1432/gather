@@ -1,11 +1,10 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/supabase_client.dart';
 import '../../shared/utils/time_ago.dart';
+import 'page_media_gallery.dart';
 import 'page_visitor_post_repository.dart';
 
 class PageVisitorPostCard extends StatefulWidget {
@@ -205,8 +204,8 @@ class _PageVisitorPostCardState extends State<PageVisitorPostCard> {
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
               child: Text(widget.post['content'] as String),
             ),
-          if (media.isNotEmpty) _MediaList(items: media),
-          if (event != null) _EventAttachment(event: event),
+          if (media.isNotEmpty) PageMediaAttachmentList(items: media),
+          if (event != null) PageEventAttachmentCard(event: event),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
             child: Row(
@@ -247,126 +246,16 @@ class _Avatar extends StatelessWidget {
   Widget build(BuildContext context) {
     if (url?.isNotEmpty == true) {
       return ClipOval(
-        child: Image.network(
-          url!,
+        child: PageNetworkImage(
+          url: url!,
           width: 36,
           height: 36,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => CircleAvatar(
-            radius: 18,
-            child: Icon(icon, size: 18),
-          ),
+          errorWidget: (_) => CircleAvatar(radius: 18, child: Icon(icon, size: 18)),
         ),
       );
     }
     return CircleAvatar(radius: 18, child: Icon(icon, size: 18));
   }
-}
-
-class _MediaList extends StatelessWidget {
-  const _MediaList({required this.items});
-  final List<Map<String, dynamic>> items;
-
-  Future<void> _openAttachment(BuildContext context, String url) async {
-    final launched = await launchUrl(
-      Uri.parse(url),
-      mode: LaunchMode.externalApplication,
-    );
-    if (!launched && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open this attachment.')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(
-        children: [
-          for (final item in items)
-            if (item['type'] == 'image')
-              Image.network(
-                item['url'] as String,
-                width: double.infinity,
-                height: 260,
-                fit: BoxFit.cover,
-                webHtmlElementStrategy: kIsWeb
-                    ? WebHtmlElementStrategy.prefer
-                    : WebHtmlElementStrategy.never,
-                errorBuilder: (_, __, ___) => const SizedBox(
-                  height: 100,
-                  child: Center(child: Text('Image unavailable')),
-                ),
-              )
-            else
-              InkWell(
-                onTap: () => _openAttachment(
-                  context,
-                  item['url']?.toString() ?? '',
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Icon(
-                        item['type'] == 'video'
-                            ? Icons.videocam_outlined
-                            : Icons.insert_drive_file_outlined,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(item['name']?.toString() ?? 'Attachment'),
-                      ),
-                      const Icon(Icons.open_in_new, size: 18),
-                    ],
-                  ),
-                ),
-              ),
-        ],
-      );
-}
-
-class _EventAttachment extends StatelessWidget {
-  const _EventAttachment({required this.event});
-  final Map<String, dynamic> event;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.event_outlined),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    event['title']?.toString() ?? 'Event',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  if (event['start_time'] != null)
-                    Text(
-                      DateTime.parse(event['start_time'] as String)
-                          .toLocal()
-                          .toString(),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  if (event['location'] != null)
-                    Text(
-                      event['location'].toString(),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
 }
 
 class _CommentsSheet extends StatefulWidget {

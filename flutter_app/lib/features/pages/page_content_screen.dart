@@ -5,6 +5,7 @@ import '../data/repositories.dart';
 import '../../shared/widgets/reusables.dart';
 import '../../shared/utils/time_ago.dart';
 import 'page_content_composer_screen.dart';
+import 'page_media_gallery.dart';
 import 'pages_theme.dart';
 
 /// Content management for a Page's team (Step 7): every `page_posts`
@@ -249,7 +250,7 @@ class _PostRow extends StatelessWidget {
           if (imageUrl != null) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(PageTokens.radiusSm),
-              child: Image.network(imageUrl, width: 56, height: 56, fit: BoxFit.cover),
+              child: PageNetworkImage(url: imageUrl, width: 56, height: 56),
             ),
             const SizedBox(width: PageTokens.spaceMd),
           ],

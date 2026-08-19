@@ -10,6 +10,7 @@ import '../data/repositories.dart';
 import 'donate_sheet.dart';
 import 'page_chat_screen.dart';
 import 'page_local_repository.dart';
+import 'page_media_gallery.dart';
 import 'page_visitor_post_card.dart';
 import 'page_visitor_post_composer_screen.dart';
 import 'page_visitor_post_repository.dart';
@@ -657,10 +658,13 @@ class _ProfilePostCardState extends State<_ProfilePostCard> {
     final type = post['post_type'] as String? ?? 'post';
     final pinned = post['pinned'] as bool? ?? false;
     final content = post['content'] as String? ?? '';
-    final media = post['media'];
-    final imageUrl = media is List && media.isNotEmpty && media.first is Map
-        ? (media.first as Map)['url'] as String?
-        : null;
+    final media = post['media'] is List
+        ? List<Map<String, dynamic>>.from((post['media'] as List).whereType<Map>())
+        : const <Map<String, dynamic>>[];
+    final event = media.firstWhere(
+      (m) => m['type'] == 'event',
+      orElse: () => const <String, dynamic>{},
+    );
     final publishedAt = post['published_at'] as String? ?? post['created_at'] as String?;
 
     return Container(
@@ -700,38 +704,14 @@ class _ProfilePostCardState extends State<_ProfilePostCard> {
             const SizedBox(height: 8),
             Text(content),
           ],
-          if (imageUrl != null) ...[
+          if (media.isNotEmpty) ...[
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(PageTokens.radiusSm),
-              child: Image.network(
-                imageUrl,
-                width: double.infinity,
-                height: 180,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  width: double.infinity,
-                  height: 180,
-                  color: PageColors.surfaceMuted(context),
-                  alignment: Alignment.center,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.broken_image_outlined,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Image unavailable',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              child: PageMediaAttachmentList(items: media),
             ),
           ],
+          if (event.isNotEmpty) PageEventAttachmentCard(event: event),
         ],
       ),
     );

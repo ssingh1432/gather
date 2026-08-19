@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'page_media_gallery.dart';
 
 // Re-export the core theme API used by Page-local screens. This keeps Page
 // screens dependent on the Page theme entry point instead of requiring each
@@ -321,10 +322,10 @@ class PageCoverAndLogo extends StatelessWidget {
         AspectRatio(
           aspectRatio: 3,
           child: coverUrl != null
-              ? Image.network(
-                  coverUrl,
+              ? PageNetworkImage(
+                  url: coverUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => coverFallback(),
+                  errorWidget: (_) => coverFallback(),
                 )
               : coverFallback(),
         ),
@@ -357,10 +358,10 @@ class PageCoverAndLogo extends StatelessWidget {
             ),
             clipBehavior: Clip.antiAlias,
             child: logoUrl != null
-                ? Image.network(
-                    logoUrl,
+                ? PageNetworkImage(
+                    url: logoUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => logoFallback(),
+                    errorWidget: (_) => logoFallback(),
                   )
                 : logoFallback(),
           ),

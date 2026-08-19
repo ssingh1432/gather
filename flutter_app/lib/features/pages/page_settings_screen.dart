@@ -6,6 +6,7 @@ import '../../shared/widgets/profile_view.dart' show PickedImagePreview;
 import '../../shared/widgets/reusables.dart';
 import '../data/repositories.dart';
 import 'page_local_repository.dart';
+import 'page_media_gallery.dart';
 import 'pages_theme.dart';
 
 /// Page Settings — edit a page's core info after creation.
@@ -465,7 +466,7 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
                               preview: _coverPick != null
                                   ? PickedImagePreview(bytesFuture: _coverPick!.readAsBytes())
                                   : _coverUrl != null
-                                      ? Image.network(_coverUrl!, fit: BoxFit.cover)
+                                      ? PageNetworkImage(url: _coverUrl!, fit: BoxFit.cover)
                                       : null,
                               onTap: () => _pickImage(cover: true),
                               placeholderIcon: Icons.image_outlined,
@@ -479,7 +480,7 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
                               preview: _logoPick != null
                                   ? PickedImagePreview(bytesFuture: _logoPick!.readAsBytes())
                                   : _logoUrl != null
-                                      ? Image.network(_logoUrl!, fit: BoxFit.cover)
+                                      ? PageNetworkImage(url: _logoUrl!, fit: BoxFit.cover)
                                       : null,
                               onTap: () => _pickImage(cover: false),
                               placeholderIcon: Icons.storefront,
