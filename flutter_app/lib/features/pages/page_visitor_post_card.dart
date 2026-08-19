@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -288,6 +289,9 @@ class _MediaList extends StatelessWidget {
                 width: double.infinity,
                 height: 260,
                 fit: BoxFit.cover,
+                webHtmlElementStrategy: kIsWeb
+                    ? WebHtmlElementStrategy.prefer
+                    : WebHtmlElementStrategy.never,
                 errorBuilder: (_, __, ___) => const SizedBox(
                   height: 100,
                   child: Center(child: Text('Image unavailable')),
