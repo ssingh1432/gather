@@ -140,6 +140,10 @@ class _PageVisitorPostCardState extends State<PageVisitorPostCard> {
         ? Map<String, dynamic>.from(widget.post['page_events'] as Map)
         : null;
     final created = widget.post['created_at']?.toString();
+    final pageName = widget.page['name']?.toString() ?? 'Page';
+    final authorSubtitle = username?.isNotEmpty == true && name?.isNotEmpty == true
+        ? '@$username'
+        : null;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -151,8 +155,8 @@ class _PageVisitorPostCardState extends State<PageVisitorPostCard> {
             child: Row(
               children: [
                 _Avatar(
-                  url: widget.page['logo_url']?.toString(),
-                  icon: Icons.flag_outlined,
+                  url: author['profile_photo_url']?.toString(),
+                  icon: Icons.person_outline,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -160,19 +164,19 @@ class _PageVisitorPostCardState extends State<PageVisitorPostCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.page['name']?.toString() ?? 'Page',
+                        poster,
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       Text(
-                        'posted by $poster',
+                        'posted on $pageName',
                         style: TextStyle(
                           fontSize: 12,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      if (username?.isNotEmpty == true && name?.isNotEmpty == true)
+                      if (authorSubtitle != null)
                         Text(
-                          '@$username',
+                          authorSubtitle,
                           style: TextStyle(
                             fontSize: 11,
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -182,8 +186,8 @@ class _PageVisitorPostCardState extends State<PageVisitorPostCard> {
                   ),
                 ),
                 _Avatar(
-                  url: author['profile_photo_url']?.toString(),
-                  icon: Icons.person_outline,
+                  url: widget.page['logo_url']?.toString(),
+                  icon: Icons.flag_outlined,
                 ),
               ],
             ),

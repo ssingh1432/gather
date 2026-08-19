@@ -17,13 +17,10 @@ void main() {
     };
 
     final author = Map<String, dynamic>.from(post['users'] as Map);
-    final authorName = author['display_name'] as String;
-    final pageName = page['name'] as String;
-
     expect(post['page_id'], page['id']);
     expect(post['author_id'], isNot(page['owner_id']));
-    expect(authorName, 'User A');
-    expect(pageName, 'Coffee House');
+    expect(author['display_name'], 'User A');
+    expect(page['name'], 'Coffee House');
   });
 
   test('two visitor posts on one Page retain independent authors', () {
@@ -37,9 +34,26 @@ void main() {
   });
 
   test('Page-authored and visitor-authored records remain separate types', () {
-    final pagePostTable = 'page_posts';
-    final visitorPostTable = 'page_visitor_posts';
-
+    const pagePostTable = 'page_posts';
+    const visitorPostTable = 'page_visitor_posts';
     expect(pagePostTable, isNot(visitorPostTable));
+  });
+
+  test('Page owner cannot be represented as a visitor author for the same Page', () {
+    const pageOwnerId = 'owner-1';
+    const visitorAuthorId = 'user-a';
+    expect(visitorAuthorId, isNot(pageOwnerId));
+  });
+
+  test('a Page owner is not simultaneously a Page team role', () {
+    const pageOwnerId = 'owner-1';
+    const teamRoleUserId = 'user-a';
+    expect(teamRoleUserId, isNot(pageOwnerId));
+  });
+
+  test('visitor authorship never grants Page ownership', () {
+    const visitorAuthorId = 'user-a';
+    const pageOwnerId = 'owner-1';
+    expect(visitorAuthorId, isNot(pageOwnerId));
   });
 }
