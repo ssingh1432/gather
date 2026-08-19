@@ -35,7 +35,16 @@ class PageVisitorPostRepository {
     final trimmed = content.trim();
     if (trimmed.length > 5000) throw ArgumentError('Post is too long.');
     if (trimmed.isEmpty && media.isEmpty && eventId == null) throw ArgumentError('Add text, media, or an event.');
-    final row = await _c.from('page_visitor_posts').insert({'page_id': pageId, 'author_id': uid, 'content': trimmed, 'content_type': contentType, 'media': media, 'event_id': eventId}).select('id').single();
+
+    // The database derives the authoritative author from auth.uid().
+    // Do not send a client-controlled author_id value.
+    final row = await _c.from('page_visitor_posts').insert({
+      'page_id': pageId,
+      'content': trimmed,
+      'content_type': contentType,
+      'media': media,
+      'event_id': eventId,
+    }).select('id').single();
     return row['id'] as String;
   }
 
