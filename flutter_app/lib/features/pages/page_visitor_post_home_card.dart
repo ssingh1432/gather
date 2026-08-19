@@ -18,15 +18,32 @@ class PageVisitorPostHomeCard extends StatefulWidget {
 
 class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
   final _repo = PageVisitorPostRepository();
+  final _commentCtrl = TextEditingController();
+  final _commentFocus = FocusNode();
   bool _liked = false;
   int _likeCount = 0;
+  int _commentCount = 0;
   bool _busy = false;
+  bool _commentsExpanded = false;
+  bool _commentsLoading = false;
+  bool _sendingComment = false;
+  String? _replyingToId;
+  String? _replyingToUsername;
+  List<Map<String, dynamic>> _comments = const [];
 
   @override
   void initState() {
     super.initState();
     _likeCount = widget.post.likeCount;
+    _commentCount = widget.post.commentCount;
     _loadLikeState();
+  }
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    _commentFocus.dispose();
+    super.dispose();
   }
 
   Future<void> _loadLikeState() async {
@@ -36,6 +53,69 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
       final liked = await _repo.getLikeState(widget.post.id, uid);
       if (mounted) setState(() => _liked = liked);
     } catch (_) {}
+  }
+
+  Future<void> _loadComments() async {
+    if (_commentsLoading) return;
+    setState(() => _commentsLoading = true);
+    try {
+      final comments = await _repo.listComments(widget.post.id);
+      final count = await _repo.commentCount(widget.post.id);
+      if (mounted) setState(() {
+        _comments = comments;
+        _commentCount = count;
+      });
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not load comments. Please try again.')));
+    } finally {
+      if (mounted) setState(() => _commentsLoading = false);
+    }
+  }
+
+  Future<void> _toggleComments() async {
+    setState(() => _commentsExpanded = !_commentsExpanded);
+    if (_commentsExpanded) await _loadComments();
+  }
+
+  void _startReply(Map<String, dynamic> comment) {
+    setState(() {
+      _replyingToId = comment['id']?.toString();
+      final user = comment['users'] as Map<String, dynamic>?;
+      _replyingToUsername = user?['username'] as String?;
+      _commentsExpanded = true;
+    });
+    _loadComments();
+    _commentFocus.requestFocus();
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyingToId = null;
+      _replyingToUsername = null;
+    });
+  }
+
+  Future<void> _submitComment() async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) {
+      if (mounted) context.push('/login');
+      return;
+    }
+    final text = _commentCtrl.text.trim();
+    if (text.isEmpty || _sendingComment) return;
+    final pageId = widget.pageId;
+    if (pageId == null || pageId.isEmpty) return;
+    setState(() => _sendingComment = true);
+    try {
+      await _repo.addComment(widget.post.id, pageId, text, parentCommentId: _replyingToId);
+      _commentCtrl.clear();
+      _cancelReply();
+      await _loadComments();
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not post comment. Please try again.')));
+    } finally {
+      if (mounted) setState(() => _sendingComment = false);
+    }
   }
 
   Future<void> _toggleLike() async {
@@ -91,8 +171,23 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
           const SizedBox(height: 8),
           Row(children: [
             _PageAction(icon: _liked ? Icons.favorite : Icons.favorite_border, label: _likeCount == 0 ? 'Like' : '$_likeCount', active: _liked, onTap: _busy ? null : _toggleLike),
+            _PageAction(icon: _commentsExpanded ? Icons.mode_comment : Icons.mode_comment_outlined, label: _commentCount == 0 ? 'Comment' : '$_commentCount', active: _commentsExpanded, onTap: _toggleComments),
             const Spacer(),
           ]),
+          if (_commentsExpanded) ...[
+            const SizedBox(height: 4),
+            _PageComments(
+              comments: _comments,
+              loading: _commentsLoading,
+              replyingToUsername: _replyingToUsername,
+              commentController: _commentCtrl,
+              commentFocus: _commentFocus,
+              sending: _sendingComment,
+              onReply: _startReply,
+              onCancelReply: _cancelReply,
+              onSubmit: _submitComment,
+            ),
+          ],
           const SizedBox(height: 8),
           SizedBox(width: double.infinity, child: OutlinedButton.icon(
             onPressed: widget.pageId == null || widget.pageId!.isEmpty ? null : () => context.push('/page-profile?id=${widget.pageId}'),
@@ -116,6 +211,97 @@ class _PageAction extends StatelessWidget {
     icon: Icon(icon, size: 20, color: active ? Theme.of(context).colorScheme.primary : null),
     label: Text(label, style: TextStyle(color: active ? Theme.of(context).colorScheme.primary : null)),
   );
+}
+
+class _PageComments extends StatelessWidget {
+  const _PageComments({required this.comments, required this.loading, required this.replyingToUsername, required this.commentController, required this.commentFocus, required this.sending, required this.onReply, required this.onCancelReply, required this.onSubmit});
+  final List<Map<String, dynamic>> comments;
+  final bool loading;
+  final String? replyingToUsername;
+  final TextEditingController commentController;
+  final FocusNode commentFocus;
+  final bool sending;
+  final void Function(Map<String, dynamic>) onReply;
+  final VoidCallback onCancelReply;
+  final VoidCallback onSubmit;
+
+  List<Map<String, dynamic>> _children(String? parentId) => comments.where((c) => (c['parent_comment_id']?.toString()) == parentId).toList();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+      decoration: BoxDecoration(color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35), borderRadius: BorderRadius.circular(12)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (loading) const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+        if (!loading && comments.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text('No comments yet. Be the first to comment.', style: theme.textTheme.bodySmall)),
+        if (!loading) ..._children(null).map((comment) => _RecursivePageComment(comment: comment, children: _children, onReply: onReply)),
+        if (replyingToUsername != null) Padding(
+          padding: const EdgeInsets.only(left: 40, bottom: 4),
+          child: Row(children: [Expanded(child: Text('Replying to @${replyingToUsername!}', style: theme.textTheme.bodySmall)), IconButton(onPressed: onCancelReply, icon: const Icon(Icons.close, size: 16), visualDensity: VisualDensity.compact)]),
+        ),
+        Row(children: [
+          const SizedBox(width: 4),
+          Expanded(child: TextField(
+            controller: commentController,
+            focusNode: commentFocus,
+            minLines: 1,
+            maxLines: 4,
+            textInputAction: TextInputAction.send,
+            onSubmitted: (_) => onSubmit(),
+            decoration: InputDecoration(hintText: replyingToUsername == null ? 'Write a comment…' : 'Write a reply…', isDense: true, filled: true, fillColor: theme.colorScheme.surface, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9)),
+          )),
+          IconButton(onPressed: sending ? null : onSubmit, icon: sending ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(Icons.send, color: theme.colorScheme.primary)),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _RecursivePageComment extends StatelessWidget {
+  const _RecursivePageComment({required this.comment, required this.children, required this.onReply});
+  final Map<String, dynamic> comment;
+  final List<Map<String, dynamic>> Function(String? parentId) children;
+  final void Function(Map<String, dynamic>) onReply;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final user = comment['users'] as Map<String, dynamic>?;
+    final replies = children(comment['id']?.toString());
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ProfileAvatar(url: user?['profile_photo_url'] as String?, radius: 14),
+          const SizedBox(width: 8),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(12)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(user?['username'] as String? ?? 'User', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(comment['content'] as String? ?? '', style: theme.textTheme.bodyMedium),
+              ]),
+            ),
+            Padding(padding: const EdgeInsets.only(left: 10, top: 2), child: Row(children: [
+              Text(timeAgo(DateTime.tryParse(comment['created_at']?.toString() ?? '') ?? DateTime.now()), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+              const SizedBox(width: 12),
+              InkWell(onTap: () => onReply(comment), child: Text('Reply', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700, color: theme.colorScheme.primary))),
+            ])),
+          ])),
+        ]),
+        if (replies.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 30),
+            child: Column(children: replies.map((reply) => _RecursivePageComment(comment: reply, children: children, onReply: onReply)).toList()),
+          ),
+      ]),
+    );
+  }
 }
 
 class _PageVisitorMedia extends StatelessWidget {
