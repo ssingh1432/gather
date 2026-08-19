@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -16,6 +17,8 @@ class PageVisitorPostHomeCard extends StatefulWidget {
   @override
   State<PageVisitorPostHomeCard> createState() => _PageVisitorPostHomeCardState();
 }
+
+enum _PagePostMenuAction { report, copyLink }
 
 class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
   final _repo = PageVisitorPostRepository();
@@ -146,6 +149,34 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
     }
   }
 
+  String? _postLink() {
+    final pageId = widget.pageId;
+    if (pageId == null || pageId.isEmpty) return null;
+    return 'https://eiquoab.xyz/page?id=$pageId&visitorPostId=${widget.post.id}';
+  }
+
+  Future<void> _copyLink() async {
+    final link = _postLink();
+    if (link == null) return;
+    try {
+      await Clipboard.setData(ClipboardData(text: link));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post link copied.')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not copy the post link.')));
+      }
+    }
+  }
+
+  void _reportPost() {
+    context.push(Uri(
+      path: '/report',
+      queryParameters: {'postId': widget.post.id},
+    ).toString());
+  }
+
   Future<void> _share() async {
     final uid = SupabaseConfig.currentUserId;
     if (uid == null) {
@@ -160,7 +191,7 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
         ? '@${widget.post.authorUsername}'
         : 'Gather user';
     final text = widget.post.textContent.trim();
-    final url = 'https://eiquoab.xyz/page?id=$pageId&visitorPostId=$id';
+    final url = _postLink()!;
     final body = [
       'Posted by $poster on ${widget.pageName.isEmpty ? 'Page' : widget.pageName}',
       if (text.isNotEmpty) text,
@@ -177,9 +208,19 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
     }
   }
 
+  void _handlePostMenuAction(_PagePostMenuAction action) {
+    switch (action) {
+      case _PagePostMenuAction.report:
+        _reportPost();
+      case _PagePostMenuAction.copyLink:
+        _copyLink();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authorName = (widget.post.authorUsername == null || widget.post.authorUsername!.isEmpty) ? 'Gather user' : '@${widget.post.authorUsername}';
+    final canCopyLink = _postLink() != null;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(color: Theme.of(context).cardColor, border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 8))),
@@ -196,7 +237,29 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
                 Text('• ${timeAgo(widget.post.createdAt)}'),
               ]),
             ])),
-            const Tooltip(message: 'Visitor post', child: Icon(Icons.campaign_outlined, size: 20)),
+            PopupMenuButton<_PagePostMenuAction>(
+              tooltip: 'Post options',
+              onSelected: _handlePostMenuAction,
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: _PagePostMenuAction.report,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.flag_outlined),
+                    title: Text('Report post'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: _PagePostMenuAction.copyLink,
+                  enabled: canCopyLink,
+                  child: const ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.link),
+                    title: Text('Copy link'),
+                  ),
+                ),
+              ],
+            ),
           ]),
           if (widget.post.textContent.trim().isNotEmpty) ...[const SizedBox(height: 12), Text(widget.post.textContent, style: Theme.of(context).textTheme.bodyLarge)],
           if (widget.post.mediaItems.isNotEmpty) ...[const SizedBox(height: 12), _PageVisitorMedia(items: widget.post.mediaItems)],
@@ -284,7 +347,7 @@ class _PageComments extends StatelessWidget {
             maxLines: 4,
             textInputAction: TextInputAction.send,
             onSubmitted: (_) => onSubmit(),
-            decoration: InputDecoration(hintText: replyingToUsername == null ? 'Write a comment…' : 'Write a reply…', isDense: true, filled: true, fillColor: theme.colorScheme.surface, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9)),
+            decoration: InputDecoration(hintText: replyingToUsername == null ? 'Write a comment…' : 'Write a reply…', isDense: true, filled: true, fillColor: theme.colorScheme.surface, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9)),
           )),
           IconButton(onPressed: sending ? null : onSubmit, icon: sending ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(Icons.send, color: theme.colorScheme.primary)),
         ]),
