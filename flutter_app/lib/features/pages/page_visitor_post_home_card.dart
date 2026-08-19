@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/supabase_client.dart';
 import '../../shared/models/models.dart';
@@ -145,6 +146,37 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
     }
   }
 
+  Future<void> _share() async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) {
+      if (mounted) context.push('/login');
+      return;
+    }
+    final pageId = widget.pageId;
+    if (pageId == null || pageId.isEmpty) return;
+
+    final id = widget.post.id;
+    final poster = widget.post.authorUsername?.isNotEmpty == true
+        ? '@${widget.post.authorUsername}'
+        : 'Gather user';
+    final text = widget.post.textContent.trim();
+    final url = 'https://eiquoab.xyz/page?id=$pageId&visitorPostId=$id';
+    final body = [
+      'Posted by $poster on ${widget.pageName.isEmpty ? 'Page' : widget.pageName}',
+      if (text.isNotEmpty) text,
+      url,
+    ].join('\n\n');
+
+    try {
+      await Share.share(body);
+      await _repo.recordShare(id, uid);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not share this post.')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authorName = (widget.post.authorUsername == null || widget.post.authorUsername!.isEmpty) ? 'Gather user' : '@${widget.post.authorUsername}';
@@ -172,6 +204,7 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
           Row(children: [
             _PageAction(icon: _liked ? Icons.favorite : Icons.favorite_border, label: _likeCount == 0 ? 'Like' : '$_likeCount', active: _liked, onTap: _busy ? null : _toggleLike),
             _PageAction(icon: _commentsExpanded ? Icons.mode_comment : Icons.mode_comment_outlined, label: _commentCount == 0 ? 'Comment' : '$_commentCount', active: _commentsExpanded, onTap: _toggleComments),
+            _PageAction(icon: Icons.share_outlined, label: 'Share', onTap: _share),
             const Spacer(),
           ]),
           if (_commentsExpanded) ...[
