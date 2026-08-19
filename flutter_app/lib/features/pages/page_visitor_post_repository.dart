@@ -13,12 +13,7 @@ class PageVisitorPostRepository {
   }
 
   Future<List<Map<String, dynamic>>> listVisitorPosts(String pageId) async {
-    final rows = await _c
-        .from('page_visitor_posts')
-        .select('id,page_id,author_id,content,status,content_type,media,event_id,created_at,users!page_visitor_posts_author_id_fkey(username,display_name,profile_photo_url),page_events(id,title,location,start_time)')
-        .eq('page_id', pageId)
-        .eq('status', 'published')
-        .order('created_at', ascending: false);
+    final rows = await _c.from('page_visitor_posts').select('id,page_id,author_id,content,status,content_type,media,event_id,created_at,users!page_visitor_posts_author_id_fkey(username,display_name,profile_photo_url),page_events(id,title,location,start_time)').eq('page_id', pageId).eq('status', 'published').order('created_at', ascending: false);
     final list = (rows as List).cast<Map<String, dynamic>>();
     for (final row in list) {
       row['like_count'] = await _countRows('page_visitor_post_likes', row['id'] as String);
@@ -28,7 +23,7 @@ class PageVisitorPostRepository {
   }
 
   Future<List<Map<String, dynamic>>> listEvents(String pageId) async =>
-      (await _c.from('page_events').select('id,title,location,start_time,end_time').eq('page_id', pageId).isFilter('deleted_at', null).order('start_time')).cast<Map<String, dynamic>>();
+      (await _c.from('page_events').select('id,title,location,start_time,end_time').isFilter('deleted_at', null).eq('page_id', pageId).order('start_time')).cast<Map<String, dynamic>>();
 
   Future<String> createVisitorPost({required String pageId, required String content, required String contentType, List<Map<String, dynamic>> media = const [], String? eventId}) async {
     final uid = SupabaseConfig.currentUserId;
@@ -36,7 +31,7 @@ class PageVisitorPostRepository {
     final trimmed = content.trim();
     if (trimmed.length > 5000) throw ArgumentError('Post is too long.');
     if (trimmed.isEmpty && media.isEmpty && eventId == null) throw ArgumentError('Add text, media, or an event.');
-    final row = await _c.from('page_visitor_posts').insert({'page_id': pageId, 'author_id': uid, 'content': trimmed, 'content_type': contentType, 'media': media, 'event_id': eventId}).select('id').single();
+    final row = await _c.from('page_visitor_posts').insert({'page_id': pageId, 'content': trimmed, 'content_type': contentType, 'media': media, 'event_id': eventId}).select('id').single();
     return row['id'] as String;
   }
 
@@ -57,20 +52,13 @@ class PageVisitorPostRepository {
   }
 
   Future<void> updateMedia(String postId, List<Map<String, dynamic>> media) => _c.from('page_visitor_posts').update({'media': media}).eq('id', postId);
-
   Future<void> deleteVisitorPost(String postId) => _c.from('page_visitor_posts').delete().eq('id', postId);
 
   Future<void> deleteVisitorPostWithMedia({required String pageId, required String postId}) async {
     try {
       final files = await _c.storage.from(bucket).list(path: '$pageId/$postId');
-      if (files.isNotEmpty) {
-        await _c.storage.from(bucket).remove([
-          for (final file in files) '$pageId/$postId/${file.name}',
-        ]);
-      }
-    } catch (_) {
-      // Cleanup is best-effort; never expose storage details to users.
-    }
+      if (files.isNotEmpty) await _c.storage.from(bucket).remove([for (final file in files) '$pageId/$postId/${file.name}']);
+    } catch (_) {}
     await deleteVisitorPost(postId);
   }
 
@@ -97,7 +85,7 @@ class PageVisitorPostRepository {
     await _c.from('page_visitor_post_comments').insert({'post_id': postId, 'user_id': uid, 'content': text});
   }
 
-  Future<int> commentCount(String postId) async => await _countRows('page_visitor_post_comments', postId);
+  Future<int> commentCount(String postId) async => _countRows('page_visitor_post_comments', postId);
   Future<void> deleteComment(String commentId) => _c.from('page_visitor_post_comments').delete().eq('id', commentId);
   Future<void> recordShare(String postId, String userId) => _c.from('page_visitor_post_shares').insert({'post_id': postId, 'user_id': userId});
 

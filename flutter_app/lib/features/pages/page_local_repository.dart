@@ -23,7 +23,8 @@ class PageLocalRepository {
     if (uid == null) throw StateError('Sign in to post on a Page.');
     if (trimmed.isEmpty) throw ArgumentError('Post cannot be empty.');
     if (trimmed.length > 5000) throw ArgumentError('Post is too long.');
-    await _c.from('page_visitor_posts').insert({'page_id': pageId, 'author_id': uid, 'content': trimmed});
+    // Identity is deliberately omitted; PostgreSQL derives author_id from auth.uid().
+    await _c.from('page_visitor_posts').insert({'page_id': pageId, 'content': trimmed});
   }
 
   Future<void> moderateVisitorPost(String postId, String status) async {
@@ -55,13 +56,8 @@ class PageLocalRepository {
     await _c.from('pages').update({'allow_visitor_posts': enabled, 'visitor_posts_require_approval': requireApproval}).eq('id', pageId);
   }
 
-  /// Removes a follower through the server-side Page permission check.
-  /// Only users with manage_roles (owner/manager by default) can perform it.
   Future<void> removeFollower(String pageId, String userId) async {
-    await _c.rpc('remove_page_follower', params: {
-      'p_page_id': pageId,
-      'p_user_id': userId,
-    });
+    await _c.rpc('remove_page_follower', params: {'p_page_id': pageId, 'p_user_id': userId});
   }
 
   Future<bool> isPageOwner(String pageId) async {
@@ -71,11 +67,7 @@ class PageLocalRepository {
     return row?['role'] == 'owner';
   }
 
-  /// Owner-only lifecycle actions. These stay Page-local so no shared Gather
-  /// repository needs to know about Page-specific destructive operations.
   Future<void> deactivatePage(String pageId) => _c.rpc('deactivate_page', params: {'p_page_id': pageId});
-
   Future<void> reactivatePage(String pageId) => _c.rpc('reactivate_page', params: {'p_page_id': pageId});
-
   Future<void> deletePagePermanently(String pageId) => _c.rpc('delete_page_permanently', params: {'p_page_id': pageId});
 }
