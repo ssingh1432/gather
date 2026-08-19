@@ -86,14 +86,27 @@ class PageVisitorPostRepository {
     if (liked) await _c.from('page_visitor_post_likes').upsert({'post_id': postId, 'user_id': uid});
     else await _c.from('page_visitor_post_likes').delete().match({'post_id': postId, 'user_id': uid});
   }
-  Future<List<Map<String, dynamic>>> listComments(String postId) async => (await _c.from('page_visitor_post_comments').select('id,post_id,user_id,content,created_at,users!page_visitor_post_comments_user_id_fkey(username,display_name,profile_photo_url)').eq('post_id', postId).order('created_at')).cast<Map<String, dynamic>>();
-  Future<void> addComment(String postId, String pageId, String content) async {
+
+  Future<List<Map<String, dynamic>>> listComments(String postId) async {
+    final rows = await _c.from('page_visitor_post_comments')
+        .select('id,post_id,user_id,parent_comment_id,content,created_at,updated_at,users!page_visitor_post_comments_user_id_fkey(username,display_name,profile_photo_url)')
+        .eq('post_id', postId)
+        .order('created_at', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> addComment(String postId, String pageId, String content, {String? parentCommentId}) async {
     final uid = SupabaseConfig.currentUserId;
     if (uid == null) throw StateError('Sign in to comment.');
     final text = content.trim();
     if (text.isEmpty || text.length > 2000) throw ArgumentError('Comment must be 1–2000 characters.');
-    await _c.from('page_visitor_post_comments').insert({'post_id': postId, 'user_id': uid, 'content': text});
+    if (parentCommentId != null) {
+      final parent = await _c.from('page_visitor_post_comments').select('id,post_id').eq('id', parentCommentId).maybeSingle();
+      if (parent == null || parent['post_id'] != postId) throw ArgumentError('Invalid comment reply.');
+    }
+    await _c.from('page_visitor_post_comments').insert({'post_id': postId, 'user_id': uid, 'content': text, 'parent_comment_id': parentCommentId});
   }
+
   Future<int> commentCount(String postId) async => _countRows('page_visitor_post_comments', postId);
   Future<void> deleteComment(String commentId) => _c.from('page_visitor_post_comments').delete().eq('id', commentId);
   Future<void> recordShare(String postId, String userId) => _c.from('page_visitor_post_shares').insert({'post_id': postId, 'user_id': userId});
