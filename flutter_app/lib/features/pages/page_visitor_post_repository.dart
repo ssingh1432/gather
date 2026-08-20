@@ -52,26 +52,47 @@ class PageVisitorPostRepository {
 
   Future<String> createVisitorPost({required String pageId, required String content, required String contentType, List<Map<String, dynamic>> media = const [], String? eventId}) async {
     final uid = SupabaseConfig.currentUserId;
-    if (uid == null) throw StateError('Sign in to post on a Page.');
+    if (uid == null) throw const PageVisitorMediaException('Sign in to post on a Page.');
     final trimmed = content.trim();
-    if (trimmed.length > 5000) throw ArgumentError('Post is too long.');
-    if (trimmed.isEmpty && media.isEmpty && eventId == null) throw ArgumentError('Add text, media, or an event.');
-    final row = await _c.from('page_visitor_posts').insert({'page_id': pageId, 'content': trimmed, 'content_type': contentType, 'media': media, 'event_id': eventId}).select('id').single();
-    return row['id'] as String;
+    if (trimmed.length > 5000) throw const PageVisitorMediaException('Post is too long.');
+    if (trimmed.isEmpty && media.isEmpty && eventId == null) throw const PageVisitorMediaException('Add text, media, or an event.');
+    try {
+      final row = await _c.from('page_visitor_posts').insert({
+        'page_id': pageId,
+        'content': trimmed,
+        'content_type': contentType,
+        'media': media,
+        'event_id': eventId,
+      }).select('id').single();
+      return row['id'] as String;
+    } on PostgrestException catch (e) {
+      throw PageVisitorMediaException(_friendlyPostError(e));
+    }
   }
 
   Future<String> uploadMedia({required String pageId, required String postId, required List<int> bytes, required String mimeType, required String fileName}) async {
+    if (bytes.isEmpty) throw const PageVisitorMediaException('The selected file is empty.');
     if (bytes.length > maxBytes) throw const PageVisitorMediaException('File must be 25 MB or smaller.');
     final safe = fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     final path = '$pageId/$postId/$safe';
     try {
       await _c.storage.from(bucket).uploadBinary(path, Uint8List.fromList(bytes), fileOptions: FileOptions(contentType: mimeType, cacheControl: '31536000', upsert: false));
       return _c.storage.from(bucket).getPublicUrl(path);
-    } on StorageException catch (e) { throw PageVisitorMediaException(_friendlyStorageError(e)); }
+    } on StorageException catch (e) {
+      throw PageVisitorMediaException('${_friendlyStorageError(e)} ($mimeType)');
+    }
   }
 
-  Future<void> updateMedia(String postId, List<Map<String, dynamic>> media) => _c.from('page_visitor_posts').update({'media': media}).eq('id', postId);
+  Future<void> updateMedia(String postId, List<Map<String, dynamic>> media) async {
+    try {
+      await _c.from('page_visitor_posts').update({'media': media}).eq('id', postId).select('id').single();
+    } on PostgrestException catch (e) {
+      throw PageVisitorMediaException(_friendlyPostError(e));
+    }
+  }
+
   Future<void> deleteVisitorPost(String postId) => _c.from('page_visitor_posts').delete().eq('id', postId);
+
   Future<void> deleteVisitorPostWithMedia({required String pageId, required String postId}) async {
     try {
       final files = await _c.storage.from(bucket).list(path: '$pageId/$postId');
@@ -79,6 +100,7 @@ class PageVisitorPostRepository {
     } catch (_) {}
     await deleteVisitorPost(postId);
   }
+
   Future<bool> getLikeState(String postId, String userId) async => (await _c.from('page_visitor_post_likes').select('post_id').match({'post_id': postId, 'user_id': userId}).maybeSingle()) != null;
   Future<void> setLike(String postId, bool liked) async {
     final uid = SupabaseConfig.currentUserId;
@@ -111,11 +133,19 @@ class PageVisitorPostRepository {
   Future<void> deleteComment(String commentId) => _c.from('page_visitor_post_comments').delete().eq('id', commentId);
   Future<void> recordShare(String postId, String userId) => _c.from('page_visitor_post_shares').insert({'post_id': postId, 'user_id': userId});
 
+  static String _friendlyPostError(PostgrestException e) {
+    final message = e.message.toLowerCase();
+    if (message.contains('row-level') || message.contains('permission') || message.contains('policy') || message.contains('not authorized')) return 'You do not have permission to create or update this Page post. Make sure you follow the Page.';
+    if (message.contains('content_type') || message.contains('check constraint')) return 'This Page post contains an unsupported content combination.';
+    if (message.contains('event_id') || message.contains('foreign key')) return 'The selected Page event is no longer available.';
+    return 'The Page post could not be saved. Please try again.';
+  }
+
   static String _friendlyStorageError(StorageException e) {
     final message = e.message.toLowerCase();
     if (message.contains('row-level') || message.contains('permission') || message.contains('unauthorized') || message.contains('forbidden')) return 'You do not have permission to upload media to this Page. Make sure you follow the Page.';
     if (message.contains('too large') || message.contains('entitytoolarge') || message.contains('size')) return 'This file is larger than the 25 MB limit.';
-    if (message.contains('mime') || message.contains('type')) return 'This file type is not supported.';
+    if (message.contains('mime') || message.contains('type') || message.contains('content type')) return 'This file type is not supported by Page media.';
     return 'The media upload failed. Please try again.';
   }
 }
