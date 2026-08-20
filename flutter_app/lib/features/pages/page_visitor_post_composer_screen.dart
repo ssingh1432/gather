@@ -34,6 +34,14 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
 
   bool _isSupported(String mime) => const {'image/jpeg','image/png','image/webp','image/gif','video/mp4','video/quicktime','video/webm','application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain'}.contains(mime);
 
+  String _contentType() {
+    if (_images.isNotEmpty) return 'image';
+    if (_video != null) return 'video';
+    if (_documents.isNotEmpty) return 'document';
+    if (_eventId != null) return 'event';
+    return 'text';
+  }
+
   Future<void> _pickImages() async {
     final files = await _picker.pickMultiImage();
     if (!mounted) return;
@@ -76,7 +84,7 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
     setState(()=>_submitting=true);
     String? postId;
     try {
-      postId=await _repo.createVisitorPost(pageId:widget.pageId,content:_text.text,contentType:hasMedia ? 'rich' : (_eventId != null ? 'event' : 'text'),eventId:_eventId);
+      postId=await _repo.createVisitorPost(pageId:widget.pageId,content:_text.text,contentType:_contentType(),eventId:_eventId);
       final media=<Map<String,dynamic>>[];
       for (final image in _images) {
         final bytes = await image.readAsBytes();
