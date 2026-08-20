@@ -135,9 +135,14 @@ class PageVisitorPostRepository {
 
   static String _friendlyPostError(PostgrestException e) {
     final message = e.message.toLowerCase();
+    if (message.contains('page managers must publish page-authored posts')) return 'This account manages the Page. Use a Page-authored post instead of a visitor post.';
+    if (message.contains('visitor posts are not enabled')) return 'Visitor posts are disabled for this Page.';
+    if (message.contains('you must follow this page')) return 'Follow this Page before posting on it.';
+    if (message.contains('authentication is required')) return 'Sign in to post on a Page.';
     if (message.contains('row-level') || message.contains('permission') || message.contains('policy') || message.contains('not authorized')) return 'You do not have permission to create or update this Page post. Make sure you follow the Page.';
     if (message.contains('content_type') || message.contains('check constraint')) return 'This Page post contains an unsupported content combination.';
     if (message.contains('event_id') || message.contains('foreign key')) return 'The selected Page event is no longer available.';
+    if (message.contains('duplicate') || message.contains('already exists')) return 'One of the selected attachments is already being used by this Page post.';
     return 'The Page post could not be saved. Please try again.';
   }
 
@@ -146,7 +151,19 @@ class PageVisitorPostRepository {
     if (message.contains('row-level') || message.contains('permission') || message.contains('unauthorized') || message.contains('forbidden')) return 'You do not have permission to upload media to this Page. Make sure you follow the Page.';
     if (message.contains('too large') || message.contains('entitytoolarge') || message.contains('size')) return 'This file is larger than the 25 MB limit.';
     if (message.contains('mime') || message.contains('type') || message.contains('content type')) return 'This file type is not supported by Page media.';
+    if (message.contains('already exists') || message.contains('duplicate')) return 'A file with this name is already attached to this Page post. Rename the file and try again.';
     return 'The media upload failed. Please try again.';
+  }
+
+  static String friendlyUnexpectedError(Object error) {
+    final message = error.toString().toLowerCase();
+    if (message.contains('permission') || message.contains('unauthorized') || message.contains('forbidden') || message.contains('row-level')) return 'You do not have permission to create this Page post. Make sure you follow the Page.';
+    if (message.contains('too large') || message.contains('entitytoolarge') || message.contains('size')) return 'One of the selected files is larger than the 25 MB limit.';
+    if (message.contains('mime') || message.contains('content type') || message.contains('unsupported')) return 'One of the selected files is not supported by Page media.';
+    if (message.contains('event') && message.contains('foreign key')) return 'The selected Page event is no longer available.';
+    if (message.contains('network') || message.contains('socket') || message.contains('connection')) return 'The network connection failed while saving the Page post. Please try again.';
+    if (message.contains('out of memory') || message.contains('memory')) return 'The selected media is too large to process on this device. Remove a large file and try again.';
+    return 'The Page post could not be saved. Please try again.';
   }
 }
 
