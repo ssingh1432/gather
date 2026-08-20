@@ -14,6 +14,7 @@ class PageVisitorPostHomeCard extends StatefulWidget {
   final PostModel post;
   final String? pageId;
   final String pageName;
+
   @override
   State<PageVisitorPostHomeCard> createState() => _PageVisitorPostHomeCardState();
 }
@@ -160,21 +161,14 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
     if (link == null) return;
     try {
       await Clipboard.setData(ClipboardData(text: link));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post link copied.')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post link copied.')));
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not copy the post link.')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not copy the post link.')));
     }
   }
 
   void _reportPost() {
-    context.push(Uri(
-      path: '/report',
-      queryParameters: {'postId': widget.post.id},
-    ).toString());
+    context.push(Uri(path: '/report', queryParameters: {'postId': widget.post.id}).toString());
   }
 
   Future<void> _share() async {
@@ -185,26 +179,15 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
     }
     final pageId = widget.pageId;
     if (pageId == null || pageId.isEmpty) return;
-
-    final id = widget.post.id;
-    final poster = widget.post.authorUsername?.isNotEmpty == true
-        ? '@${widget.post.authorUsername}'
-        : 'Gather user';
+    final poster = widget.post.authorUsername?.isNotEmpty == true ? '@${widget.post.authorUsername}' : 'Gather user';
     final text = widget.post.textContent.trim();
     final url = _postLink()!;
-    final body = [
-      'Posted by $poster on ${widget.pageName.isEmpty ? 'Page' : widget.pageName}',
-      if (text.isNotEmpty) text,
-      url,
-    ].join('\n\n');
-
+    final body = ['Posted by $poster on ${widget.pageName.isEmpty ? 'Page' : widget.pageName}', if (text.isNotEmpty) text, url].join('\n\n');
     try {
       await Share.share(body);
-      await _repo.recordShare(id, uid);
+      await _repo.recordShare(widget.post.id, uid);
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not share this post.')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not share this post.')));
     }
   }
 
@@ -219,8 +202,10 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
 
   @override
   Widget build(BuildContext context) {
-    final authorName = (widget.post.authorUsername == null || widget.post.authorUsername!.isEmpty) ? 'Gather user' : '@${widget.post.authorUsername}';
+    final authorName = widget.post.authorUsername?.isNotEmpty == true ? '@${widget.post.authorUsername}' : 'Gather user';
     final canCopyLink = _postLink() != null;
+    final canViewPage = widget.pageId?.isNotEmpty == true;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(color: Theme.of(context).cardColor, border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 8))),
@@ -228,9 +213,11 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            ProfileAvatar(url: widget.post.authorAvatarUrl, radius: 20), const SizedBox(width: 10),
+            ProfileAvatar(url: widget.post.authorAvatarUrl, radius: 20),
+            const SizedBox(width: 10),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(authorName, style: const TextStyle(fontWeight: FontWeight.w700)), const SizedBox(height: 2),
+              Text(authorName, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
               Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 4, children: [
                 const Icon(Icons.arrow_forward, size: 13),
                 Text(widget.pageName.isEmpty ? 'a Page' : widget.pageName, style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary)),
@@ -241,54 +228,30 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
               tooltip: 'Post options',
               onSelected: _handlePostMenuAction,
               itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: _PagePostMenuAction.report,
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.flag_outlined),
-                    title: Text('Report post'),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: _PagePostMenuAction.copyLink,
-                  enabled: canCopyLink,
-                  child: const ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.link),
-                    title: Text('Copy link'),
-                  ),
-                ),
+                const PopupMenuItem(value: _PagePostMenuAction.report, child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.flag_outlined), title: Text('Report post'))),
+                PopupMenuItem(value: _PagePostMenuAction.copyLink, enabled: canCopyLink, child: const ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.link), title: Text('Copy link'))),
               ],
             ),
           ]),
           if (widget.post.textContent.trim().isNotEmpty) ...[const SizedBox(height: 12), Text(widget.post.textContent, style: Theme.of(context).textTheme.bodyLarge)],
           if (widget.post.mediaItems.isNotEmpty) ...[const SizedBox(height: 12), _PageVisitorMedia(items: widget.post.mediaItems)],
-          const SizedBox(height: 8),
-          Row(children: [
-            _PageAction(icon: _liked ? Icons.favorite : Icons.favorite_border, label: _likeCount == 0 ? 'Like' : '$_likeCount', active: _liked, onTap: _busy ? null : _toggleLike),
-            _PageAction(icon: _commentsExpanded ? Icons.mode_comment : Icons.mode_comment_outlined, label: _commentCount == 0 ? 'Comment' : '$_commentCount', active: _commentsExpanded, onTap: _toggleComments),
-            _PageAction(icon: Icons.share_outlined, label: 'Share', onTap: _share),
-            const Spacer(),
-          ]),
+          const SizedBox(height: 6),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 2,
+            runSpacing: 2,
+            children: [
+              _PageAction(icon: _liked ? Icons.favorite : Icons.favorite_border, label: _likeCount == 0 ? 'Like' : '$_likeCount', active: _liked, onTap: _busy ? null : _toggleLike),
+              _PageAction(icon: _commentsExpanded ? Icons.mode_comment : Icons.mode_comment_outlined, label: _commentCount == 0 ? 'Comment' : '$_commentCount', active: _commentsExpanded, onTap: _toggleComments),
+              _PageAction(icon: Icons.share_outlined, label: 'Share', onTap: _share),
+              _PageAction(icon: Icons.open_in_new, label: 'View Page & post', onTap: canViewPage ? () => context.push('/page-profile?id=${widget.pageId}') : null),
+            ],
+          ),
           if (_commentsExpanded) ...[
             const SizedBox(height: 4),
-            _PageComments(
-              comments: _comments,
-              loading: _commentsLoading,
-              replyingToUsername: _replyingToUsername,
-              commentController: _commentCtrl,
-              commentFocus: _commentFocus,
-              sending: _sendingComment,
-              onReply: _startReply,
-              onCancelReply: _cancelReply,
-              onSubmit: _submitComment,
-            ),
+            _PageComments(comments: _comments, loading: _commentsLoading, replyingToUsername: _replyingToUsername, commentController: _commentCtrl, commentFocus: _commentFocus, sending: _sendingComment, onReply: _startReply, onCancelReply: _cancelReply, onSubmit: _submitComment),
           ],
-          const SizedBox(height: 8),
-          SizedBox(width: double.infinity, child: OutlinedButton.icon(
-            onPressed: widget.pageId == null || widget.pageId!.isEmpty ? null : () => context.push('/page-profile?id=${widget.pageId}'),
-            icon: const Icon(Icons.open_in_new, size: 18), label: const Text('View Page & post'),
-          )),
         ]),
       ),
     );
@@ -301,10 +264,12 @@ class _PageAction extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
   final bool active;
+
   @override
   Widget build(BuildContext context) => TextButton.icon(
     onPressed: onTap,
-    icon: Icon(icon, size: 20, color: active ? Theme.of(context).colorScheme.primary : null),
+    style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7), minimumSize: const Size(0, 36), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+    icon: Icon(icon, size: 19, color: active ? Theme.of(context).colorScheme.primary : null),
     label: Text(label, style: TextStyle(color: active ? Theme.of(context).colorScheme.primary : null)),
   );
 }
@@ -321,7 +286,7 @@ class _PageComments extends StatelessWidget {
   final VoidCallback onCancelReply;
   final VoidCallback onSubmit;
 
-  List<Map<String, dynamic>> _children(String? parentId) => comments.where((c) => (c['parent_comment_id']?.toString()) == parentId).toList();
+  List<Map<String, dynamic>> _children(String? parentId) => comments.where((c) => c['parent_comment_id']?.toString() == parentId).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -334,28 +299,10 @@ class _PageComments extends StatelessWidget {
         if (loading) const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
         if (!loading && comments.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text('No comments yet. Be the first to comment.', style: theme.textTheme.bodySmall)),
         if (!loading) ..._children(null).map((comment) => _RecursivePageComment(comment: comment, children: _children, onReply: onReply)),
-        if (replyingToUsername != null) Padding(
-          padding: const EdgeInsets.only(left: 40, bottom: 4),
-          child: Row(children: [Expanded(child: Text('Replying to @${replyingToUsername!}', style: theme.textTheme.bodySmall)), IconButton(onPressed: onCancelReply, icon: const Icon(Icons.close, size: 16), visualDensity: VisualDensity.compact)]),
-        ),
+        if (replyingToUsername != null) Padding(padding: const EdgeInsets.only(left: 40, bottom: 4), child: Row(children: [Expanded(child: Text('Replying to @${replyingToUsername!}', style: theme.textTheme.bodySmall)), IconButton(onPressed: onCancelReply, icon: const Icon(Icons.close, size: 16), visualDensity: VisualDensity.compact)])),
         Row(children: [
           const SizedBox(width: 4),
-          Expanded(child: TextField(
-            controller: commentController,
-            focusNode: commentFocus,
-            minLines: 1,
-            maxLines: 4,
-            textInputAction: TextInputAction.send,
-            onSubmitted: (_) => onSubmit(),
-            decoration: InputDecoration(
-              hintText: replyingToUsername == null ? 'Write a comment…' : 'Write a reply…',
-              isDense: true,
-              filled: true,
-              fillColor: theme.colorScheme.surface,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            ),
-          )),
+          Expanded(child: TextField(controller: commentController, focusNode: commentFocus, minLines: 1, maxLines: 4, textInputAction: TextInputAction.send, onSubmitted: (_) => onSubmit(), decoration: InputDecoration(hintText: replyingToUsername == null ? 'Write a comment…' : 'Write a reply…', isDense: true, filled: true, fillColor: theme.colorScheme.surface, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9)))),
           IconButton(onPressed: sending ? null : onSubmit, icon: sending ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(Icons.send, color: theme.colorScheme.primary)),
         ]),
       ]),
@@ -381,27 +328,11 @@ class _RecursivePageComment extends StatelessWidget {
           ProfileAvatar(url: user?['profile_photo_url'] as String?, radius: 14),
           const SizedBox(width: 8),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(12)),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(user?['username'] as String? ?? 'User', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text(comment['content'] as String? ?? '', style: theme.textTheme.bodyMedium),
-              ]),
-            ),
-            Padding(padding: const EdgeInsets.only(left: 10, top: 2), child: Row(children: [
-              Text(timeAgo(DateTime.tryParse(comment['created_at']?.toString() ?? '') ?? DateTime.now()), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-              const SizedBox(width: 12),
-              InkWell(onTap: () => onReply(comment), child: Text('Reply', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700, color: theme.colorScheme.primary))),
-            ])),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7), decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(12)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(user?['username'] as String? ?? 'User', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700)), const SizedBox(height: 2), Text(comment['content'] as String? ?? '', style: theme.textTheme.bodyMedium)])),
+            Padding(padding: const EdgeInsets.only(left: 10, top: 2), child: Row(children: [Text(timeAgo(DateTime.tryParse(comment['created_at']?.toString() ?? '') ?? DateTime.now()), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)), const SizedBox(width: 12), InkWell(onTap: () => onReply(comment), child: Text('Reply', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700, color: theme.colorScheme.primary)))])),
           ])),
         ]),
-        if (replies.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(left: 30),
-            child: Column(children: replies.map((reply) => _RecursivePageComment(comment: reply, children: children, onReply: onReply)).toList()),
-          ),
+        if (replies.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 30), child: Column(children: replies.map((reply) => _RecursivePageComment(comment: reply, children: children, onReply: onReply)).toList())),
       ]),
     );
   }
@@ -410,6 +341,7 @@ class _RecursivePageComment extends StatelessWidget {
 class _PageVisitorMedia extends StatelessWidget {
   const _PageVisitorMedia({required this.items});
   final List<PostMediaItem> items;
+
   @override
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(12),
@@ -419,5 +351,6 @@ class _PageVisitorMedia extends StatelessWidget {
       return Padding(padding: const EdgeInsets.only(bottom: 4), child: Image.network(item.mediaUrl, width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(height: 120, child: Center(child: Icon(Icons.broken_image_outlined)))));
     }).toList()),
   );
+
   IconData _iconFor(String type) => switch (type) { 'video' => Icons.play_circle_outline, 'document' => Icons.description_outlined, _ => Icons.attach_file };
 }
