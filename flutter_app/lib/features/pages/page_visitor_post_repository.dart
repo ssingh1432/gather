@@ -24,31 +24,16 @@ class PageVisitorPostRepository {
   }
 
   Future<PostModel?> getPublishedPostForHome(String postId) async {
-    final row = await _c.from('page_visitor_posts')
-        .select('id,page_id,author_id,content,status,content_type,media,created_at,users!page_visitor_posts_author_id_fkey(username,profile_photo_url),pages!page_visitor_posts_page_id_fkey(name)')
-        .eq('id', postId).eq('status', 'published').maybeSingle();
+    final row = await _c.from('page_visitor_posts').select('id,page_id,author_id,content,status,content_type,media,created_at,users!page_visitor_posts_author_id_fkey(username,profile_photo_url),pages!page_visitor_posts_page_id_fkey(name)').eq('id', postId).eq('status', 'published').maybeSingle();
     if (row == null) return null;
     final media = (row['media'] as List?) ?? const [];
     final page = row['pages'] as Map<String, dynamic>?;
     final author = row['users'] as Map<String, dynamic>?;
-    final mediaItems = media.whereType<Map>().map((item) => PostMediaItem.fromMap({
-      'media_url': item['url'],
-      'media_type': item['type'] ?? row['content_type'] ?? 'image',
-      'thumbnail_url': item['thumbnail_url'],
-    })).whereType<PostMediaItem>().toList();
-    return PostModel(
-      id: row['id'].toString(), authorId: row['author_id'].toString(),
-      authorUsername: author?['username'] as String?, authorAvatarUrl: author?['profile_photo_url'] as String?,
-      communityId: row['page_id'].toString(), textContent: row['content'] as String? ?? '',
-      createdAt: DateTime.parse(row['created_at'].toString()), mediaItems: mediaItems,
-      imageUrl: mediaItems.isNotEmpty ? mediaItems.first.mediaUrl : null,
-      mediaType: mediaItems.isNotEmpty ? mediaItems.first.mediaType : row['content_type'] as String?,
-      location: 'Posted on ${page?['name'] ?? 'Page'}', contentType: 'page_visitor', visibility: 'public',
-    );
+    final mediaItems = media.whereType<Map>().map((item) => PostMediaItem.fromMap({'media_url': item['url'],'media_type': item['type'] ?? row['content_type'] ?? 'image','thumbnail_url': item['thumbnail_url']})).whereType<PostMediaItem>().toList();
+    return PostModel(id: row['id'].toString(), authorId: row['author_id'].toString(), authorUsername: author?['username'] as String?, authorAvatarUrl: author?['profile_photo_url'] as String?, communityId: row['page_id'].toString(), textContent: row['content'] as String? ?? '', createdAt: DateTime.parse(row['created_at'].toString()), mediaItems: mediaItems, imageUrl: mediaItems.isNotEmpty ? mediaItems.first.mediaUrl : null, mediaType: mediaItems.isNotEmpty ? mediaItems.first.mediaType : row['content_type'] as String?, location: 'Posted on ${page?['name'] ?? 'Page'}', contentType: 'page_visitor', visibility: 'public');
   }
 
-  Future<List<Map<String, dynamic>>> listEvents(String pageId) async =>
-      (await _c.from('page_events').select('id,title,location,start_time,end_time').isFilter('deleted_at', null).eq('page_id', pageId).order('start_time')).cast<Map<String, dynamic>>();
+  Future<List<Map<String, dynamic>>> listEvents(String pageId) async => (await _c.from('page_events').select('id,title,location,start_time,end_time').isFilter('deleted_at', null).eq('page_id', pageId).order('start_time')).cast<Map<String, dynamic>>();
 
   Future<String> createVisitorPost({required String pageId, required String content, required String contentType, List<Map<String, dynamic>> media = const [], String? eventId}) async {
     final uid = SupabaseConfig.currentUserId;
@@ -57,13 +42,7 @@ class PageVisitorPostRepository {
     if (trimmed.length > 5000) throw const PageVisitorMediaException('Post is too long.');
     if (trimmed.isEmpty && media.isEmpty && eventId == null) throw const PageVisitorMediaException('Add text, media, or an event.');
     try {
-      final row = await _c.from('page_visitor_posts').insert({
-        'page_id': pageId,
-        'content': trimmed,
-        'content_type': contentType,
-        'media': media,
-        'event_id': eventId,
-      }).select('id').single();
+      final row = await _c.from('page_visitor_posts').insert({'page_id': pageId,'content': trimmed,'content_type': contentType,'media': media,'event_id': eventId}).select('id').single();
       return row['id'] as String;
     } on PostgrestException catch (e) {
       throw PageVisitorMediaException(_friendlyPostError(e));
@@ -110,10 +89,7 @@ class PageVisitorPostRepository {
   }
 
   Future<List<Map<String, dynamic>>> listComments(String postId) async {
-    final rows = await _c.from('page_visitor_post_comments')
-        .select('id,post_id,user_id,parent_comment_id,content,created_at,updated_at,users!page_visitor_post_comments_user_id_fkey(username,display_name,profile_photo_url)')
-        .eq('post_id', postId)
-        .order('created_at', ascending: true);
+    final rows = await _c.from('page_visitor_post_comments').select('id,post_id,user_id,parent_comment_id,content,created_at,updated_at,users!page_visitor_post_comments_user_id_fkey(username,display_name,profile_photo_url)').eq('post_id', postId).order('created_at', ascending: true);
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
@@ -155,6 +131,8 @@ class PageVisitorPostRepository {
     return 'The media upload failed. Please try again.';
   }
 
+  // Keep this helper public so Page-local composers can consistently translate
+  // unexpected Storage/database/runtime failures without exposing raw errors.
   static String friendlyUnexpectedError(Object error) {
     final message = error.toString().toLowerCase();
     if (message.contains('permission') || message.contains('unauthorized') || message.contains('forbidden') || message.contains('row-level')) return 'You do not have permission to create this Page post. Make sure you follow the Page.';
