@@ -32,7 +32,7 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
     return types[extension] ?? fallback;
   }
 
-  bool _isSupported(String mime) => const {'image/jpeg','image/png','image/webp','image/gif','video/mp4','video/quicktime','video/webm','application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain'}.contains(mime);
+  bool _isSupported(String mime) => const {'image/jpeg','image/png','image/webp','image/gif','video/mp4','video/quicktime','video/x-m4v','video/webm','application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain'}.contains(mime);
 
   String _contentType() {
     if (_images.isNotEmpty) return 'image';
@@ -74,6 +74,35 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
     finally { if(mounted)setState(()=>_loadingEvents=false); }
   }
 
+  Future<void> _validateSelectedMedia() async {
+    for (final image in _images) {
+      final size = await image.length();
+      if (size > PageVisitorPostRepository.maxBytes) {
+        throw PageVisitorMediaException('${image.name} is larger than the 25 MB limit.');
+      }
+      final mime = _mimeTypeFor(image.name, fallback: 'image/jpeg');
+      if (!_isSupported(mime)) throw PageVisitorMediaException('${image.name} is not a supported Page media type.');
+    }
+    if (_video != null) {
+      final size = await _video!.length();
+      if (size > PageVisitorPostRepository.maxBytes) {
+        throw PageVisitorMediaException('${_video!.name} is larger than the 25 MB limit.');
+      }
+      final mime = _mimeTypeFor(_video!.name, fallback: 'video/mp4');
+      if (!_isSupported(mime)) throw PageVisitorMediaException('${_video!.name} is not a supported Page media type.');
+    }
+    for (final document in _documents) {
+      final bytes = document.bytes;
+      if (bytes == null) throw PageVisitorMediaException('Could not read ${document.name}. Please select it again.');
+      if (bytes.isEmpty) throw PageVisitorMediaException('${document.name} is empty.');
+      if (bytes.length > PageVisitorPostRepository.maxBytes) {
+        throw PageVisitorMediaException('${document.name} is larger than the 25 MB limit.');
+      }
+      final mime = _mimeTypeFor(document.name);
+      if (!_isSupported(mime)) throw PageVisitorMediaException('${document.name} is not a supported Page media type.');
+    }
+  }
+
   Future<void> _submit() async {
     if (_submitting) return;
     final hasMedia = _images.isNotEmpty || _video != null || _documents.isNotEmpty;
@@ -84,21 +113,21 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
     setState(()=>_submitting=true);
     String? postId;
     try {
+      // Validate everything before creating the database row so invalid media
+      // never creates an orphaned Page post.
+      await _validateSelectedMedia();
       postId=await _repo.createVisitorPost(pageId:widget.pageId,content:_text.text,contentType:_contentType(),eventId:_eventId);
       final media=<Map<String,dynamic>>[];
       for (final image in _images) {
         final bytes = await image.readAsBytes();
-        if (bytes.length > PageVisitorPostRepository.maxBytes) throw const PageVisitorMediaException('An image is larger than the 25 MB limit.');
         media.add({'type':'image','name':image.name,'url':await _repo.uploadMedia(pageId:widget.pageId,postId:postId,bytes:bytes,mimeType:_mimeTypeFor(image.name,fallback:'image/jpeg'),fileName:image.name)});
       }
       if (_video != null) {
         final bytes = await _video!.readAsBytes();
-        if (bytes.length > PageVisitorPostRepository.maxBytes) throw const PageVisitorMediaException('The video is larger than the 25 MB limit.');
         media.add({'type':'video','name':_video!.name,'url':await _repo.uploadMedia(pageId:widget.pageId,postId:postId,bytes:bytes,mimeType:_mimeTypeFor(_video!.name,fallback:'video/mp4'),fileName:_video!.name)});
       }
       for (final document in _documents) {
-        final bytes=document.bytes;
-        if(bytes==null) throw const PageVisitorMediaException('Could not read one of the selected documents.');
+        final bytes=document.bytes!;
         media.add({'type':'document','name':document.name,'url':await _repo.uploadMedia(pageId:widget.pageId,postId:postId,bytes:bytes,mimeType:_mimeTypeFor(document.name),fileName:document.name)});
       }
       if (media.isNotEmpty) await _repo.updateMedia(postId,media);
@@ -106,9 +135,10 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
     } on PageVisitorMediaException catch(e) {
       if(postId!=null){try{await _repo.deleteVisitorPostWithMedia(pageId:widget.pageId,postId:postId);}catch(_) {}}
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e.message)));
-    } catch(_) {
+    } catch(e) {
       if(postId!=null){try{await _repo.deleteVisitorPostWithMedia(pageId:widget.pageId,postId:postId);}catch(_) {}}
-      if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Could not create the Page post. Please check the selected media and try again.')));
+      final message = PageVisitorPostRepository.friendlyUnexpectedError(e);
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(message)));
     } finally { if(mounted)setState(()=>_submitting=false); }
   }
 
