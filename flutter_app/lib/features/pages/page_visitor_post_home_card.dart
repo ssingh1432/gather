@@ -7,6 +7,7 @@ import '../../core/supabase_client.dart';
 import '../../shared/models/models.dart';
 import '../../shared/utils/time_ago.dart';
 import '../../shared/widgets/reusables.dart';
+import 'page_media_gallery.dart';
 import 'page_visitor_post_repository.dart';
 
 class PageVisitorPostHomeCard extends StatefulWidget {
@@ -302,7 +303,7 @@ class _PageComments extends StatelessWidget {
         if (replyingToUsername != null) Padding(padding: const EdgeInsets.only(left: 40, bottom: 4), child: Row(children: [Expanded(child: Text('Replying to @${replyingToUsername!}', style: theme.textTheme.bodySmall)), IconButton(onPressed: onCancelReply, icon: const Icon(Icons.close, size: 16), visualDensity: VisualDensity.compact)])),
         Row(children: [
           const SizedBox(width: 4),
-          Expanded(child: TextField(controller: commentController, focusNode: commentFocus, minLines: 1, maxLines: 4, textInputAction: TextInputAction.send, onSubmitted: (_) => onSubmit(), decoration: InputDecoration(hintText: replyingToUsername == null ? 'Write a comment…' : 'Write a reply…', isDense: true, filled: true, fillColor: theme.colorScheme.surface, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9)))),
+          Expanded(child: TextField(controller: commentController, focusNode: commentFocus, minLines: 1, maxLines: 4, textInputAction: TextInputAction.send, onSubmitted: (_) => onSubmit(), decoration: InputDecoration(hintText: replyingToUsername == null ? 'Write a comment…' : 'Write a reply…', isDense: true, filled: true, fillColor: theme.colorScheme.surface, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9)))),
           IconButton(onPressed: sending ? null : onSubmit, icon: sending ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(Icons.send, color: theme.colorScheme.primary)),
         ]),
       ]),
@@ -343,14 +344,11 @@ class _PageVisitorMedia extends StatelessWidget {
   final List<PostMediaItem> items;
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(12),
-    child: Column(children: items.map((item) {
-      final isImage = item.mediaType == 'image' || item.mediaType == 'gif';
-      if (!isImage) return Container(width: double.infinity, padding: const EdgeInsets.all(16), color: Theme.of(context).colorScheme.surfaceContainerHighest, child: Row(children: [Icon(_iconFor(item.mediaType)), const SizedBox(width: 10), Expanded(child: Text(item.mediaType.toUpperCase()))]));
-      return Padding(padding: const EdgeInsets.only(bottom: 4), child: Image.network(item.mediaUrl, width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(height: 120, child: Center(child: Icon(Icons.broken_image_outlined)))));
-    }).toList()),
+  Widget build(BuildContext context) => PageMediaGallery(
+    items: items.map((item) => <String, dynamic>{
+      'type': item.mediaType,
+      'url': item.mediaUrl,
+      'name': item.mediaType.toUpperCase(),
+    }).toList(),
   );
-
-  IconData _iconFor(String type) => switch (type) { 'video' => Icons.play_circle_outline, 'document' => Icons.description_outlined, _ => Icons.attach_file };
 }
