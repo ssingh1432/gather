@@ -4,19 +4,20 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/supabase_client.dart';
 import '../../shared/utils/external_link.dart';
-import '../../shared/utils/time_ago.dart';
 import '../../shared/widgets/reusables.dart';
 import '../data/repositories.dart';
 import 'donate_sheet.dart';
 import 'page_chat_screen.dart';
+import 'page_content_composer_screen.dart';
 import 'page_local_repository.dart';
-import 'page_media_gallery.dart';
-import 'page_visitor_post_card.dart';
-import 'page_visitor_post_composer_screen.dart';
-import 'page_visitor_post_repository.dart';
 import 'page_manage_screen.dart';
 import 'page_preview_screen.dart' show PageInfoRow;
+import 'page_profile_widgets.dart';
+import 'page_visitor_post_composer_screen.dart';
+import 'page_visitor_post_repository.dart';
 import 'pages_theme.dart';
+
+export 'page_profile_widgets.dart' show PageVisitorPostFollowGate;
 
 class PageProfileScreen extends StatefulWidget {
   const PageProfileScreen({super.key, required this.pageId});
@@ -43,9 +44,6 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
   bool _hasMarketplaceItems = false;
   bool _allowVisitorPosts = false;
   bool _visitorPostsRequireApproval = false;
-  List<Map<String, dynamic>> _posts = const [];
-  List<Map<String, dynamic>> _visitorPosts = const [];
-  List<Map<String, dynamic>> _events = const [];
   String? _error;
 
   @override
@@ -68,12 +66,12 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       final canViewFollowers = uid == null
           ? false
           : await _repo.hasPagePermission(widget.pageId, 'view_analytics');
-      final posts = await _repo.listPagePosts(widget.pageId, status: 'published');
-      final events = await _repo.listPageEvents(widget.pageId);
+      await _repo.listPagePosts(widget.pageId, status: 'published');
+      await _repo.listPageEvents(widget.pageId);
       final hasTiers = await _repo.hasVisibleSubscriptionTiers(widget.pageId);
       final hasItems = await _repo.hasVisibleMarketplaceItems(widget.pageId);
       final visitorSettings = await _localRepo.getVisitorPostingSettings(widget.pageId);
-      final visitorPosts = await _visitorRepo.listVisitorPosts(widget.pageId);
+      await _visitorRepo.listVisitorPosts(widget.pageId);
 
       if (!mounted) return;
 
@@ -86,16 +84,8 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
         _hasSubscriptionTiers = hasTiers;
         _hasMarketplaceItems = hasItems;
         _allowVisitorPosts = visitorSettings['allow_visitor_posts'] == true;
-        _visitorPostsRequireApproval = visitorSettings['visitor_posts_require_approval'] == true;
-        _posts = posts;
-        _visitorPosts = visitorPosts;
-        _events = events
-            .where(
-              (event) => DateTime.parse(event['start_time'] as String).isAfter(
-                DateTime.now().subtract(const Duration(days: 1)),
-              ),
-            )
-            .toList();
+        _visitorPostsRequireApproval =
+            visitorSettings['visitor_posts_require_approval'] == true;
         _loading = false;
       });
     } catch (e) {
@@ -269,11 +259,15 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView(
-                        padding: const EdgeInsets.only(bottom: PageTokens.spaceXxl),
+                        padding: const EdgeInsets.only(
+                          bottom: PageTokens.spaceXxl,
+                        ),
                         children: [
                           PageCoverAndLogo(page: page),
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceLg),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: PageTokens.spaceLg,
+                            ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -283,47 +277,83 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                     Flexible(
                                       child: Text(
                                         page['name'] as String,
-                                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .headlineSmall
+                                            ?.copyWith(fontWeight: FontWeight.w800),
                                       ),
                                     ),
                                     if (page['verification_status'] == 'verified') ...[
                                       const SizedBox(width: 6),
-                                      const Icon(Icons.verified, color: AppColors.brandTeal, size: 20),
+                                      const Icon(
+                                        Icons.verified,
+                                        color: AppColors.brandTeal,
+                                        size: 20,
+                                      ),
                                     ],
                                   ],
                                 ),
                                 Text(
                                   '@${page['username']}',
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
                                 ),
                                 const SizedBox(height: PageTokens.spaceSm),
                                 Wrap(
                                   spacing: 8,
                                   runSpacing: 8,
                                   children: [
-                                    PageStatChip(icon: Icons.category_outlined, label: _pageTypeLabel),
+                                    PageStatChip(
+                                      icon: Icons.category_outlined,
+                                      label: _pageTypeLabel,
+                                    ),
                                     InkWell(
-                                      borderRadius: BorderRadius.circular(PageTokens.radiusPill),
-                                      onTap: _canViewFollowers ? () => context.push('/page-followers?id=${widget.pageId}') : null,
+                                      borderRadius: BorderRadius.circular(
+                                        PageTokens.radiusPill,
+                                      ),
+                                      onTap: _canViewFollowers
+                                          ? () => context.push(
+                                                '/page-followers?id=${widget.pageId}',
+                                              )
+                                          : null,
                                       child: PageStatChip(
                                         icon: Icons.people_alt_outlined,
-                                        label: '${page['follower_count'] ?? 0} follower${(page['follower_count'] ?? 0) == 1 ? '' : 's'}',
+                                        label:
+                                            '${page['follower_count'] ?? 0} follower${(page['follower_count'] ?? 0) == 1 ? '' : 's'}',
                                       ),
                                     ),
-                                    if (page['location'] != null) PageStatChip(icon: Icons.place_outlined, label: page['location'] as String),
+                                    if (page['location'] != null)
+                                      PageStatChip(
+                                        icon: Icons.place_outlined,
+                                        label: page['location'] as String,
+                                      ),
                                     InkWell(
-                                      borderRadius: BorderRadius.circular(PageTokens.radiusPill),
-                                      onTap: () => context.push('/page-reviews?id=${widget.pageId}'),
+                                      borderRadius: BorderRadius.circular(
+                                        PageTokens.radiusPill,
+                                      ),
+                                      onTap: () => context.push(
+                                        '/page-reviews?id=${widget.pageId}',
+                                      ),
                                       child: PageStatChip(
                                         icon: Icons.star_outline,
-                                        color: (page['rating_count'] ?? 0) > 0 ? AppColors.brandTeal : null,
-                                        label: (page['rating_count'] ?? 0) > 0 ? '${((page['rating_avg'] as num?) ?? 0).toStringAsFixed(1)} (${page['rating_count']})' : 'No reviews yet',
+                                        color: (page['rating_count'] ?? 0) > 0
+                                            ? AppColors.brandTeal
+                                            : null,
+                                        label: (page['rating_count'] ?? 0) > 0
+                                            ? '${((page['rating_avg'] as num?) ?? 0).toStringAsFixed(1)} (${page['rating_count']})'
+                                            : 'No reviews yet',
                                       ),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: PageTokens.spaceLg),
-                                _CtaRow(
+                                PageCtaRow(
                                   following: _following,
                                   favorite: _favorite,
                                   busy: _followBusy,
@@ -331,7 +361,10 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                   onFavorite: _following ? _toggleFavorite : null,
                                   onMessage: () => Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => PageChatScreen(pageId: widget.pageId, pageName: page['name'] as String? ?? 'Page'),
+                                      builder: (_) => PageChatScreen(
+                                        pageId: widget.pageId,
+                                        pageName: page['name'] as String? ?? 'Page',
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -343,7 +376,11 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                       child: OutlinedButton.icon(
                                         onPressed: _openPostComposer,
                                         icon: const Icon(Icons.edit_outlined),
-                                        label: Text(_canManage ? 'Create Page post' : 'Post on this Page'),
+                                        label: Text(
+                                          _canManage
+                                              ? 'Create Page post'
+                                              : 'Post on this Page',
+                                        ),
                                       ),
                                     )
                                   else
@@ -359,14 +396,24 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                     children: [
                                       if (_hasSubscriptionTiers)
                                         TextButton.icon(
-                                          onPressed: () => context.push('/page-subscriptions?id=${widget.pageId}&name=${Uri.encodeComponent(page['name'] as String? ?? 'Page')}'),
-                                          icon: const Icon(Icons.workspace_premium_outlined, size: 16),
+                                          onPressed: () => context.push(
+                                            '/page-subscriptions?id=${widget.pageId}&name=${Uri.encodeComponent(page['name'] as String? ?? 'Page')}',
+                                          ),
+                                          icon: const Icon(
+                                            Icons.workspace_premium_outlined,
+                                            size: 16,
+                                          ),
                                           label: const Text('Subscriptions'),
                                         ),
                                       if (_hasMarketplaceItems)
                                         TextButton.icon(
-                                          onPressed: () => context.push('/page-marketplace?id=${widget.pageId}&name=${Uri.encodeComponent(page['name'] as String? ?? 'Page')}'),
-                                          icon: const Icon(Icons.storefront_outlined, size: 16),
+                                          onPressed: () => context.push(
+                                            '/page-marketplace?id=${widget.pageId}&name=${Uri.encodeComponent(page['name'] as String? ?? 'Page')}',
+                                          ),
+                                          icon: const Icon(
+                                            Icons.storefront_outlined,
+                                            size: 16,
+                                          ),
                                           label: const Text('Shop'),
                                         ),
                                     ],
@@ -377,8 +424,15 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                   SizedBox(
                                     width: double.infinity,
                                     child: OutlinedButton.icon(
-                                      onPressed: () => showDonateSheet(context, pageId: widget.pageId, pageName: page['name'] as String? ?? 'this Page'),
-                                      icon: const Icon(Icons.volunteer_activism_outlined, size: 18),
+                                      onPressed: () => showDonateSheet(
+                                        context,
+                                        pageId: widget.pageId,
+                                        pageName: page['name'] as String? ?? 'this Page',
+                                      ),
+                                      icon: const Icon(
+                                        Icons.volunteer_activism_outlined,
+                                        size: 18,
+                                      ),
                                       label: const Text('Support this Page'),
                                     ),
                                   ),
@@ -390,14 +444,62 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                 const SizedBox(height: PageTokens.spaceLg),
                                 const Divider(),
                                 const SizedBox(height: PageTokens.spaceSm),
-                                if (page['website'] != null) InkWell(onTap: () => openExternalLink(context, page['website'] as String), child: PageInfoRow(icon: Icons.link, text: page['website'] as String)),
-                                if (page['phone'] != null) InkWell(onTap: () => _launchOrSnack(Uri(scheme: 'tel', path: page['phone'] as String)), child: PageInfoRow(icon: Icons.phone_outlined, text: page['phone'] as String)),
-                                if (page['email'] != null) InkWell(onTap: () => _launchOrSnack(Uri(scheme: 'mailto', path: page['email'] as String)), child: PageInfoRow(icon: Icons.email_outlined, text: page['email'] as String)),
-                                if (page['country'] != null) PageInfoRow(icon: Icons.public, text: page['country'] as String),
-                                if (_businessHoursNote != null) PageInfoRow(icon: Icons.schedule_outlined, text: _businessHoursNote!),
+                                if (page['website'] != null)
+                                  InkWell(
+                                    onTap: () => openExternalLink(
+                                      context,
+                                      page['website'] as String,
+                                    ),
+                                    child: PageInfoRow(
+                                      icon: Icons.link,
+                                      text: page['website'] as String,
+                                    ),
+                                  ),
+                                if (page['phone'] != null)
+                                  InkWell(
+                                    onTap: () => _launchOrSnack(
+                                      Uri(
+                                        scheme: 'tel',
+                                        path: page['phone'] as String,
+                                      ),
+                                    ),
+                                    child: PageInfoRow(
+                                      icon: Icons.phone_outlined,
+                                      text: page['phone'] as String,
+                                    ),
+                                  ),
+                                if (page['email'] != null)
+                                  InkWell(
+                                    onTap: () => _launchOrSnack(
+                                      Uri(
+                                        scheme: 'mailto',
+                                        path: page['email'] as String,
+                                      ),
+                                    ),
+                                    child: PageInfoRow(
+                                      icon: Icons.email_outlined,
+                                      text: page['email'] as String,
+                                    ),
+                                  ),
+                                if (page['country'] != null)
+                                  PageInfoRow(
+                                    icon: Icons.public,
+                                    text: page['country'] as String,
+                                  ),
+                                if (_businessHoursNote != null)
+                                  PageInfoRow(
+                                    icon: Icons.schedule_outlined,
+                                    text: _businessHoursNote!,
+                                  ),
                                 if (_socialLinks.isNotEmpty) ...[
                                   const SizedBox(height: PageTokens.spaceMd),
-                                  Text('Social', style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+                                  Text(
+                                    'Social',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
                                   const SizedBox(height: 6),
                                   Wrap(
                                     spacing: 8,
@@ -405,8 +507,14 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
                                     children: [
                                       for (final entry in _socialLinks.entries)
                                         TextButton.icon(
-                                          onPressed: () => openExternalLink(context, entry.value),
-                                          icon: const Icon(Icons.open_in_new, size: 16),
+                                          onPressed: () => openExternalLink(
+                                            context,
+                                            entry.value,
+                                          ),
+                                          icon: const Icon(
+                                            Icons.open_in_new,
+                                            size: 16,
+                                          ),
                                           label: Text(entry.key),
                                         ),
                                     ],
