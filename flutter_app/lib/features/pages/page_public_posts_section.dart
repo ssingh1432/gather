@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/repositories.dart';
+import '../../shared/widgets/reusables.dart';
 import 'page_media_gallery.dart';
 import 'page_visitor_post_card.dart';
 import 'page_visitor_post_repository.dart';
@@ -49,7 +50,7 @@ class _PagePublicPostsSectionState extends State<PagePublicPostsSection> {
         _visitorPosts = List<Map<String, dynamic>>.from(results[1] as List);
         _loading = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _error = 'Could not load Page posts.';
