@@ -303,7 +303,24 @@ class _PageComments extends StatelessWidget {
         if (replyingToUsername != null) Padding(padding: const EdgeInsets.only(left: 40, bottom: 4), child: Row(children: [Expanded(child: Text('Replying to @${replyingToUsername!}', style: theme.textTheme.bodySmall)), IconButton(onPressed: onCancelReply, icon: const Icon(Icons.close, size: 16), visualDensity: VisualDensity.compact)])),
         Row(children: [
           const SizedBox(width: 4),
-          Expanded(child: TextField(controller: commentController, focusNode: commentFocus, minLines: 1, maxLines: 4, textInputAction: TextInputAction.send, onSubmitted: (_) => onSubmit(), decoration: InputDecoration(hintText: replyingToUsername == null ? 'Write a comment…' : 'Write a reply…', isDense: true, filled: true, fillColor: theme.colorScheme.surface, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9)))),
+          Expanded(
+            child: TextField(
+              controller: commentController,
+              focusNode: commentFocus,
+              minLines: 1,
+              maxLines: 4,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => onSubmit(),
+              decoration: InputDecoration(
+                hintText: replyingToUsername == null ? 'Write a comment…' : 'Write a reply…',
+                isDense: true,
+                filled: true,
+                fillColor: theme.colorScheme.surface,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              ),
+            ),
+          ),
           IconButton(onPressed: sending ? null : onSubmit, icon: sending ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(Icons.send, color: theme.colorScheme.primary)),
         ]),
       ]),
