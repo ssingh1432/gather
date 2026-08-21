@@ -212,9 +212,9 @@ class PageMediaGallery extends StatelessWidget {
           Expanded(flex: 2, child: _Tile(item: visible[0], height: 320)),
           const SizedBox(width: 3),
           Expanded(child: Column(children: [
-            Expanded(child: _Tile(item: visible[1], height: double.infinity)),
+            Expanded(child: _Tile(item: visible[1], height: 160)),
             const SizedBox(height: 3),
-            Expanded(child: _Tile(item: visible[2], height: double.infinity)),
+            Expanded(child: _Tile(item: visible[2], height: 160)),
           ])),
         ]),
       );
@@ -229,7 +229,7 @@ class PageMediaGallery extends StatelessWidget {
         itemBuilder: (context, index) {
           final remaining = count - 4;
           return Stack(children: [
-            Positioned.fill(child: _Tile(item: visible[index], height: double.infinity)),
+            Positioned.fill(child: _Tile(item: visible[index], height: 158)),
             if (index == 3 && remaining > 0)
               Positioned.fill(
                 child: Container(
