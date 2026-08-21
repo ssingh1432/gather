@@ -1,6 +1,9 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+
+import '../../core/supabase_client.dart';
+import 'page_content_composer_screen.dart';
 import 'page_visitor_post_repository.dart';
 
 class PageVisitorPostComposerScreen extends StatefulWidget {
@@ -22,9 +25,38 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
   List<Map<String, dynamic>> _events = const [];
   bool _loadingEvents = false;
   bool _submitting = false;
+  bool _redirectingOwner = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _redirectPageManagerToOwnerComposer());
+  }
 
   @override
   void dispose() { _text.dispose(); super.dispose(); }
+
+  Future<void> _redirectPageManagerToOwnerComposer() async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null || _redirectingOwner) return;
+    try {
+      final role = await SupabaseConfig.client
+          .from('page_roles')
+          .select('role')
+          .eq('page_id', widget.pageId)
+          .eq('user_id', uid)
+          .maybeSingle();
+      if (role != null && mounted) {
+        setState(() => _redirectingOwner = true);
+        await Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => PageContentComposerScreen(pageId: widget.pageId)),
+        );
+      }
+    } catch (_) {
+      // RLS remains authoritative. If role lookup is unavailable, keep the
+      // visitor composer and let the server reject unauthorized operations.
+    }
+  }
 
   String _mimeTypeFor(String name, {String fallback = 'application/octet-stream'}) {
     final extension = name.toLowerCase().split('.').last;
@@ -104,7 +136,7 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
   }
 
   Future<void> _submit() async {
-    if (_submitting) return;
+    if (_submitting || _redirectingOwner) return;
     final hasMedia = _images.isNotEmpty || _video != null || _documents.isNotEmpty;
     if (_text.text.trim().isEmpty && !hasMedia && _eventId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add text, media, or an event.')));
@@ -113,8 +145,6 @@ class _PageVisitorPostComposerScreenState extends State<PageVisitorPostComposerS
     setState(()=>_submitting=true);
     String? postId;
     try {
-      // Validate everything before creating the database row so invalid media
-      // never creates an orphaned Page post.
       await _validateSelectedMedia();
       postId=await _repo.createVisitorPost(pageId:widget.pageId,content:_text.text,contentType:_contentType(),eventId:_eventId);
       final media=<Map<String,dynamic>>[];
