@@ -81,11 +81,23 @@ class PageVisitorPostRepository {
   }
 
   Future<bool> getLikeState(String postId, String userId) async => (await _c.from('page_visitor_post_likes').select('post_id').match({'post_id': postId, 'user_id': userId}).maybeSingle()) != null;
+
   Future<void> setLike(String postId, bool liked) async {
     final uid = SupabaseConfig.currentUserId;
     if (uid == null) throw StateError('Sign in to like posts.');
-    if (liked) await _c.from('page_visitor_post_likes').upsert({'post_id': postId, 'user_id': uid});
-    else await _c.from('page_visitor_post_likes').delete().match({'post_id': postId, 'user_id': uid});
+    if (liked) {
+      // Do not use upsert here. Upsert can require UPDATE policy evaluation on
+      // an existing like, while Page likes are intentionally insert/delete
+      // only. The unique key still prevents duplicate likes server-side.
+      try {
+        await _c.from('page_visitor_post_likes').insert({'post_id': postId, 'user_id': uid});
+      } on PostgrestException catch (e) {
+        final message = e.message.toLowerCase();
+        if (!message.contains('duplicate') && !message.contains('unique')) rethrow;
+      }
+    } else {
+      await _c.from('page_visitor_post_likes').delete().match({'post_id': postId, 'user_id': uid});
+    }
   }
 
   Future<List<Map<String, dynamic>>> listComments(String postId) async {
@@ -131,8 +143,6 @@ class PageVisitorPostRepository {
     return 'The media upload failed. Please try again.';
   }
 
-  // Keep this helper public so Page-local composers can consistently translate
-  // unexpected Storage/database/runtime failures without exposing raw errors.
   static String friendlyUnexpectedError(Object error) {
     final message = error.toString().toLowerCase();
     if (message.contains('permission') || message.contains('unauthorized') || message.contains('forbidden') || message.contains('row-level')) return 'You do not have permission to create this Page post. Make sure you follow the Page.';
