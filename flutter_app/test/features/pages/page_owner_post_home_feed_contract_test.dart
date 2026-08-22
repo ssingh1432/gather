@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../../shared/models/models.dart';
+import '../../../lib/shared/models/models.dart';
 
 void main() {
   test('Page owner Home Feed rows use page_owner content type and Page identity', () {
