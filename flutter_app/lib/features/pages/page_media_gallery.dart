@@ -29,7 +29,7 @@ class PageMediaUrlResolver {
 }
 
 class PageNetworkImage extends StatefulWidget {
-  const PageNetworkImage({super.key, required this.url, this.width, this.height, this.fit = BoxFit.cover, this.borderRadius, this.errorWidget});
+  const PageNetworkImage({super.key, required this.url, this.width, this.height, this.fit = BoxFit.contain, this.borderRadius, this.errorWidget});
   final String url;
   final double? width;
   final double? height;
@@ -43,6 +43,9 @@ class PageNetworkImage extends StatefulWidget {
 
 class _PageNetworkImageState extends State<PageNetworkImage> {
   String? _resolvedUrl;
+  ImageStream? _imageStream;
+  ImageStreamListener? _imageListener;
+  double? _aspectRatio;
 
   @override
   void initState() {
@@ -53,12 +56,37 @@ class _PageNetworkImageState extends State<PageNetworkImage> {
   @override
   void didUpdateWidget(covariant PageNetworkImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) _resolve();
+    if (oldWidget.url != widget.url) {
+      _aspectRatio = null;
+      _resolve();
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_imageStream != null && _imageListener != null) {
+      _imageStream!.removeListener(_imageListener!);
+    }
+    super.dispose();
   }
 
   Future<void> _resolve() async {
     final resolved = await PageMediaUrlResolver.resolve(widget.url);
-    if (mounted) setState(() => _resolvedUrl = resolved);
+    if (!mounted) return;
+    setState(() => _resolvedUrl = resolved);
+    _listenForDimensions(resolved);
+  }
+
+  void _listenForDimensions(String url) {
+    final provider = NetworkImage(url);
+    final stream = provider.resolve(const ImageConfiguration());
+    _imageStream = stream;
+    _imageListener = ImageStreamListener((info, _) {
+      final size = info.image;
+      if (!mounted || size.width <= 0 || size.height <= 0) return;
+      setState(() => _aspectRatio = size.width / size.height);
+    }, onError: (_, __) {});
+    stream.addListener(_imageListener!);
   }
 
   @override
@@ -77,7 +105,9 @@ class _PageNetworkImageState extends State<PageNetworkImage> {
 
     if (widget.url.trim().isEmpty) return fallback();
     final url = _resolvedUrl;
-    if (url == null) return SizedBox(width: widget.width, height: widget.height, child: const Center(child: CircularProgressIndicator(strokeWidth: 2)));
+    if (url == null) {
+      return SizedBox(width: widget.width, height: widget.height ?? 240, child: const Center(child: CircularProgressIndicator(strokeWidth: 2)));
+    }
 
     final image = Image.network(
       url,
@@ -87,7 +117,14 @@ class _PageNetworkImageState extends State<PageNetworkImage> {
       webHtmlElementStrategy: kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
       errorBuilder: (_, __, ___) => fallback(),
     );
-    return widget.borderRadius == null ? image : ClipRRect(borderRadius: widget.borderRadius!, child: image);
+
+    Widget child;
+    if (widget.height == null && _aspectRatio != null) {
+      child = AspectRatio(aspectRatio: _aspectRatio!.clamp(0.5625, 1.7778), child: image);
+    } else {
+      child = image;
+    }
+    return widget.borderRadius == null ? child : ClipRRect(borderRadius: widget.borderRadius!, child: child);
   }
 }
 
@@ -172,19 +209,17 @@ class _PageInlineVideoState extends State<PageInlineVideo> {
         ]),
       );
     }
+    final size = controller.value.size;
+    final ratio = size.width > 0 && size.height > 0 ? (size.width / size.height).clamp(0.5625, 1.7778) : 16 / 9;
     return GestureDetector(
       onTap: _toggle,
-      child: Stack(alignment: Alignment.center, children: [
-        SizedBox(
-          height: widget.height,
-          width: double.infinity,
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: SizedBox(width: controller.value.size.width, height: controller.value.size.height, child: VideoPlayer(controller)),
-          ),
-        ),
-        if (!controller.value.isPlaying) const Icon(Icons.play_circle_fill, size: 54, color: Colors.white70),
-      ]),
+      child: AspectRatio(
+        aspectRatio: ratio,
+        child: Stack(alignment: Alignment.center, children: [
+          Positioned.fill(child: VideoPlayer(controller)),
+          if (!controller.value.isPlaying) const Icon(Icons.play_circle_fill, size: 54, color: Colors.white70),
+        ]),
+      ),
     );
   }
 }
@@ -197,31 +232,43 @@ class PageMediaGallery extends StatelessWidget {
   Widget build(BuildContext context) {
     final visible = items.where((item) => item['type'] != 'event').toList();
     if (visible.isEmpty) return const SizedBox.shrink();
-    if (visible.length == 1) return _Tile(item: visible.first, height: 280);
+
+    // A single attachment keeps its natural aspect ratio. The old fixed
+    // 280px box cropped portrait/landscape media with BoxFit.cover, making
+    // Page posts look broken compared with the normal Home feed.
+    if (visible.length == 1) return _SingleTile(item: visible.first);
+
+    // Multi-attachment layouts intentionally use tiles, but the tiles remain
+    // bounded and are limited to four visible items. This avoids an unbounded
+    // vertical gallery while keeping the existing collage behavior.
     if (visible.length == 2) {
-      return Row(children: [
-        Expanded(child: _Tile(item: visible[0], height: 210)),
-        const SizedBox(width: 3),
-        Expanded(child: _Tile(item: visible[1], height: 210)),
-      ]);
+      return SizedBox(
+        height: 240,
+        child: Row(children: [
+          Expanded(child: _Tile(item: visible[0], height: 240)),
+          const SizedBox(width: 3),
+          Expanded(child: _Tile(item: visible[1], height: 240)),
+        ]),
+      );
     }
     if (visible.length == 3) {
       return SizedBox(
-        height: 320,
+        height: 300,
         child: Row(children: [
-          Expanded(flex: 2, child: _Tile(item: visible[0], height: 320)),
+          Expanded(flex: 2, child: _Tile(item: visible[0], height: 300)),
           const SizedBox(width: 3),
           Expanded(child: Column(children: [
-            Expanded(child: _Tile(item: visible[1], height: 160)),
+            Expanded(child: _Tile(item: visible[1], height: 148)),
             const SizedBox(height: 3),
-            Expanded(child: _Tile(item: visible[2], height: 160)),
+            Expanded(child: _Tile(item: visible[2], height: 149)),
           ])),
         ]),
       );
     }
+
     final count = visible.length;
     return SizedBox(
-      height: 320,
+      height: 300,
       child: GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
         itemCount: count > 4 ? 4 : count,
@@ -229,7 +276,7 @@ class PageMediaGallery extends StatelessWidget {
         itemBuilder: (context, index) {
           final remaining = count - 4;
           return Stack(children: [
-            Positioned.fill(child: _Tile(item: visible[index], height: 158)),
+            Positioned.fill(child: _Tile(item: visible[index], height: 148)),
             if (index == 3 && remaining > 0)
               Positioned.fill(
                 child: Container(
@@ -243,6 +290,41 @@ class PageMediaGallery extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SingleTile extends StatelessWidget {
+  const _SingleTile({required this.item});
+  final Map<String, dynamic> item;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = item['type']?.toString() ?? 'document';
+    final url = item['url']?.toString() ?? '';
+    final name = item['name']?.toString() ?? 'Attachment';
+    if (type == 'image' || type == 'gif') {
+      return _SingleImage(url: url);
+    }
+    if (type == 'video') return PageInlineVideo(url: url, height: 300);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      alignment: Alignment.center,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.description_outlined, size: 48),
+        const SizedBox(height: 8),
+        Text(name, maxLines: 3, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+      ]),
+    );
+  }
+}
+
+class _SingleImage extends StatelessWidget {
+  const _SingleImage({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) => PageNetworkImage(url: url, width: double.infinity, fit: BoxFit.contain);
 }
 
 class _Tile extends StatelessWidget {
@@ -269,7 +351,7 @@ class _Tile extends StatelessWidget {
       child: Stack(children: [
         Positioned.fill(
           child: switch (type) {
-            'image' || 'gif' => PageNetworkImage(url: url, width: double.infinity, height: height),
+            'image' || 'gif' => PageNetworkImage(url: url, width: double.infinity, height: height, fit: BoxFit.cover),
             'video' => PageInlineVideo(url: url, height: height),
             _ => Container(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
