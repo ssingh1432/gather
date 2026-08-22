@@ -2,6 +2,7 @@ name: Flutter CI
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -40,9 +41,9 @@ jobs:
   build-android-apk:
     name: Build Android APK
     needs: analyze-and-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: flutter_app
@@ -67,6 +68,16 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Cache Gradle build state
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('flutter_app/android/**/gradle-wrapper.properties', 'flutter_app/android/**/build.gradle*', 'flutter_app/android/**/settings.gradle*', 'flutter_app/android/gradle.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - name: Cache Android CMake
         uses: actions/cache@v4
         with:
@@ -81,26 +92,27 @@ jobs:
           org.gradle.parallel=true
           org.gradle.caching=true
           org.gradle.configureondemand=true
+          org.gradle.workers.max=4
           EOF
 
-      - name: Build release APK
-        run: flutter build apk --release --android-skip-build-dependency-validation
-        # Signed with the debug keystore for now (see build.gradle.kts TODO) —
-        # fine for sideloading/testing, not for Play Store submission.
-        # receive_sharing_intent declares a compileSdk 37 requirement, but
-        # platform 37 isn't an actual installable SDK yet (sdkmanager: "Failed
-        # to find package"). compileSdk is backwards-compatible in practice
-        # for a plugin like this (no SDK-37-specific APIs at play), so we
-        # skip Flutter's validation rather than chase a platform that
-        # doesn't exist.
+      - name: Build release APK (ARM64)
+        run: flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation
+        # ARM64 is the production Android architecture used by modern phones.
+        # Building one ABI avoids compiling and packaging unnecessary native
+        # architectures in CI, significantly reducing release-build time.
 
-      - name: Upload APK artifact
+      # Do not upload an APK on every push. GitHub Actions artifact storage was
+      # exhausted by repeated APK uploads, causing otherwise-successful builds
+      # to be marked failed. Manual workflow runs still produce a downloadable
+      # APK artifact for testing/release preparation.
+      - name: Upload APK artifact (manual runs only)
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: gather-android-apk
+          name: gather-android-apk-arm64
           path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 1
           compression-level: 0
 
   deploy:
