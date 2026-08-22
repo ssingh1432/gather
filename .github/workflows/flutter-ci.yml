@@ -99,7 +99,9 @@ jobs:
         with:
           name: gather-android-apk
           path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 14
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
 
   deploy:
     name: Build web and deploy to VPS
