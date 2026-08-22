@@ -15,7 +15,6 @@ import 'page_preview_screen.dart' show PageInfoRow;
 import 'page_profile_widgets.dart';
 import 'page_public_posts_section.dart';
 import 'page_visitor_post_composer_screen.dart';
-import 'page_visitor_post_repository.dart';
 import 'pages_theme.dart';
 
 export 'page_profile_widgets.dart' show PageVisitorPostFollowGate;
@@ -32,7 +31,6 @@ class PageProfileScreen extends StatefulWidget {
 class _PageProfileScreenState extends State<PageProfileScreen> {
   final _repo = PageRepository();
   final _localRepo = PageLocalRepository();
-  final _visitorRepo = PageVisitorPostRepository();
 
   Map<String, dynamic>? _page;
   bool _loading = true;
@@ -54,12 +52,17 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
+      // Keep the Page shell independent from post/media loading. The public
+      // posts section owns its own loading/error state so a single post,
+      // media, or visitor-post failure cannot tear down the entire Page.
       final page = await _repo.getPage(widget.pageId);
       final uid = SupabaseConfig.currentUserId;
       final followState = uid == null ? null : await _repo.getFollowState(widget.pageId);
@@ -67,12 +70,9 @@ class _PageProfileScreenState extends State<PageProfileScreen> {
       final canViewFollowers = uid == null
           ? false
           : await _repo.hasPagePermission(widget.pageId, 'view_analytics');
-      await _repo.listPagePosts(widget.pageId, status: 'published');
-      await _repo.listPageEvents(widget.pageId);
       final hasTiers = await _repo.hasVisibleSubscriptionTiers(widget.pageId);
       final hasItems = await _repo.hasVisibleMarketplaceItems(widget.pageId);
       final visitorSettings = await _localRepo.getVisitorPostingSettings(widget.pageId);
-      await _visitorRepo.listVisitorPosts(widget.pageId);
 
       if (!mounted) return;
 
