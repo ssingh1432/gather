@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/reusables.dart' show ProfileAvatar;
 import '../data/repositories.dart';
 import 'page_post_media_repository.dart';
+import 'page_post_publish_service.dart';
 import 'pages_theme.dart';
 
 /// Create or edit a Page post. Rich media is deliberately Page-local so the
@@ -22,6 +23,7 @@ class PageContentComposerScreen extends StatefulWidget {
 
 class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
   final _repo = PageRepository();
+  final _publishService = PagePostPublishService();
   final _profileRepo = ProfileRepository();
   final _mediaRepo = PagePostMediaRepository();
   final _contentController = TextEditingController();
@@ -381,7 +383,7 @@ class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
           .toSet();
       final stalePaths = oldPaths.difference(newPaths).toList();
 
-      await _repo.updatePagePost(createdPostId, {
+      await _publishService.updatePagePost(createdPostId, {
         'post_type': _postType,
         'content': text,
         'media': media,

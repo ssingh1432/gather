@@ -25,6 +25,7 @@ import '../../shared/widgets/story_bar.dart';
 import '../../shared/widgets/top_bar_profile_link.dart';
 import '../../shared/widgets/notification_bell.dart';
 import '../pages/page_visitor_post_home_card.dart';
+import '../pages/page_owner_post_home_card.dart';
 import '../../shared/providers/app_providers.dart';
 import '../../shared/services/remote_config_service.dart';
 
@@ -34,31 +35,19 @@ class HomeFeedScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeFeedScreen> createState() => _S();
 }
 
-/// A feed row that's an ad rather than a post, tied to the approved
-/// creator's post it's shown alongside.
 class _AdSlot {
   const _AdSlot(this.postId);
   final String postId;
 }
 
-/// Marker row for the "People you may know" section, so it can be
-/// interleaved into the same row list as posts/ads instead of living at a
-/// fixed index.
 class _PYMKSlot {
   const _PYMKSlot();
 }
 
-/// Marker row for the "Suggested for you" public-communities section —
-/// same idea as [_PYMKSlot], kept as its own slot type (rather than
-/// reusing _PYMKSlot) so the two sections can be placed at different,
-/// independently-tunable points in the feed.
 class _SuggestedCommunitiesSlot {
   const _SuggestedCommunitiesSlot();
 }
 
-/// Marker row for the "Suggested Pages" section — same idea as
-/// [_SuggestedCommunitiesSlot], placed further down the feed so the two
-/// suggestion breaks (groups, then pages) don't land back-to-back.
 class _SuggestedPagesSlot {
   const _SuggestedPagesSlot();
 }
@@ -74,10 +63,6 @@ class _S extends ConsumerState<HomeFeedScreen> {
   Set<String> bookmarked = <String>{};
   final Set<String> _expandedComments = <String>{};
   List<PostModel> _posts = const [];
-  // Cursor pagination (Step 16) for the authenticated home feed. Only
-  // used when signed in; the logged-out public feed still uses
-  // page-number pagination (repo.publicFeed) since it's a much smaller,
-  // lower-traffic surface and isn't worth a second RPC right now.
   FeedCursor? _cursor;
   int _anonPage = 0;
   bool _loadingInitial = true;
@@ -110,9 +95,6 @@ class _S extends ConsumerState<HomeFeedScreen> {
     super.dispose();
   }
 
-  /// Live like/comment/share counts patch the matching post in place;
-  /// a new post from someone else surfaces as a "New posts" pill rather
-  /// than silently reordering the list under the person's thumb.
   void _handleRealtimeEvent(FeedRealtimeEvent event) {
     if (!mounted) return;
     final uid = SupabaseConfig.currentUserId;
@@ -158,7 +140,6 @@ class _S extends ConsumerState<HomeFeedScreen> {
       }
     } catch (error, stackTrace) {
       BetaErrorLoggingService.instance.record(error, stackTrace, context: 'home_feed_banned_user_guard');
-      // Feed loading owns the visible offline/error state; do not crash here.
     }
   }
 
@@ -205,10 +186,6 @@ class _S extends ConsumerState<HomeFeedScreen> {
       _cachedAsOf = null;
     } catch (e, stackTrace) {
       BetaErrorLoggingService.instance.record(e, stackTrace, context: 'home_feed_initial_load');
-      // Offline/network-failure fallback: show whatever was cached from the
-      // last successful load instead of a blank error screen (Step 16 —
-      // offline support). Still surfaces the error banner so it's clear
-      // this is stale data, not a live feed.
       final cached = await FeedOfflineCache.load();
       if (cached != null && cached.posts.isNotEmpty) {
         _posts = cached.posts;
@@ -250,28 +227,19 @@ class _S extends ConsumerState<HomeFeedScreen> {
     }
   }
 
-  /// Media prefetching (Step 16): warms CachedNetworkImage's disk/memory
-  /// cache for the next batch of feed images while the user is still
-  /// reading the current ones, so by the time they scroll there the image
-  /// decodes instantly instead of popping in. Best-effort — failures are
-  /// swallowed since this is purely a perf nicety, never load-bearing.
   void _prefetchMedia(List<PostModel> posts) {
     if (!mounted) return;
     final ctx = context;
     for (final post in posts.take(_pageSize)) {
       final url = post.displayImageUrl;
       if (url == null) continue;
-      unawaited(
-        precacheImage(CachedNetworkImageProvider(url), ctx).catchError((_) {}),
-      );
+      unawaited(precacheImage(CachedNetworkImageProvider(url), ctx).catchError((_) {}));
     }
   }
 
   void _maybePreloadNextPage() {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
-    // Start loading before the user hits the end so slow networks do not leave
-    // a blank gap or force a full-screen spinner during ordinary scrolling.
     if (position.extentAfter < _preloadExtent) _loadNextPage();
   }
 
@@ -291,9 +259,6 @@ class _S extends ConsumerState<HomeFeedScreen> {
     _noInteractionTimer?.cancel();
   }
 
-  /// Replaces `liked`/`bookmarked` wholesale — use for the initial load only.
-  /// Pagination should call [_mergeStates] instead so it doesn't re-query
-  /// state for every post loaded so far on every single page.
   Future<void> _refreshStates(List<String> ids) async {
     final uid = SupabaseConfig.currentUserId;
     if (uid == null || ids.isEmpty) {
@@ -305,9 +270,6 @@ class _S extends ConsumerState<HomeFeedScreen> {
     bookmarked = await repo.bookmarkedPostIds(uid, ids);
   }
 
-  /// Fetches liked/bookmarked state for just the given (newly-loaded) ids
-  /// and unions it into the existing sets, rather than re-fetching state
-  /// for the whole accumulated post list on every page.
   Future<void> _mergeStates(List<String> newIds) async {
     final uid = SupabaseConfig.currentUserId;
     if (uid == null || newIds.isEmpty) return;
@@ -317,17 +279,8 @@ class _S extends ConsumerState<HomeFeedScreen> {
     bookmarked = {...bookmarked, ...newBookmarked};
   }
 
-  /// Posts with ad slots interleaved. Unlike a plain fixed-interval house
-  /// ad, each slot is tied to a specific approved, opted-in creator's post
-  /// — that's what makes the "earn a share of ad revenue on your posts"
-  /// promise in the monetization screen actually true, since
-  /// `_AdSlot.postId` is what `log_ad_impression` attributes the
-  /// impression to. Falls back to no ad slots whenever ads are
-  /// disabled/unsupported or there's no eligible creator post to attach
-  /// to yet — which is the default today, until creators get approved.
   List<Object> _feedRows() {
-    final adsSupportedPlatform =
-        !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+    final adsSupportedPlatform = !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
     final adsOn = RemoteConfigService.instance.adsEnabled && adsSupportedPlatform;
     if (!adsOn) return _posts;
     final interval = RemoteConfigService.instance.adsFeedInterval;
@@ -344,12 +297,6 @@ class _S extends ConsumerState<HomeFeedScreen> {
     return rows;
   }
 
-  /// A brand-new account (created within the last 3 days) hasn't had time
-  /// to build a feed worth scrolling through, so friend suggestions stay
-  /// front and center at the top — same idea as Instagram/Facebook
-  /// pushing "find people" hard right after signup. Once someone's more
-  /// established, the same section moves down a few posts so it reads as
-  /// a feed break rather than the first thing they see every time.
   bool _isNewAccount(WidgetRef ref) {
     final profile = ref.watch(currentUserProfileProvider).asData?.value;
     final createdAt = profile != null ? DateTime.tryParse(profile['created_at']?.toString() ?? '') : null;
@@ -357,12 +304,6 @@ class _S extends ConsumerState<HomeFeedScreen> {
     return DateTime.now().difference(createdAt) < const Duration(days: 3);
   }
 
-  /// Interleaves the "People you may know" and "Suggested for you" groups
-  /// rows into [feedRows]: PYMK at the top for brand-new accounts (or
-  /// right after row 3 otherwise), with the communities row placed a
-  /// further few rows below it so the two breaks don't land back-to-back
-  /// — mirrors Facebook staggering "People You May Know" and "Suggested
-  /// for you" groups rather than stacking them.
   List<Object> _rowsWithSuggestions(List<Object> feedRows, bool isNewAccount) {
     if (SupabaseConfig.currentUserId == null) return feedRows;
     List<Object> withCommunities;
@@ -377,8 +318,6 @@ class _S extends ConsumerState<HomeFeedScreen> {
           ? [...withPymk, const _SuggestedCommunitiesSlot()]
           : [...withPymk.sublist(0, 10), const _SuggestedCommunitiesSlot(), ...withPymk.sublist(10)];
     }
-    // Suggested Pages placed further down still, so PYMK / Communities /
-    // Pages read as three separate feed breaks rather than stacking.
     if (withCommunities.length <= 18) return [...withCommunities, const _SuggestedPagesSlot()];
     return [...withCommunities.sublist(0, 18), const _SuggestedPagesSlot(), ...withCommunities.sublist(18)];
   }
@@ -404,147 +343,155 @@ class _S extends ConsumerState<HomeFeedScreen> {
         children: [
           _loadingInitial
               ? const FeedSkeletonList()
-          : _error != null && _posts.isEmpty
-              ? ErrorRetryState(title: 'Unable to load posts', message: _error!, onRetry: _loadInitial)
-              : _posts.isEmpty
-                  ? RefreshIndicator(
-                      onRefresh: _loadInitial,
-                      child: CustomScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: const [
-                          SliverToBoxAdapter(child: StoryBar()),
-                          SliverToBoxAdapter(child: ComposerPrompt()),
-                          SliverToBoxAdapter(child: PeopleYouMayKnow()),
-                          SliverToBoxAdapter(child: SuggestedCommunities()),
-                          SliverToBoxAdapter(child: SuggestedPages()),
-                          SliverFillRemaining(
-                            child: EmptyState(icon: Icons.dynamic_feed_outlined, title: 'No posts yet', message: 'Pull to refresh or check back soon.'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadInitial,
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: 2 + rows.length + (_loadingMore ? 1 : 0),
-                        itemBuilder: (context, rawIndex) {
-                          if (rawIndex == 0) return const StoryBar();
-                          if (rawIndex == 1) return const ComposerPrompt();
-                          final index = rawIndex - 2;
-                          if (index >= rows.length) {
-                            return const Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Center(child: CircularProgressIndicator()),
-                            );
-                          }
-                          final rowPost = rows[index];
-                          if (rowPost is _PYMKSlot) return const PeopleYouMayKnow(key: ValueKey('pymk'));
-                          if (rowPost is _SuggestedCommunitiesSlot) return const SuggestedCommunities(key: ValueKey('suggested-communities'));
-                          if (rowPost is _SuggestedPagesSlot) return const SuggestedPages(key: ValueKey('suggested-pages'));
-                          if (rowPost is _AdSlot) return FeedAdCard(key: ValueKey('ad-${rowPost.postId}'), postId: rowPost.postId);
-                          final p = rowPost as PostModel;
-                          if (p.contentType == 'page_visitor') {
-                            final location = p.location ?? '';
-                            final prefix = 'Posted on ';
-                            final pageName = location.startsWith(prefix)
-                                ? location.substring(prefix.length)
-                                : 'Page';
-                            return PageVisitorPostHomeCard(
-                              key: ValueKey('page-visitor-${p.id}'),
-                              post: p,
-                              pageId: p.communityId,
-                              pageName: pageName,
-                            );
-                          }
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              PostCard(
-                                key: ValueKey('post-${p.id}'),
-                                post: p,
-                                liked: liked.contains(p.id) || p.isLiked,
-                                bookmarked: bookmarked.contains(p.id) || p.isBookmarked,
-                                // InlinePostComments renders immediately below on the
-                                // same card background and owns the closing bottom
-                                // divider instead, so the two read as one continuous
-                                // card rather than PostCard visually closing itself
-                                // off before the comments panel starts.
-                                showBottomDivider: false,
-                                onLike: () async {
-                                  if (uid == null) {
-                                    redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to like posts.');
-                                    return;
-                                  }
-                                  _markFeedInteracted();
-                                  AnalyticsService.instance.firstActionCompleted(action: 'post_liked');
-                                  final wasLiked = liked.contains(p.id) || p.isLiked;
-                                  // Optimistic: flip the local flag immediately so the tap feels
-                                  // instant, instead of round-tripping liked/bookmarked state for
-                                  // every loaded post (previously refetched on every single tap).
-                                  setState(() => wasLiked ? liked.remove(p.id) : liked.add(p.id));
-                                  try {
-                                    if (wasLiked) {
-                                      await repo.unlikePost(p.id, uid);
-                                    } else {
-                                      await repo.likePost(p.id, uid);
-                                    }
-                                  } catch (_) {
-                                    if (mounted) setState(() => wasLiked ? liked.add(p.id) : liked.remove(p.id));
-                                  }
-                                },
-                                onComment: () {
-                                  if (uid == null) {
-                                    redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to comment.');
-                                    return;
-                                  }
-                                  _markFeedInteracted();
-                                  setState(() {
-                                    if (_expandedComments.contains(p.id)) {
-                                      _expandedComments.remove(p.id);
-                                    } else {
-                                      _expandedComments.add(p.id);
-                                    }
-                                  });
-                                },
-                                onBookmark: () async {
-                                  if (uid == null) {
-                                    redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to save posts.');
-                                    return;
-                                  }
-                                  _markFeedInteracted();
-                                  AnalyticsService.instance.firstActionCompleted(action: 'post_bookmarked');
-                                  final wasBookmarked = bookmarked.contains(p.id) || p.isBookmarked;
-                                  setState(() => wasBookmarked ? bookmarked.remove(p.id) : bookmarked.add(p.id));
-                                  try {
-                                    if (wasBookmarked) {
-                                      await repo.unbookmarkPost(p.id, uid);
-                                    } else {
-                                      await repo.bookmarkPost(p.id, uid);
-                                    }
-                                  } catch (_) {
-                                    if (mounted) setState(() => wasBookmarked ? bookmarked.add(p.id) : bookmarked.remove(p.id));
-                                  }
-                                },
-                              ),
-                              InlinePostComments(
-                                key: ValueKey('comments-${p.id}'),
-                                post: p,
-                                expanded: _expandedComments.contains(p.id),
-                                onToggleExpanded: () => setState(() {
-                                  if (_expandedComments.contains(p.id)) {
-                                    _expandedComments.remove(p.id);
-                                  } else {
-                                    _expandedComments.add(p.id);
-                                  }
-                                }),
+              : _error != null && _posts.isEmpty
+                  ? ErrorRetryState(title: 'Unable to load posts', message: _error!, onRetry: _loadInitial)
+                  : _posts.isEmpty
+                      ? RefreshIndicator(
+                          onRefresh: _loadInitial,
+                          child: CustomScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            slivers: const [
+                              SliverToBoxAdapter(child: StoryBar()),
+                              SliverToBoxAdapter(child: ComposerPrompt()),
+                              SliverToBoxAdapter(child: PeopleYouMayKnow()),
+                              SliverToBoxAdapter(child: SuggestedCommunities()),
+                              SliverToBoxAdapter(child: SuggestedPages()),
+                              SliverFillRemaining(
+                                child: EmptyState(icon: Icons.dynamic_feed_outlined, title: 'No posts yet', message: 'Pull to refresh or check back soon.'),
                               ),
                             ],
-                          );
-                        },
-                      ),
-                    ),
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadInitial,
+                          child: ListView.builder(
+                            controller: _scrollController,
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            itemCount: 2 + rows.length + (_loadingMore ? 1 : 0),
+                            itemBuilder: (context, rawIndex) {
+                              if (rawIndex == 0) return const StoryBar();
+                              if (rawIndex == 1) return const ComposerPrompt();
+                              final index = rawIndex - 2;
+                              if (index >= rows.length) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Center(child: CircularProgressIndicator()),
+                                );
+                              }
+                              final rowPost = rows[index];
+                              if (rowPost is _PYMKSlot) return const PeopleYouMayKnow(key: ValueKey('pymk'));
+                              if (rowPost is _SuggestedCommunitiesSlot) return const SuggestedCommunities(key: ValueKey('suggested-communities'));
+                              if (rowPost is _SuggestedPagesSlot) return const SuggestedPages(key: ValueKey('suggested-pages'));
+                              if (rowPost is _AdSlot) return FeedAdCard(key: ValueKey('ad-${rowPost.postId}'), postId: rowPost.postId);
+                              final p = rowPost as PostModel;
+
+                              if (p.contentType == 'page_owner') {
+                                final location = p.location ?? '';
+                                const prefix = 'Posted on ';
+                                final pageName = location.startsWith(prefix)
+                                    ? location.substring(prefix.length)
+                                    : (p.authorUsername ?? 'Page');
+                                return PageOwnerPostHomeCard(
+                                  key: ValueKey('page-owner-${p.id}'),
+                                  post: p,
+                                  pageId: p.communityId,
+                                  pageName: pageName,
+                                );
+                              }
+
+                              if (p.contentType == 'page_visitor') {
+                                final location = p.location ?? '';
+                                const prefix = 'Posted on ';
+                                final pageName = location.startsWith(prefix)
+                                    ? location.substring(prefix.length)
+                                    : 'Page';
+                                return PageVisitorPostHomeCard(
+                                  key: ValueKey('page-visitor-${p.id}'),
+                                  post: p,
+                                  pageId: p.communityId,
+                                  pageName: pageName,
+                                );
+                              }
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  PostCard(
+                                    key: ValueKey('post-${p.id}'),
+                                    post: p,
+                                    liked: liked.contains(p.id) || p.isLiked,
+                                    bookmarked: bookmarked.contains(p.id) || p.isBookmarked,
+                                    showBottomDivider: false,
+                                    onLike: () async {
+                                      if (uid == null) {
+                                        redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to like posts.');
+                                        return;
+                                      }
+                                      _markFeedInteracted();
+                                      AnalyticsService.instance.firstActionCompleted(action: 'post_liked');
+                                      final wasLiked = liked.contains(p.id) || p.isLiked;
+                                      setState(() => wasLiked ? liked.remove(p.id) : liked.add(p.id));
+                                      try {
+                                        if (wasLiked) {
+                                          await repo.unlikePost(p.id, uid);
+                                        } else {
+                                          await repo.likePost(p.id, uid);
+                                        }
+                                      } catch (_) {
+                                        if (mounted) setState(() => wasLiked ? liked.add(p.id) : liked.remove(p.id));
+                                      }
+                                    },
+                                    onComment: () {
+                                      if (uid == null) {
+                                        redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to comment.');
+                                        return;
+                                      }
+                                      _markFeedInteracted();
+                                      setState(() {
+                                        if (_expandedComments.contains(p.id)) {
+                                          _expandedComments.remove(p.id);
+                                        } else {
+                                          _expandedComments.add(p.id);
+                                        }
+                                      });
+                                    },
+                                    onBookmark: () async {
+                                      if (uid == null) {
+                                        redirectToLogin(context, redirect: '/', message: 'Please log in or create an account to save posts.');
+                                        return;
+                                      }
+                                      _markFeedInteracted();
+                                      AnalyticsService.instance.firstActionCompleted(action: 'post_bookmarked');
+                                      final wasBookmarked = bookmarked.contains(p.id) || p.isBookmarked;
+                                      setState(() => wasBookmarked ? bookmarked.remove(p.id) : bookmarked.add(p.id));
+                                      try {
+                                        if (wasBookmarked) {
+                                          await repo.unbookmarkPost(p.id, uid);
+                                        } else {
+                                          await repo.bookmarkPost(p.id, uid);
+                                        }
+                                      } catch (_) {
+                                        if (mounted) setState(() => wasBookmarked ? bookmarked.add(p.id) : bookmarked.remove(p.id));
+                                      }
+                                    },
+                                  ),
+                                  InlinePostComments(
+                                    key: ValueKey('comments-${p.id}'),
+                                    post: p,
+                                    expanded: _expandedComments.contains(p.id),
+                                    onToggleExpanded: () => setState(() {
+                                      if (_expandedComments.contains(p.id)) {
+                                        _expandedComments.remove(p.id);
+                                      } else {
+                                        _expandedComments.add(p.id);
+                                      }
+                                    }),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
           if (_newPostsAvailable)
             Positioned(
               top: 8,
