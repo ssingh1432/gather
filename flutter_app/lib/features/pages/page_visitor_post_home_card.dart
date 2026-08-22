@@ -26,7 +26,7 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
   final _repo = PageVisitorPostRepository();
   final _commentCtrl = TextEditingController();
   final _commentFocus = FocusNode();
-  bool _liked = false;
+  late bool _liked;
   int _likeCount = 0;
   int _commentCount = 0;
   bool _busy = false;
@@ -40,9 +40,15 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
   @override
   void initState() {
     super.initState();
+    // get_home_feed_cursor() already returns each row's like state and
+    // count, so there is no need for a per-card follow-up request here.
+    // Previously every visitor-post card fired its own like-state query the
+    // moment it mounted, so scrolling past a screenful of Page posts meant
+    // a burst of individual network calls competing with image loads —
+    // a direct contributor to stutter/jank while scrolling Home.
+    _liked = widget.post.isLiked;
     _likeCount = widget.post.likeCount;
     _commentCount = widget.post.commentCount;
-    _loadLikeState();
   }
 
   @override
@@ -50,15 +56,6 @@ class _PageVisitorPostHomeCardState extends State<PageVisitorPostHomeCard> {
     _commentCtrl.dispose();
     _commentFocus.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadLikeState() async {
-    final uid = SupabaseConfig.currentUserId;
-    if (uid == null) return;
-    try {
-      final liked = await _repo.getLikeState(widget.post.id, uid);
-      if (mounted) setState(() => _liked = liked);
-    } catch (_) {}
   }
 
   Future<void> _loadComments() async {
