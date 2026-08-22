@@ -13,12 +13,41 @@ class PageVisitorPostRepository {
     return (rows as List).length;
   }
 
+  /// Tallies post_id occurrences from a single batched query result instead
+  /// of one round trip per post, so callers can fan a list of post ids out
+  /// to one like-count query and one comment-count query total.
+  Map<String, int> _tally(List rows) {
+    final counts = <String, int>{};
+    for (final row in rows) {
+      final id = (row as Map)['post_id'] as String;
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /// Loads a Page's published visitor posts with their like/comment counts
+  /// in three total requests (posts, likes, comments) regardless of list
+  /// size. Previously this issued two additional sequential round trips
+  /// *per post* (like-count then comment-count), so a Page with 20 visitor
+  /// posts made 40+ serialized network calls just to render — slow enough
+  /// on a mobile connection to look like the Page had failed to load.
   Future<List<Map<String, dynamic>>> listVisitorPosts(String pageId) async {
     final rows = await _c.from('page_visitor_posts').select('id,page_id,author_id,content,status,content_type,media,event_id,created_at,users!page_visitor_posts_author_id_fkey(username,display_name,profile_photo_url),page_events(id,title,location,start_time)').eq('page_id', pageId).eq('status', 'published').order('created_at', ascending: false);
     final list = (rows as List).cast<Map<String, dynamic>>();
+    if (list.isEmpty) return list;
+
+    final ids = list.map((row) => row['id'] as String).toList();
+    final results = await Future.wait([
+      _c.from('page_visitor_post_likes').select('post_id').inFilter('post_id', ids),
+      _c.from('page_visitor_post_comments').select('post_id').inFilter('post_id', ids),
+    ]);
+    final likeCounts = _tally(results[0] as List);
+    final commentCounts = _tally(results[1] as List);
+
     for (final row in list) {
-      row['like_count'] = await _countRows('page_visitor_post_likes', row['id'] as String);
-      row['comment_count'] = await _countRows('page_visitor_post_comments', row['id'] as String);
+      final id = row['id'] as String;
+      row['like_count'] = likeCounts[id] ?? 0;
+      row['comment_count'] = commentCounts[id] ?? 0;
     }
     return list;
   }
