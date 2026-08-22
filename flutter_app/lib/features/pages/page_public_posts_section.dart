@@ -21,42 +21,58 @@ class _PagePublicPostsSectionState extends State<PagePublicPostsSection> {
   final _pageRepo = PageRepository();
   final _visitorRepo = PageVisitorPostRepository();
 
-  bool _loading = true;
-  String? _error;
+  bool _pageLoading = true;
+  bool _visitorLoading = true;
+  String? _pageError;
+  String? _visitorError;
   List<Map<String, dynamic>> _pagePosts = const [];
   List<Map<String, dynamic>> _visitorPosts = const [];
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadPagePosts();
+    _loadVisitorPosts();
   }
 
-  Future<void> _load() async {
-    if (mounted) {
-      setState(() {
-        _loading = true;
-        _error = null;
-      });
-    }
+  Future<void> _loadPagePosts() async {
     try {
-      final results = await Future.wait([
-        _pageRepo.listPagePosts(widget.pageId, status: 'published'),
-        _visitorRepo.listVisitorPosts(widget.pageId),
-      ]);
+      final posts = await _pageRepo.listPagePosts(widget.pageId, status: 'published');
       if (!mounted) return;
       setState(() {
-        _pagePosts = List<Map<String, dynamic>>.from(results[0] as List);
-        _visitorPosts = List<Map<String, dynamic>>.from(results[1] as List);
-        _loading = false;
+        _pagePosts = posts;
+        _pageLoading = false;
+        _pageError = null;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Could not load Page posts.';
-        _loading = false;
+        _pageLoading = false;
+        _pageError = 'Could not load Page posts.';
       });
     }
+  }
+
+  Future<void> _loadVisitorPosts() async {
+    try {
+      final posts = await _visitorRepo.listVisitorPosts(widget.pageId);
+      if (!mounted) return;
+      setState(() {
+        _visitorPosts = posts;
+        _visitorLoading = false;
+        _visitorError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _visitorLoading = false;
+        _visitorError = 'Could not load visitor posts.';
+      });
+    }
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait([_loadPagePosts(), _loadVisitorPosts()]);
   }
 
   DateTime _dateOf(Map<String, dynamic> post) {
@@ -66,34 +82,16 @@ class _PagePublicPostsSectionState extends State<PagePublicPostsSection> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: PageTokens.spaceLg),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      );
-    }
-
-    if (_error != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: PageTokens.spaceMd),
-        child: Column(
-          children: [
-            Text(_error!),
-            TextButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('Retry')),
-          ],
-        ),
-      );
-    }
-
     final combined = <Map<String, dynamic>>[
       ..._pagePosts.map((post) => {...post, '_isPagePost': true}),
       ..._visitorPosts.map((post) => {...post, '_isPagePost': false}),
     ]..sort((a, b) => _dateOf(b).compareTo(_dateOf(a)));
 
-    if (combined.isEmpty) {
+    final initialLoading = combined.isEmpty && _pageLoading && _visitorLoading;
+    if (initialLoading) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: PageTokens.spaceLg),
-        child: Center(child: Text('No posts yet.')),
+        padding: EdgeInsets.symmetric(vertical: PageTokens.spaceMd),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
 
@@ -101,19 +99,55 @@ class _PagePublicPostsSectionState extends State<PagePublicPostsSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: PageTokens.spaceLg),
-        Text('Posts', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: PageTokens.spaceSm),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Posts',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+            if (_pageLoading || _visitorLoading)
+              const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+            IconButton(onPressed: _refreshAll, tooltip: 'Refresh posts', icon: const Icon(Icons.refresh)),
+          ],
+        ),
+        if (_pageError != null && _pagePosts.isEmpty)
+          _PostSourceError(message: _pageError!, onRetry: _loadPagePosts),
+        if (_visitorError != null && _visitorPosts.isEmpty)
+          _PostSourceError(message: _visitorError!, onRetry: _loadVisitorPosts),
+        if (combined.isEmpty && !_pageLoading && !_visitorLoading && _pageError == null && _visitorError == null)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: PageTokens.spaceLg),
+            child: Center(child: Text('No posts yet.')),
+          ),
         ...combined.map((post) => Padding(
           padding: const EdgeInsets.only(bottom: PageTokens.spaceMd),
           child: post['_isPagePost'] == true
               ? _PageAuthoredPostCard(post: post, page: widget.page)
               : PageVisitorPostCard(post: post, page: widget.page),
         )),
-        Align(
-          alignment: Alignment.center,
-          child: TextButton.icon(onPressed: _load, icon: const Icon(Icons.refresh, size: 18), label: const Text('Refresh posts')),
-        ),
       ],
+    );
+  }
+}
+
+class _PostSourceError extends StatelessWidget {
+  const _PostSourceError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: PageTokens.spaceSm),
+      child: Row(
+        children: [
+          Expanded(child: Text(message)),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
     );
   }
 }
@@ -144,25 +178,35 @@ class _PageAuthoredPostCard extends StatelessWidget {
         border: Border.all(color: PageColors.border(context)),
       ),
       padding: const EdgeInsets.all(PageTokens.spaceMd),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          ProfileAvatar(url: page['logo_url']?.toString(), radius: 20),
-          const SizedBox(width: 10),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(pageName, style: const TextStyle(fontWeight: FontWeight.w800)),
-            Text(created?.toString() ?? '', style: Theme.of(context).textTheme.bodySmall),
-          ])),
-          const Icon(Icons.verified_outlined, size: 18),
-        ]),
-        if (content.isNotEmpty) ...[
-          const SizedBox(height: PageTokens.spaceMd),
-          Text(content, style: Theme.of(context).textTheme.bodyLarge),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ProfileAvatar(url: page['logo_url']?.toString(), radius: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(pageName, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    Text(created?.toString() ?? '', style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+              const Icon(Icons.verified_outlined, size: 18),
+            ],
+          ),
+          if (content.isNotEmpty) ...[
+            const SizedBox(height: PageTokens.spaceMd),
+            Text(content, style: Theme.of(context).textTheme.bodyLarge),
+          ],
+          if (media.isNotEmpty) ...[
+            const SizedBox(height: PageTokens.spaceMd),
+            PageMediaGallery(items: media),
+          ],
         ],
-        if (media.isNotEmpty) ...[
-          const SizedBox(height: PageTokens.spaceMd),
-          PageMediaGallery(items: media),
-        ],
-      ]),
+      ),
     );
   }
 }
