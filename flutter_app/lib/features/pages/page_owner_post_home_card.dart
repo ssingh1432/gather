@@ -15,26 +15,19 @@ class PageOwnerPostHomeCard extends StatefulWidget {
   final PostModel post;
   final String? pageId;
   final String pageName;
-
-  @override
-  State<PageOwnerPostHomeCard> createState() => _PageOwnerPostHomeCardState();
+  @override State<PageOwnerPostHomeCard> createState() => _PageOwnerPostHomeCardState();
 }
 
 class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
   final _repo = PageOwnerPostEngagementRepository();
   bool _liked = false;
-  int _likes = 0;
-  int _comments = 0;
-  int _shares = 0;
+  int _likes = 0, _comments = 0, _shares = 0;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    _likes = widget.post.likeCount;
-    _comments = widget.post.commentCount;
-    _shares = widget.post.shareCount;
-    _liked = widget.post.isLiked;
+    _likes = widget.post.likeCount; _comments = widget.post.commentCount; _shares = widget.post.shareCount; _liked = widget.post.isLiked;
     _loadEngagement();
   }
 
@@ -42,12 +35,7 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
     try {
       final e = await _repo.getEngagement(widget.post.id);
       if (!mounted) return;
-      setState(() {
-        _likes = e['likes'] as int;
-        _comments = e['comments'] as int;
-        _shares = e['shares'] as int;
-        _liked = e['liked'] as bool;
-      });
+      setState(() { _likes = e['likes'] as int; _comments = e['comments'] as int; _shares = e['shares'] as int; _liked = e['liked'] as bool; });
     } catch (_) {}
   }
 
@@ -58,19 +46,13 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
   }
 
   Future<void> _reportPost(BuildContext context) async {
-    if (SupabaseConfig.currentUserId == null) {
-      context.push('/login');
-      return;
-    }
-    final result = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (_) => const _PagePostReportDialog(),
-    );
+    if (SupabaseConfig.currentUserId == null) { context.push('/login'); return; }
+    final result = await showDialog<Map<String, String>>(context: context, builder: (_) => const _PagePostReportDialog());
     if (result == null) return;
     try {
       await _repo.report(widget.post.id, result['category']!, reason: result['reason']);
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report submitted.')));
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not submit report.')));
     }
   }
@@ -81,9 +63,8 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
     if (_busy) return;
     final previous = _liked;
     setState(() { _busy = true; _liked = !previous; _likes += previous ? -1 : 1; });
-    try {
-      await _repo.setLike(widget.post.id, !previous);
-    } catch (_) {
+    try { await _repo.setLike(widget.post.id, !previous); }
+    catch (_) {
       if (mounted) {
         setState(() { _liked = previous; _likes += previous ? 1 : -1; });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not update like.')));
@@ -106,14 +87,20 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
       await Share.share([if (text.isNotEmpty) text, url].join('\n\n'));
       await _repo.recordShare(widget.post.id);
       if (mounted) setState(() => _shares++);
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not share this post.')));
-    }
+    } catch (_) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not share this post.'))); }
   }
 
-  void _viewPost() {
-    if (widget.pageId == null || widget.pageId!.isEmpty) return;
-    context.push('/page-post?id=${widget.post.id}&pageId=${widget.pageId}');
+  Future<void> _viewPost() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: SingleChildScrollView(
+          child: PageOwnerPostHomeCard(post: widget.post, pageId: widget.pageId, pageName: widget.pageName),
+        ),
+      ),
+    );
   }
 
   @override
@@ -135,17 +122,12 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
             ])),
             PopupMenuButton<String>(
               tooltip: 'Post options',
-              onSelected: (value) {
-                if (value == 'copy') _copyLink(context);
-                if (value == 'view') _viewPost();
-                if (value == 'page' && widget.pageId != null) context.push('/page-profile?id=${widget.pageId}');
-                if (value == 'report') _reportPost(context);
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: 'view', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.article_outlined), title: Text('View Post'))),
-                const PopupMenuItem(value: 'page', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.business_outlined), title: Text('View Page'))),
-                const PopupMenuItem(value: 'copy', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.link), title: Text('Copy post link'))),
-                const PopupMenuItem(value: 'report', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.flag_outlined), title: Text('Report'))),
+              onSelected: (value) { if (value == 'copy') _copyLink(context); if (value == 'view') _viewPost(); if (value == 'page' && widget.pageId != null) context.push('/page-profile?id=${widget.pageId}'); if (value == 'report') _reportPost(context); },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'view', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.article_outlined), title: Text('View Post'))),
+                PopupMenuItem(value: 'page', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.business_outlined), title: Text('View Page'))),
+                PopupMenuItem(value: 'copy', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.link), title: Text('Copy post link'))),
+                PopupMenuItem(value: 'report', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.flag_outlined), title: Text('Report'))),
               ],
             ),
           ]),
