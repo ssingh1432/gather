@@ -36,22 +36,23 @@ create policy page_post_reports_select_own on public.page_post_reports
 
 grant select, insert on public.page_post_reports to authenticated;
 
--- Update the already-installed Home Feed function without copying or changing
--- the personal/community branches. The replacement is intentionally scoped to
--- the Page-owner hard-coded engagement projection from migration 117.
-do $$
+-- Update the installed Home Feed function in place. Only the Page-owner
+-- engagement projection is replaced; personal/community branches remain byte-for-byte intact.
+do $migration$
 declare
   v_def text;
-  v_old text := $$PAGE_OWNER_ENGAGEMENT_PLACEHOLDER$$;
-  v_new text := $$PAGE_OWNER_ENGAGEMENT_REPLACEMENT$$;
 begin
   select pg_get_functiondef('public.get_home_feed_cursor(uuid,integer,boolean,timestamptz,uuid)'::regprocedure)
     into v_def;
 
   v_def := replace(
     v_def,
-    '0::bigint as like_count, 0::bigint as comment_count, 0::integer as share_count,\n      false as is_liked, false as is_bookmarked, false as is_following,',
-    'coalesce((select count(*) from public.page_post_likes ppl where ppl.post_id = pp.id), 0)::bigint as like_count,\n      coalesce((select count(*) from public.page_post_comments ppc where ppc.post_id = pp.id), 0)::bigint as comment_count,\n      coalesce((select count(*) from public.page_post_shares pps where pps.post_id = pp.id), 0)::integer as share_count,\n      exists (select 1 from public.page_post_likes ppl_me where ppl_me.post_id = pp.id and ppl_me.user_id = $1) as is_liked, false as is_bookmarked, false as is_following,'
+    $old$0::bigint as like_count, 0::bigint as comment_count, 0::integer as share_count,
+      false as is_liked, false as is_bookmarked, false as is_following,$old$,
+    $new$coalesce((select count(*) from public.page_post_likes ppl where ppl.post_id = pp.id), 0)::bigint as like_count,
+      coalesce((select count(*) from public.page_post_comments ppc where ppc.post_id = pp.id), 0)::bigint as comment_count,
+      coalesce((select count(*) from public.page_post_shares pps where pps.post_id = pp.id), 0)::integer as share_count,
+      exists (select 1 from public.page_post_likes ppl_me where ppl_me.post_id = pp.id and ppl_me.user_id = $1) as is_liked, false as is_bookmarked, false as is_following,$new$
   );
 
   if v_def is null or position('page_post_likes' in v_def) = 0 then
@@ -59,4 +60,5 @@ begin
   end if;
 
   execute v_def;
-end $$;
+end
+$migration$;
