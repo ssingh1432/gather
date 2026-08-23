@@ -50,4 +50,15 @@ class PageOwnerPostEngagementRepository {
     if (uid == null) throw StateError('Sign in to share posts.');
     await _c.from('page_post_shares').insert({'post_id': postId, 'user_id': uid});
   }
+
+  Future<void> report(String postId, String category, {String? reason}) async {
+    final uid = SupabaseConfig.currentUserId;
+    if (uid == null) throw StateError('Sign in to report posts.');
+    await _c.from('page_post_reports').insert({
+      'post_id': postId,
+      'reporter_id': uid,
+      'category': category,
+      'reason': reason?.trim().isEmpty == true ? null : reason?.trim(),
+    });
+  }
 }
