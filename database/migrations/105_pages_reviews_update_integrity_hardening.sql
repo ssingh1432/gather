@@ -14,6 +14,9 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_is_team boolean := public.current_user_page_role(new.page_id) = 'owner'
+    or public.current_user_has_page_permission(new.page_id, 'manage_reviews');
 begin
   -- Review identity is immutable. A review cannot be moved between Pages or
   -- reassigned to another user through UPDATE, including by the reviewer.
@@ -23,10 +26,24 @@ begin
     raise exception 'page review identity cannot be changed';
   end if;
 
-  -- Preserve the existing moderation/ownership boundary: ordinary reviewers
-  -- may edit only review content/rating fields; Page-team moderation may
-  -- change moderation fields, while the owner response remains server-side
-  -- controlled by the existing review guard/RLS design.
+  -- Preserve the existing moderation/response boundary for ordinary
+  -- reviewers. Page team members may moderate/respond according to the
+  -- existing RLS permission checks.
+  if not v_is_team then
+    if new.status is distinct from old.status
+       or new.owner_response is distinct from old.owner_response
+       or new.owner_response_by is distinct from old.owner_response_by then
+      raise exception 'Only the page team can moderate or respond to a review.';
+    end if;
+  end if;
+
+  -- Preserve the existing server-side attribution for Page responses.
+  if new.owner_response is distinct from old.owner_response
+     and new.owner_response is not null then
+    new.owner_response_by := auth.uid();
+    new.owner_response_at := now();
+  end if;
+
   return new;
 end;
 $$;
@@ -36,8 +53,5 @@ create trigger trg_guard_page_review_update
 before update on public.page_reviews
 for each row execute function public.guard_page_review_update();
 
--- Defense in depth: ensure the existing INSERT self-review invariant also
--- remains enforced through the UPDATE path if review identity is ever
--- extended in the future.
 comment on function public.guard_page_review_update() is
-  'Page Reviews only: prevents changing review id, page_id, or user_id during UPDATE.';
+  'Page Reviews only: prevents changing review identity and preserves existing moderation/response guards.';
