@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
@@ -26,6 +27,23 @@ class PageMediaUrlResolver {
       return url;
     }
   }
+}
+
+/// Opens the Page-specific media viewer without changing the normal-post
+/// viewer or any shared feed behavior.
+Future<void> showPageMediaViewer(
+  BuildContext context,
+  List<Map<String, dynamic>> items, {
+  int initialIndex = 0,
+}) async {
+  final visible = items.where((item) => item['type'] != 'event').toList();
+  if (visible.isEmpty || !context.mounted) return;
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _PageMediaViewer(items: visible, initialIndex: initialIndex.clamp(0, visible.length - 1)),
+    ),
+  );
 }
 
 class PageNetworkImage extends StatefulWidget {
@@ -225,42 +243,38 @@ class _PageInlineVideoState extends State<PageInlineVideo> {
 }
 
 class PageMediaGallery extends StatelessWidget {
-  const PageMediaGallery({super.key, required this.items});
+  const PageMediaGallery({super.key, required this.items, this.onOpen});
   final List<Map<String, dynamic>> items;
+  final ValueChanged<int>? onOpen;
 
   @override
   Widget build(BuildContext context) {
     final visible = items.where((item) => item['type'] != 'event').toList();
     if (visible.isEmpty) return const SizedBox.shrink();
 
-    // A single attachment keeps its natural aspect ratio. The old fixed
-    // 280px box cropped portrait/landscape media with BoxFit.cover, making
-    // Page posts look broken compared with the normal Home feed.
-    if (visible.length == 1) return _SingleTile(item: visible.first);
+    if (visible.length == 1) return _SingleTile(item: visible.first, onTap: onOpen == null ? null : () => onOpen!(0));
 
-    // Multi-attachment layouts intentionally use tiles, but the tiles remain
-    // bounded and are limited to four visible items. This avoids an unbounded
-    // vertical gallery while keeping the existing collage behavior.
     if (visible.length == 2) {
       return SizedBox(
         height: 240,
         child: Row(children: [
-          Expanded(child: _Tile(item: visible[0], height: 240)),
+          Expanded(child: _Tile(item: visible[0], height: 240, onTap: onOpen == null ? null : () => onOpen!(0))),
           const SizedBox(width: 3),
-          Expanded(child: _Tile(item: visible[1], height: 240)),
+          Expanded(child: _Tile(item: visible[1], height: 240, onTap: onOpen == null ? null : () => onOpen!(1))),
         ]),
       );
     }
+
     if (visible.length == 3) {
       return SizedBox(
         height: 300,
         child: Row(children: [
-          Expanded(flex: 2, child: _Tile(item: visible[0], height: 300)),
+          Expanded(flex: 2, child: _Tile(item: visible[0], height: 300, onTap: onOpen == null ? null : () => onOpen!(0))),
           const SizedBox(width: 3),
           Expanded(child: Column(children: [
-            Expanded(child: _Tile(item: visible[1], height: 148)),
+            Expanded(child: _Tile(item: visible[1], height: 148, onTap: onOpen == null ? null : () => onOpen!(1))),
             const SizedBox(height: 3),
-            Expanded(child: _Tile(item: visible[2], height: 149)),
+            Expanded(child: _Tile(item: visible[2], height: 149, onTap: onOpen == null ? null : () => onOpen!(2))),
           ])),
         ]),
       );
@@ -271,18 +285,20 @@ class PageMediaGallery extends StatelessWidget {
       height: 300,
       child: GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: count > 4 ? 4 : count,
+        itemCount: 4,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 3, mainAxisSpacing: 3),
         itemBuilder: (context, index) {
           final remaining = count - 4;
           return Stack(children: [
-            Positioned.fill(child: _Tile(item: visible[index], height: 148)),
+            Positioned.fill(child: _Tile(item: visible[index], height: 148, onTap: onOpen == null ? null : () => onOpen!(index))),
             if (index == 3 && remaining > 0)
               Positioned.fill(
-                child: Container(
-                  color: Colors.black.withValues(alpha: 0.48),
-                  alignment: Alignment.center,
-                  child: Text('+$remaining more', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
+                child: IgnorePointer(
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.48),
+                    alignment: Alignment.center,
+                    child: Text('+$remaining more', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
+                  ),
                 ),
               ),
           ]);
@@ -293,44 +309,39 @@ class PageMediaGallery extends StatelessWidget {
 }
 
 class _SingleTile extends StatelessWidget {
-  const _SingleTile({required this.item});
+  const _SingleTile({required this.item, this.onTap});
   final Map<String, dynamic> item;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final type = item['type']?.toString() ?? 'document';
     final url = item['url']?.toString() ?? '';
     final name = item['name']?.toString() ?? 'Attachment';
-    if (type == 'image' || type == 'gif') {
-      return _SingleImage(url: url);
-    }
-    if (type == 'video') return PageInlineVideo(url: url, height: 300);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      alignment: Alignment.center,
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.description_outlined, size: 48),
-        const SizedBox(height: 8),
-        Text(name, maxLines: 3, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
-      ]),
-    );
+    final child = type == 'image' || type == 'gif'
+        ? PageNetworkImage(url: url, width: double.infinity, fit: BoxFit.contain)
+        : type == 'video'
+            ? PageInlineVideo(url: url, height: 300)
+            : Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                alignment: Alignment.center,
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.description_outlined, size: 48),
+                  const SizedBox(height: 8),
+                  Text(name, maxLines: 3, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+                ]),
+              );
+    return onTap == null ? child : GestureDetector(onTap: onTap, child: child);
   }
 }
 
-class _SingleImage extends StatelessWidget {
-  const _SingleImage({required this.url});
-  final String url;
-
-  @override
-  Widget build(BuildContext context) => PageNetworkImage(url: url, width: double.infinity, fit: BoxFit.contain);
-}
-
 class _Tile extends StatelessWidget {
-  const _Tile({required this.item, required this.height});
+  const _Tile({required this.item, required this.height, this.onTap});
   final Map<String, dynamic> item;
   final double height;
+  final VoidCallback? onTap;
 
   Future<void> _download(BuildContext context) async {
     final raw = item['url']?.toString() ?? '';
@@ -346,40 +357,58 @@ class _Tile extends StatelessWidget {
     final type = item['type']?.toString() ?? 'document';
     final url = item['url']?.toString() ?? '';
     final name = item['name']?.toString() ?? 'Attachment';
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: Stack(children: [
-        Positioned.fill(
-          child: switch (type) {
-            'image' || 'gif' => PageNetworkImage(url: url, width: double.infinity, height: height, fit: BoxFit.cover),
-            'video' => PageInlineVideo(url: url, height: height),
-            _ => Container(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              padding: const EdgeInsets.all(16),
-              alignment: Alignment.center,
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                const Icon(Icons.description_outlined, size: 42),
-                const SizedBox(height: 8),
-                Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
-              ]),
-            ),
-          },
+    final media = switch (type) {
+      'image' || 'gif' => PageNetworkImage(url: url, width: double.infinity, height: height, fit: BoxFit.cover),
+      'video' => onTap == null
+          ? PageInlineVideo(url: url, height: height)
+          : IgnorePointer(child: PageInlineVideo(url: url, height: height)),
+      _ => Container(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          padding: const EdgeInsets.all(16),
+          alignment: Alignment.center,
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.description_outlined, size: 42),
+            const SizedBox(height: 8),
+            Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+          ]),
         ),
-        Positioned(
-          right: 8,
-          top: 8,
-          child: Material(
-            color: Colors.black54,
-            shape: const CircleBorder(),
+    };
+
+    final content = Stack(children: [
+      Positioned.fill(child: media),
+      Positioned(
+        right: 8,
+        top: 8,
+        child: Material(
+          color: Colors.black38,
+          shape: const CircleBorder(),
+          child: SizedBox(
+            width: 34,
+            height: 34,
             child: IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 34, height: 34),
               tooltip: 'Download',
               onPressed: () => _download(context),
-              icon: const Icon(Icons.download_outlined, color: Colors.white, size: 20),
+              icon: const Icon(Icons.download_outlined, color: Colors.white, size: 17),
             ),
           ),
         ),
-        if (type == 'video') const Positioned(left: 8, bottom: 8, child: DecoratedBox(decoration: BoxDecoration(color: Colors.black54, shape: BoxShape.circle), child: Padding(padding: EdgeInsets.all(6), child: Icon(Icons.play_arrow, color: Colors.white, size: 18)))),
-      ]),
+      ),
+      if (type == 'video' && onTap == null)
+        const Positioned(
+          left: 8,
+          bottom: 8,
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+            child: Padding(padding: EdgeInsets.all(6), child: Icon(Icons.play_arrow, color: Colors.white, size: 18)),
+          ),
+        ),
+    ]);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: onTap == null ? content : GestureDetector(onTap: onTap, child: content),
     );
   }
 }
@@ -411,6 +440,231 @@ class PageEventAttachmentCard extends StatelessWidget {
       ])),
     ]),
   );
+}
+
+class _PageMediaViewer extends StatefulWidget {
+  const _PageMediaViewer({required this.items, required this.initialIndex});
+  final List<Map<String, dynamic>> items;
+  final int initialIndex;
+
+  @override
+  State<_PageMediaViewer> createState() => _PageMediaViewerState();
+}
+
+class _PageMediaViewerState extends State<_PageMediaViewer> {
+  late final PageController _controller;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+    _controller = PageController(initialPage: _index);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.items[_index];
+    final name = item['name']?.toString() ?? 'Attachment';
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text('${_index + 1} / ${widget.items.length}', style: const TextStyle(fontSize: 15)),
+        actions: [
+          if ((item['type']?.toString() ?? 'document') != 'event')
+            IconButton(
+              tooltip: 'Open',
+              onPressed: () => _openCurrent(context),
+              icon: const Icon(Icons.open_in_new),
+            ),
+        ],
+      ),
+      body: PageView.builder(
+        controller: _controller,
+        itemCount: widget.items.length,
+        onPageChanged: (value) => setState(() => _index = value),
+        itemBuilder: (context, index) => _PageMediaViewerItem(item: widget.items[index], name: index == _index ? name : null),
+      ),
+    );
+  }
+
+  Future<void> _openCurrent(BuildContext context) async {
+    final raw = widget.items[_index]['url']?.toString() ?? '';
+    if (raw.isEmpty) return;
+    final url = await PageMediaUrlResolver.resolve(raw);
+    if (!context.mounted) return;
+    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open this attachment.')));
+  }
+}
+
+class _PageMediaViewerItem extends StatelessWidget {
+  const _PageMediaViewerItem({required this.item, this.name});
+  final Map<String, dynamic> item;
+  final String? name;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = item['type']?.toString() ?? 'document';
+    final url = item['url']?.toString() ?? '';
+    final title = name ?? item['name']?.toString() ?? 'Attachment';
+    if (type == 'image' || type == 'gif') {
+      return Center(
+        child: InteractiveViewer(
+          minScale: 1,
+          maxScale: 5,
+          child: PageNetworkImage(url: url, fit: BoxFit.contain),
+        ),
+      );
+    }
+    if (type == 'video') return _PageViewerVideo(url: url);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.description_outlined, color: Colors.white, size: 72),
+          const SizedBox(height: 16),
+          Text(title, textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: () async {
+              final resolved = await PageMediaUrlResolver.resolve(url);
+              if (!context.mounted) return;
+              await launchUrl(Uri.parse(resolved), mode: LaunchMode.externalApplication);
+            },
+            icon: const Icon(Icons.open_in_new),
+            label: const Text('Open file'),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _PageViewerVideo extends StatefulWidget {
+  const _PageViewerVideo({required this.url});
+  final String url;
+
+  @override
+  State<_PageViewerVideo> createState() => _PageViewerVideoState();
+}
+
+class _PageViewerVideoState extends State<_PageViewerVideo> {
+  VideoPlayerController? _controller;
+  String? _resolvedUrl;
+  bool _error = false;
+  bool _controlsVisible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveAndStart();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _resolveAndStart() async {
+    final resolved = await PageMediaUrlResolver.resolve(widget.url);
+    if (!mounted) return;
+    setState(() => _resolvedUrl = resolved);
+    try {
+      final controller = VideoPlayerController.networkUrl(Uri.parse(resolved));
+      await controller.initialize();
+      if (!mounted) {
+        controller.dispose();
+        return;
+      }
+      controller.addListener(() {
+        if (mounted) setState(() {});
+      });
+      setState(() => _controller = controller);
+      await controller.play();
+    } catch (_) {
+      if (mounted) setState(() => _error = true);
+    }
+  }
+
+  void _togglePlay() {
+    final controller = _controller;
+    if (controller == null) return;
+    if (controller.value.isPlaying) {
+      controller.pause();
+    } else {
+      controller.play();
+    }
+    setState(() {});
+  }
+
+  String _format(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error) return const Center(child: Text('Could not play this video.', style: TextStyle(color: Colors.white70)));
+    final controller = _controller;
+    if (controller == null) return const Center(child: CircularProgressIndicator());
+    final ratio = controller.value.aspectRatio == 0 ? 16 / 9 : controller.value.aspectRatio;
+    return GestureDetector(
+      onTap: () => setState(() => _controlsVisible = !_controlsVisible),
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: ratio,
+          child: Stack(alignment: Alignment.center, children: [
+            VideoPlayer(controller),
+            if (_controlsVisible) ...[
+              IconButton(
+                onPressed: _togglePlay,
+                iconSize: 60,
+                color: Colors.white,
+                icon: Icon(controller.value.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
+              ),
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(8, 18, 8, 4),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black87]),
+                  ),
+                  child: Row(children: [
+                    Text(_format(controller.value.position), style: const TextStyle(color: Colors.white, fontSize: 11)),
+                    Expanded(
+                      child: VideoProgressIndicator(
+                        controller,
+                        allowScrubbing: true,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        colors: VideoProgressColors(playedColor: Theme.of(context).colorScheme.primary, backgroundColor: Colors.white24),
+                      ),
+                    ),
+                    Text(_format(controller.value.duration), style: const TextStyle(color: Colors.white, fontSize: 11)),
+                  ]),
+                ),
+              ),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
 }
 
 class _MediaError extends StatelessWidget {
