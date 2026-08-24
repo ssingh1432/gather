@@ -8,6 +8,7 @@ import 'page_media_gallery.dart';
 import 'page_post_media_ux.dart';
 import 'page_visitor_post_repository.dart';
 
+// Page-only post card. Keep Page UX isolated from normal/community posts.
 class PageVisitorPostCard extends StatefulWidget {
   const PageVisitorPostCard({super.key, required this.post, required this.page});
   final Map<String, dynamic> post;
@@ -456,6 +457,7 @@ class _PageCommentThreadState extends State<_PageCommentThread> {
                       username: widget.username(reply),
                       userId: widget.userId(reply),
                       replyToName: widget.username(widget.comment),
+                      replyToUserId: widget.userId(widget.comment),
                       onReply: () => widget.onReply(reply),
                     ),
                 ],
@@ -468,12 +470,13 @@ class _PageCommentThreadState extends State<_PageCommentThread> {
 }
 
 class _PageCommentRow extends StatelessWidget {
-  const _PageCommentRow({required this.comment, required this.displayName, required this.username, required this.userId, required this.onReply, this.replyToName});
+  const _PageCommentRow({required this.comment, required this.displayName, required this.username, required this.userId, required this.onReply, this.replyToName, this.replyToUserId});
   final Map<String, dynamic> comment;
   final String displayName;
   final String username;
   final String userId;
   final String? replyToName;
+  final String? replyToUserId;
   final VoidCallback onReply;
 
   @override
@@ -512,7 +515,7 @@ class _PageCommentRow extends StatelessWidget {
                             alignment: PlaceholderAlignment.baseline,
                             baseline: TextBaseline.alphabetic,
                             child: GestureDetector(
-                              onTap: userId.isEmpty ? null : () => context.push('/user?id=$userId'),
+                              onTap: replyToUserId?.isEmpty == false ? () => context.push('/user?id=$replyToUserId') : null,
                               child: Text('@$replyToName ', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w600)),
                             ),
                           ),
