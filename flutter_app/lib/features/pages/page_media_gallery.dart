@@ -561,7 +561,16 @@ class _Tile extends StatelessWidget {
 
     final wrapped = onTap == null
         ? content
-        : GestureDetector(onTap: onTap, child: content);
+        : GestureDetector(
+            onTap: () async {
+              if (type == 'document' || type == 'file') {
+                await _download(context);
+                return;
+              }
+              onTap!();
+            },
+            child: content,
+          );
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
