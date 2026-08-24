@@ -211,9 +211,13 @@ class _PageMediaListItem extends StatelessWidget {
     final url = item['url']?.toString() ?? '';
     final name = item['name']?.toString() ?? 'Attachment';
     Widget media;
-    if (type == 'image' || type == 'gif') media = ClipRRect(borderRadius: BorderRadius.circular(12), child: _PageNetworkImage(url: url, fit: BoxFit.contain));
-    else if (type == 'video') media = ClipRRect(borderRadius: BorderRadius.circular(12), child: _PageVideo(url: url, height: 360));
-    else media = Container(width: double.infinity, padding: const EdgeInsets.all(24), decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)), child: Column(children: [const Icon(Icons.description_outlined, size: 52), const SizedBox(height: 8), Text(name, textAlign: TextAlign.center)]));
+    if (type == 'image' || type == 'gif') {
+      media = ClipRRect(borderRadius: BorderRadius.circular(12), child: _PageNetworkImage(url: url, fit: BoxFit.contain));
+    } else if (type == 'video') {
+      media = ClipRRect(borderRadius: BorderRadius.circular(12), child: _PageVideo(url: url, height: 360));
+    } else {
+      media = Container(width: double.infinity, padding: const EdgeInsets.all(24), decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)), child: Column(children: [const Icon(Icons.description_outlined, size: 52), const SizedBox(height: 8), Text(name, textAlign: TextAlign.center)]));
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [Text('${index + 1}', style: Theme.of(context).textTheme.labelLarge), const Spacer(), _PageDownloadButton(item: item)]), const SizedBox(height: 6), media]);
   }
 }
@@ -285,7 +289,11 @@ class _PageVideoState extends State<_PageVideo> {
       controller.play();
       return;
     }
-    controller.value.isPlaying ? controller.pause() : controller.play();
+    if (controller.value.isPlaying) {
+      controller.pause();
+    } else {
+      controller.play();
+    }
   }
 
   Future<void> _toggleMute() async {
@@ -298,18 +306,50 @@ class _PageVideoState extends State<_PageVideo> {
 
   @override
   Widget build(BuildContext context) {
-    if (_failed) return SizedBox(height: widget.height, child: const Center(child: Text('Video unavailable')));
+    if (_failed) {
+      return SizedBox(height: widget.height, child: const Center(child: Text('Video unavailable')));
+    }
     final controller = _controller;
-    if (controller == null) return SizedBox(height: widget.height, child: Center(child: _loading || _resolved == null ? const CircularProgressIndicator(strokeWidth: 2) : IconButton.filled(onPressed: _start, icon: const Icon(Icons.play_arrow), iconSize: widget.compact ? 28 : 36)));
+    if (controller == null) {
+      return SizedBox(
+        height: widget.height,
+        child: Center(
+          child: _loading || _resolved == null
+              ? const CircularProgressIndicator(strokeWidth: 2)
+              : IconButton.filled(onPressed: _start, icon: const Icon(Icons.play_arrow), iconSize: widget.compact ? 28 : 36),
+        ),
+      );
+    }
     final size = controller.value.size;
     final ratio = size.width > 0 && size.height > 0 ? (size.width / size.height).clamp(0.5625, 1.7778) : 16 / 9;
     return GestureDetector(
       onTap: _togglePlay,
-      child: AspectRatio(aspectRatio: ratio, child: Stack(alignment: Alignment.center, children: [
-        Positioned.fill(child: VideoPlayer(controller)),
-        if (!controller.value.isPlaying) const Icon(Icons.play_circle_fill, size: 58, color: Colors.white70),
-        Positioned(right: 8, bottom: 8, child: Material(color: Colors.black.withValues(alpha: 0.48), shape: const CircleBorder(), child: InkWell(customBorder: const CircleBorder(), onTap: _toggleMute, child: Padding(padding: const EdgeInsets.all(8), child: Icon(_muted ? Icons.volume_off : Icons.volume_up, size: 18, color: Colors.white)))),
-      ])),
+      child: AspectRatio(
+        aspectRatio: ratio,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(child: VideoPlayer(controller)),
+            if (!controller.value.isPlaying) const Icon(Icons.play_circle_fill, size: 58, color: Colors.white70),
+            Positioned(
+              right: 8,
+              bottom: 8,
+              child: Material(
+                color: Colors.black.withValues(alpha: 0.48),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: _toggleMute,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(_muted ? Icons.volume_off : Icons.volume_up, size: 18, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
