@@ -46,20 +46,68 @@ class _PageMediaPreviewGrid extends StatelessWidget {
   const _PageMediaPreviewGrid({required this.items});
   final List<Map<String, dynamic>> items;
 
-  void _open(BuildContext context, int index) => showPagePostMediaList(context, items, initialIndex: index);
+  void _openCollection(BuildContext context) => showPagePostMediaList(context, items, initialIndex: 0);
 
   @override
   Widget build(BuildContext context) {
     if (items.length == 1) {
-      return _PreviewTile(item: items.first, onTap: () => _open(context, 0), height: 300);
+      return _PreviewTile(item: items.first, onTap: () => _openCollection(context), height: 300);
     }
+
+    // For 2+ attachments the preview is intentionally one collection-level
+    // tap target. Individual tiles do not choose a starting attachment.
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _openCollection(context),
+        child: _MultiMediaPreview(items: items),
+      ),
+    );
+  }
+}
+
+class _MultiMediaPreview extends StatelessWidget {
+  const _MultiMediaPreview({required this.items});
+  final List<Map<String, dynamic>> items;
+
+  Widget _tile(BuildContext context, Map<String, dynamic> item, double height) {
+    final type = item['type']?.toString() ?? 'document';
+    final url = item['url']?.toString() ?? '';
+    final name = item['name']?.toString() ?? 'Attachment';
+    Widget media;
+    if (type == 'image' || type == 'gif') {
+      media = _PageNetworkImage(url: url, fit: BoxFit.cover);
+    } else if (type == 'video') {
+      media = _PageVideo(url: url, height: height, compact: true);
+    } else {
+      media = Container(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.description_outlined, size: 42),
+            const SizedBox(height: 8),
+            Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+          ],
+        ),
+      );
+    }
+    return ClipRRect(borderRadius: BorderRadius.circular(10), child: Stack(fit: StackFit.expand, children: [media, Positioned(right: 8, top: 8, child: _PageDownloadButton(item: item))]));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     if (items.length == 2) {
       return SizedBox(
         height: 240,
         child: Row(children: [
-          Expanded(child: _PreviewTile(item: items[0], onTap: () => _open(context, 0), height: 240)),
+          Expanded(child: _tile(context, items[0], 240)),
           const SizedBox(width: 3),
-          Expanded(child: _PreviewTile(item: items[1], onTap: () => _open(context, 1), height: 240)),
+          Expanded(child: _tile(context, items[1], 240)),
         ]),
       );
     }
@@ -67,12 +115,12 @@ class _PageMediaPreviewGrid extends StatelessWidget {
       return SizedBox(
         height: 300,
         child: Row(children: [
-          Expanded(flex: 2, child: _PreviewTile(item: items[0], onTap: () => _open(context, 0), height: 300)),
+          Expanded(flex: 2, child: _tile(context, items[0], 300)),
           const SizedBox(width: 3),
           Expanded(child: Column(children: [
-            Expanded(child: _PreviewTile(item: items[1], onTap: () => _open(context, 1), height: 148)),
+            Expanded(child: _tile(context, items[1], 148)),
             const SizedBox(height: 3),
-            Expanded(child: _PreviewTile(item: items[2], onTap: () => _open(context, 2), height: 149)),
+            Expanded(child: _tile(context, items[2], 149)),
           ])),
         ]),
       );
@@ -86,7 +134,7 @@ class _PageMediaPreviewGrid extends StatelessWidget {
         itemCount: 4,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 3, mainAxisSpacing: 3),
         itemBuilder: (context, index) => Stack(children: [
-          Positioned.fill(child: _PreviewTile(item: items[index], onTap: () => _open(context, index), height: 148)),
+          Positioned.fill(child: _tile(context, items[index], 148)),
           if (index == 3 && remaining > 0)
             Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black.withValues(alpha: 0.48), alignment: Alignment.center, child: Text('+$remaining more', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700))))),
         ]),
