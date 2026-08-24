@@ -61,21 +61,6 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post link copied.')));
   }
 
-  Future<void> _reportPost(BuildContext context) async {
-    if (SupabaseConfig.currentUserId == null) {
-      context.push('/login');
-      return;
-    }
-    final result = await showDialog<Map<String, String>>(context: context, builder: (_) => const _PagePostReportDialog());
-    if (result == null) return;
-    try {
-      await _repo.report(widget.post.id, result['category']!, reason: result['reason']);
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report submitted.')));
-    } catch (_) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not submit report.')));
-    }
-  }
-
   Future<void> _toggleLike() async {
     final uid = SupabaseConfig.currentUserId;
     if (uid == null) {
@@ -142,6 +127,7 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
       'media_type': item.mediaType,
       if (item.thumbnailUrl != null) 'thumbnail_url': item.thumbnailUrl,
     }).toList();
+    final viewerItems = mediaItems.where((item) => item['type'] != 'event').toList();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -173,12 +159,10 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
               onSelected: (value) {
                 if (value == 'copy') _copyLink(context);
                 if (value == 'page' && widget.pageId != null) context.push('/page-profile?id=${widget.pageId}');
-                if (value == 'report') _reportPost(context);
               },
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'page', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.business_outlined), title: Text('View Page'))),
                 PopupMenuItem(value: 'copy', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.link), title: Text('Copy post link'))),
-                PopupMenuItem(value: 'report', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.flag_outlined), title: Text('Report'))),
               ],
             ),
           ]),
@@ -190,7 +174,7 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
             const SizedBox(height: 12),
             PageMediaGallery(
               items: mediaItems,
-              onOpen: (index) => showPageMediaViewer(context, mediaItems, initialIndex: index),
+              onOpen: viewerItems.isEmpty ? null : (index) => showPageMediaViewer(context, viewerItems, initialIndex: index),
             ),
           ],
           const SizedBox(height: 4),
@@ -220,56 +204,6 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
       ),
     );
   }
-}
-
-class _PagePostReportDialog extends StatefulWidget {
-  const _PagePostReportDialog();
-  @override
-  State<_PagePostReportDialog> createState() => _PagePostReportDialogState();
-}
-
-class _PagePostReportDialogState extends State<_PagePostReportDialog> {
-  final _reason = TextEditingController();
-  String _category = 'spam';
-
-  @override
-  void dispose() {
-    _reason.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Report Page post'),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<String>(
-              value: _category,
-              decoration: const InputDecoration(labelText: 'Reason'),
-              items: const [
-                DropdownMenuItem(value: 'spam', child: Text('Spam')),
-                DropdownMenuItem(value: 'harassment', child: Text('Harassment or abuse')),
-                DropdownMenuItem(value: 'misinformation', child: Text('False or misleading information')),
-                DropdownMenuItem(value: 'inappropriate', child: Text('Inappropriate content')),
-                DropdownMenuItem(value: 'other', child: Text('Other')),
-              ],
-              onChanged: (v) {
-                if (v != null) setState(() => _category = v);
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _reason,
-              maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Additional details (optional)', border: OutlineInputBorder()),
-            ),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, {'category': _category, 'reason': _reason.text}), child: const Text('Report')),
-        ],
-      );
 }
 
 class _PageOwnerCommentsSheet extends StatefulWidget {
@@ -409,8 +343,10 @@ class _PageOwnerCommentsSheetState extends State<_PageOwnerCommentsSheet> {
   Widget _commentTree(BuildContext context, Map<String, dynamic> comment, {int depth = 0, Set<String>? ancestors}) {
     final id = comment['id']?.toString();
     final path = {...?ancestors, if (id != null) id};
-    final children = id == null || path.length > 32 ? const <Map<String, dynamic>>[] : _childrenOf(id).where((child) => !path.contains(child['id']?.toString())).toList();
-    final left = depth == 0 ? 0.0 : (depth.clamp(1, 5) * 28.0);
+    final children = id == null || path.length > 32
+        ? const <Map<String, dynamic>>[]
+        : _childrenOf(id).where((child) => !path.contains(child['id']?.toString())).toList();
+    final left = depth == 0 ? 0.0 : depth.clamp(1, 5).toDouble() * 28.0;
     return Padding(
       padding: EdgeInsets.only(left: left),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
