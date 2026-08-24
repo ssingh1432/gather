@@ -273,7 +273,38 @@ class _CommentsSheetState extends State<_CommentsSheet> {
   }
 
   List<Map<String, dynamic>> get _topLevel => _comments.where((c) => c['parent_comment_id'] == null).toList();
-  List<Map<String, dynamic>> _repliesTo(String id) => _comments.where((c) => c['parent_comment_id'] == id).toList();
+
+  List<Map<String, dynamic>> _repliesTo(String id) => _comments.where((c) => c['parent_comment_id']?.toString() == id).toList();
+
+  List<Map<String, dynamic>> _threadReplies(String rootId) {
+    final byParent = <String, List<Map<String, dynamic>>>{};
+    for (final comment in _comments) {
+      final parent = comment['parent_comment_id']?.toString();
+      if (parent == null || parent.isEmpty) continue;
+      byParent.putIfAbsent(parent, () => <Map<String, dynamic>>[]).add(comment);
+    }
+
+    final result = <Map<String, dynamic>>[];
+    final queue = List<Map<String, dynamic>>.from(byParent[rootId] ?? const <Map<String, dynamic>>[]);
+    final seen = <String>{};
+    while (queue.isNotEmpty) {
+      final reply = queue.removeAt(0);
+      final id = reply['id']?.toString();
+      if (id == null || !seen.add(id)) continue;
+      result.add(reply);
+      queue.addAll(byParent[id] ?? const <Map<String, dynamic>>[]);
+    }
+    return result;
+  }
+
+  Map<String, dynamic>? _parentOf(Map<String, dynamic> comment) {
+    final parentId = comment['parent_comment_id']?.toString();
+    if (parentId == null || parentId.isEmpty) return null;
+    for (final candidate in _comments) {
+      if (candidate['id']?.toString() == parentId) return candidate;
+    }
+    return null;
+  }
 
   String _displayName(Map<String, dynamic> comment) {
     final user = comment['users'] is Map ? Map<String, dynamic>.from(comment['users'] as Map) : <String, dynamic>{};
@@ -306,7 +337,9 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 
     setState(() => _sending = true);
     try {
-      final parentId = _replyingTo == null ? null : (_replyingTo!['parent_comment_id']?.toString() ?? _replyingTo!['id']?.toString());
+      // Preserve the exact reply target. A reply to a reply must reference
+      // that reply, rather than being silently redirected to the root comment.
+      final parentId = _replyingTo?['id']?.toString();
       await _repo.addComment(widget.postId, '', text, parentCommentId: parentId);
       _controller.clear();
       setState(() => _replyingTo = null);
@@ -349,7 +382,8 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                             final comment = _topLevel[i];
                             return _PageCommentThread(
                               comment: comment,
-                              replies: _repliesTo(comment['id']?.toString() ?? ''),
+                              replies: _threadReplies(comment['id']?.toString() ?? ''),
+                              parentOf: _parentOf,
                               displayName: _displayName,
                               username: _username,
                               userId: _userId,
@@ -361,11 +395,20 @@ class _CommentsSheetState extends State<_CommentsSheet> {
             if (_replyingTo != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 2, 14, 4),
-                child: Row(
-                  children: [
-                    Expanded(child: Text('Replying to @${_username(_replyingTo!)}', style: theme.textTheme.bodySmall)),
-                    IconButton(icon: const Icon(Icons.close, size: 17), visualDensity: VisualDensity.compact, onPressed: () => setState(() => _replyingTo = null)),
-                  ],
+                child: Material(
+                  color: theme.colorScheme.primaryContainer.withValues(alpha: .35),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Row(
+                      children: [
+                        Icon(Icons.reply_rounded, size: 16, color: theme.colorScheme.primary),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text('Replying to @${_username(_replyingTo!)}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w600))),
+                        IconButton(icon: const Icon(Icons.close, size: 17), visualDensity: VisualDensity.compact, onPressed: () => setState(() => _replyingTo = null)),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             Padding(
@@ -406,9 +449,10 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 }
 
 class _PageCommentThread extends StatefulWidget {
-  const _PageCommentThread({required this.comment, required this.replies, required this.displayName, required this.username, required this.userId, required this.onReply});
+  const _PageCommentThread({required this.comment, required this.replies, required this.parentOf, required this.displayName, required this.username, required this.userId, required this.onReply});
   final Map<String, dynamic> comment;
   final List<Map<String, dynamic>> replies;
+  final Map<String, dynamic>? Function(Map<String, dynamic>) parentOf;
   final String Function(Map<String, dynamic>) displayName;
   final String Function(Map<String, dynamic>) username;
   final String Function(Map<String, dynamic>) userId;
@@ -456,8 +500,10 @@ class _PageCommentThreadState extends State<_PageCommentThread> {
                       displayName: widget.displayName(reply),
                       username: widget.username(reply),
                       userId: widget.userId(reply),
-                      replyToName: widget.username(widget.comment),
-                      replyToUserId: widget.userId(widget.comment),
+                      replyTo: widget.parentOf(reply),
+                      displayNameOf: widget.displayName,
+                      usernameOf: widget.username,
+                      userIdOf: widget.userId,
                       onReply: () => widget.onReply(reply),
                     ),
                 ],
@@ -470,14 +516,16 @@ class _PageCommentThreadState extends State<_PageCommentThread> {
 }
 
 class _PageCommentRow extends StatelessWidget {
-  const _PageCommentRow({required this.comment, required this.displayName, required this.username, required this.userId, required this.onReply, this.replyToName, this.replyToUserId});
+  const _PageCommentRow({required this.comment, required this.displayName, required this.username, required this.userId, required this.onReply, this.replyTo, this.displayNameOf, this.usernameOf, this.userIdOf});
   final Map<String, dynamic> comment;
   final String displayName;
   final String username;
   final String userId;
-  final String? replyToName;
-  final String? replyToUserId;
   final VoidCallback onReply;
+  final Map<String, dynamic>? replyTo;
+  final String Function(Map<String, dynamic>)? displayNameOf;
+  final String Function(Map<String, dynamic>)? usernameOf;
+  final String Function(Map<String, dynamic>)? userIdOf;
 
   @override
   Widget build(BuildContext context) {
@@ -486,6 +534,8 @@ class _PageCommentRow extends StatelessWidget {
     final avatar = user['profile_photo_url']?.toString();
     final content = comment['content']?.toString() ?? '';
     final created = DateTime.tryParse(comment['created_at']?.toString() ?? '');
+    final targetUsername = replyTo == null || usernameOf == null ? null : usernameOf!(replyTo!);
+    final targetUserId = replyTo == null || userIdOf == null ? null : userIdOf!(replyTo!);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -503,6 +553,25 @@ class _PageCommentRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (targetUsername != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6, bottom: 3),
+                    child: InkWell(
+                      onTap: targetUserId?.isNotEmpty == true ? () => context.push('/user?id=$targetUserId') : null,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.reply_rounded, size: 14, color: theme.colorScheme.primary),
+                            const SizedBox(width: 3),
+                            Text('@$targetUsername', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w700, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
                   decoration: BoxDecoration(color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5), borderRadius: BorderRadius.circular(13)),
@@ -510,15 +579,6 @@ class _PageCommentRow extends StatelessWidget {
                     text: TextSpan(
                       style: theme.textTheme.bodyMedium,
                       children: [
-                        if (replyToName != null)
-                          WidgetSpan(
-                            alignment: PlaceholderAlignment.baseline,
-                            baseline: TextBaseline.alphabetic,
-                            child: GestureDetector(
-                              onTap: replyToUserId?.isEmpty == false ? () => context.push('/user?id=$replyToUserId') : null,
-                              child: Text('@$replyToName ', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w600)),
-                            ),
-                          ),
                         TextSpan(text: displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
                         const TextSpan(text: '\n'),
                         TextSpan(text: content),
