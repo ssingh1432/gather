@@ -41,7 +41,10 @@ Future<void> showPageMediaViewer(
   await Navigator.of(context).push<void>(
     MaterialPageRoute(
       fullscreenDialog: true,
-      builder: (_) => _PageMediaViewer(items: visible, initialIndex: initialIndex.clamp(0, visible.length - 1)),
+      builder: (_) => _PageMediaViewer(
+        items: visible,
+        initialIndex: initialIndex.clamp(0, visible.length - 1).toInt(),
+      ),
     ),
   );
 }
@@ -313,27 +316,63 @@ class _SingleTile extends StatelessWidget {
   final Map<String, dynamic> item;
   final VoidCallback? onTap;
 
+  Future<void> _download(BuildContext context) async {
+    final raw = item['url']?.toString() ?? '';
+    if (raw.isEmpty) return;
+    final url = await PageMediaUrlResolver.resolve(raw);
+    if (!context.mounted) return;
+    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open this media.')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final type = item['type']?.toString() ?? 'document';
     final url = item['url']?.toString() ?? '';
     final name = item['name']?.toString() ?? 'Attachment';
-    final child = type == 'image' || type == 'gif'
-        ? PageNetworkImage(url: url, width: double.infinity, fit: BoxFit.contain)
-        : type == 'video'
-            ? PageInlineVideo(url: url, height: 300)
-            : Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                alignment: Alignment.center,
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.description_outlined, size: 48),
-                  const SizedBox(height: 8),
-                  Text(name, maxLines: 3, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
-                ]),
-              );
-    return onTap == null ? child : GestureDetector(onTap: onTap, child: child);
+    final media = switch (type) {
+      'image' || 'gif' => PageNetworkImage(url: url, width: double.infinity, fit: BoxFit.contain),
+      'video' => onTap == null
+          ? PageInlineVideo(url: url, height: 300)
+          : IgnorePointer(child: PageInlineVideo(url: url, height: 300)),
+      _ => Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          alignment: Alignment.center,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.description_outlined, size: 48),
+            const SizedBox(height: 8),
+            Text(name, maxLines: 3, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+          ]),
+        ),
+    };
+    final content = Stack(children: [
+      Positioned.fill(child: media),
+      Positioned(
+        right: 10,
+        top: 10,
+        child: Material(
+          color: Colors.black38,
+          shape: const CircleBorder(),
+          child: SizedBox(
+            width: 34,
+            height: 34,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+              tooltip: 'Download',
+              onPressed: () => _download(context),
+              icon: const Icon(Icons.download_outlined, color: Colors.white, size: 17),
+            ),
+          ),
+        ),
+      ),
+    ]);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: onTap == null ? content : GestureDetector(onTap: onTap, child: content),
+    );
   }
 }
 
@@ -474,51 +513,54 @@ class _PageMediaViewerState extends State<_PageMediaViewer> {
   @override
   Widget build(BuildContext context) {
     final item = widget.items[_index];
-    final name = item['name']?.toString() ?? 'Attachment';
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: Text('${_index + 1} / ${widget.items.length}', style: const TextStyle(fontSize: 15)),
-        actions: [
-          if ((item['type']?.toString() ?? 'document') != 'event')
-            IconButton(
-              tooltip: 'Open',
-              onPressed: () => _openCurrent(context),
-              icon: const Icon(Icons.open_in_new),
-            ),
-        ],
       ),
       body: PageView.builder(
         controller: _controller,
         itemCount: widget.items.length,
         onPageChanged: (value) => setState(() => _index = value),
-        itemBuilder: (context, index) => _PageMediaViewerItem(item: widget.items[index], name: index == _index ? name : null),
+        itemBuilder: (context, index) => _PageMediaViewerItem(item: widget.items[index]),
       ),
+      floatingActionButton: _ViewerOpenButton(item: item),
     );
   }
+}
 
-  Future<void> _openCurrent(BuildContext context) async {
-    final raw = widget.items[_index]['url']?.toString() ?? '';
+class _ViewerOpenButton extends StatelessWidget {
+  const _ViewerOpenButton({required this.item});
+  final Map<String, dynamic> item;
+
+  Future<void> _open(BuildContext context) async {
+    final raw = item['url']?.toString() ?? '';
     if (raw.isEmpty) return;
     final url = await PageMediaUrlResolver.resolve(raw);
     if (!context.mounted) return;
     final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     if (!ok && context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open this attachment.')));
   }
+
+  @override
+  Widget build(BuildContext context) {
+    final type = item['type']?.toString() ?? 'document';
+    if (type == 'image' || type == 'gif' || type == 'video') return const SizedBox.shrink();
+    return FloatingActionButton.extended(onPressed: () => _open(context), icon: const Icon(Icons.open_in_new), label: const Text('Open file'));
+  }
 }
 
 class _PageMediaViewerItem extends StatelessWidget {
-  const _PageMediaViewerItem({required this.item, this.name});
+  const _PageMediaViewerItem({required this.item});
   final Map<String, dynamic> item;
-  final String? name;
 
   @override
   Widget build(BuildContext context) {
     final type = item['type']?.toString() ?? 'document';
     final url = item['url']?.toString() ?? '';
-    final title = name ?? item['name']?.toString() ?? 'Attachment';
+    final title = item['name']?.toString() ?? 'Attachment';
     if (type == 'image' || type == 'gif') {
       return Center(
         child: InteractiveViewer(
@@ -536,16 +578,6 @@ class _PageMediaViewerItem extends StatelessWidget {
           const Icon(Icons.description_outlined, color: Colors.white, size: 72),
           const SizedBox(height: 16),
           Text(title, textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 18),
-          FilledButton.icon(
-            onPressed: () async {
-              final resolved = await PageMediaUrlResolver.resolve(url);
-              if (!context.mounted) return;
-              await launchUrl(Uri.parse(resolved), mode: LaunchMode.externalApplication);
-            },
-            icon: const Icon(Icons.open_in_new),
-            label: const Text('Open file'),
-          ),
         ]),
       ),
     );
@@ -562,7 +594,6 @@ class _PageViewerVideo extends StatefulWidget {
 
 class _PageViewerVideoState extends State<_PageViewerVideo> {
   VideoPlayerController? _controller;
-  String? _resolvedUrl;
   bool _error = false;
   bool _controlsVisible = true;
 
@@ -581,7 +612,6 @@ class _PageViewerVideoState extends State<_PageViewerVideo> {
   Future<void> _resolveAndStart() async {
     final resolved = await PageMediaUrlResolver.resolve(widget.url);
     if (!mounted) return;
-    setState(() => _resolvedUrl = resolved);
     try {
       final controller = VideoPlayerController.networkUrl(Uri.parse(resolved));
       await controller.initialize();
