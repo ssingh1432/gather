@@ -135,6 +135,14 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
   @override
   Widget build(BuildContext context) {
     final name = widget.pageName.isEmpty ? 'Page' : widget.pageName;
+    final mediaItems = widget.post.mediaItems.map((item) => <String, dynamic>{
+      'url': item.mediaUrl,
+      'type': item.mediaType,
+      'media_url': item.mediaUrl,
+      'media_type': item.mediaType,
+      if (item.thumbnailUrl != null) 'thumbnail_url': item.thumbnailUrl,
+    }).toList();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -178,16 +186,11 @@ class _PageOwnerPostHomeCardState extends State<PageOwnerPostHomeCard> {
             const SizedBox(height: 12),
             Text(widget.post.textContent, style: Theme.of(context).textTheme.bodyLarge),
           ],
-          if (widget.post.mediaItems.isNotEmpty) ...[
+          if (mediaItems.isNotEmpty) ...[
             const SizedBox(height: 12),
             PageMediaGallery(
-              items: widget.post.mediaItems.map((item) => {
-                'url': item.mediaUrl,
-                'type': item.mediaType,
-                'media_url': item.mediaUrl,
-                'media_type': item.mediaType,
-                if (item.thumbnailUrl != null) 'thumbnail_url': item.thumbnailUrl,
-              }).toList(),
+              items: mediaItems,
+              onOpen: (index) => showPageMediaViewer(context, mediaItems, initialIndex: index),
             ),
           ],
           const SizedBox(height: 4),
@@ -357,6 +360,7 @@ class _PageOwnerCommentsSheetState extends State<_PageOwnerCommentsSheet> {
 
   Widget _commentRow(BuildContext context, Map<String, dynamic> comment) {
     final theme = Theme.of(context);
+    final created = DateTime.tryParse(comment['created_at']?.toString() ?? '');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -387,13 +391,8 @@ class _PageOwnerCommentsSheetState extends State<_PageOwnerCommentsSheet> {
               Padding(
                 padding: const EdgeInsets.only(left: 10, top: 2),
                 child: Row(children: [
-                  Text(
-                    DateTime.tryParse(comment['created_at']?.toString() ?? '') == null
-                        ? ''
-                        : timeAgo(DateTime.parse(comment['created_at'].toString()).toLocal()),
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
-                  ),
-                  const SizedBox(width: 12),
+                  if (created != null) Text(timeAgo(created.toLocal()), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+                  if (created != null) const SizedBox(width: 12),
                   InkWell(
                     onTap: () => _startReply(comment),
                     child: Text('Reply', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.primary)),
@@ -407,15 +406,16 @@ class _PageOwnerCommentsSheetState extends State<_PageOwnerCommentsSheet> {
     );
   }
 
-  Widget _commentTree(BuildContext context, Map<String, dynamic> comment, {int depth = 0}) {
-    final children = _childrenOf(comment['id']?.toString());
+  Widget _commentTree(BuildContext context, Map<String, dynamic> comment, {int depth = 0, Set<String>? ancestors}) {
+    final id = comment['id']?.toString();
+    final path = {...?ancestors, if (id != null) id};
+    final children = id == null || path.length > 32 ? const <Map<String, dynamic>>[] : _childrenOf(id).where((child) => !path.contains(child['id']?.toString())).toList();
     final left = depth == 0 ? 0.0 : (depth.clamp(1, 5) * 28.0);
     return Padding(
       padding: EdgeInsets.only(left: left),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _commentRow(context, comment),
-        if (children.isNotEmpty)
-          for (final child in children) _commentTree(context, child, depth: depth + 1),
+        for (final child in children) _commentTree(context, child, depth: depth + 1, ancestors: path),
       ]),
     );
   }
@@ -424,7 +424,6 @@ class _PageOwnerCommentsSheetState extends State<_PageOwnerCommentsSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final topLevel = _childrenOf(null);
-    final profileAsync = context.read<ProviderContainer?>();
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * .72,
