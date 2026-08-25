@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../../lib/features/pages/page_comments_ux.dart';
+import 'package:gather_app/features/pages/page_comments_ux.dart';
 
 void main() {
   final comments = <Map<String, dynamic>>[
@@ -36,6 +36,14 @@ void main() {
     expect(find.byKey(const ValueKey('page-comment-c1')), findsOneWidget);
     expect(find.byKey(const ValueKey('page-comment-c2')), findsOneWidget);
     expect(find.byKey(const ValueKey('page-comment-c3')), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('page-comment-c4')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
     expect(find.byKey(const ValueKey('page-comment-c4')), findsOneWidget);
     expect(find.byKey(const ValueKey('page-reply-target-c2')), findsOneWidget);
     expect(find.byKey(const ValueKey('page-reply-target-c3')), findsOneWidget);
