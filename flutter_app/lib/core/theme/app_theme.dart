@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 /// Gather's centralized semantic color tokens and shared theme configuration.
 ///
 /// The semantic palette is intentionally defined separately from ThemeData so
-/// later visual migrations can map the approved Gather palette into Flutter's
-/// ColorScheme without scattering raw HEX values throughout widgets.
+/// visual styling can use semantic roles without scattering raw HEX values
+/// throughout widgets.
 class AppColors {
   AppColors._();
 
@@ -48,15 +48,10 @@ class AppColors {
   // Existing compatibility aliases
   // -------------------------------------------------------------------------
   // These retain the current public AppColors API during the staged migration.
-  // They are deliberately not removed until widget migration is complete.
+  // They will be removed only after dependent widget migrations are complete.
 
-  /// Legacy primary brand alias. Kept stable until the Light Theme stage.
   static const Color brandTeal = Color(0xFF1D9E75);
-
-  /// Legacy foreground alias for content on the existing teal brand color.
   static const Color onBrandTeal = Color(0xFF04342C);
-
-  /// Legacy light brand alias used by existing selected/highlight states.
   static const Color brandTealLight = Color(0xFF9FE1CB);
 }
 
@@ -64,52 +59,111 @@ class AppTheme {
   AppTheme._();
 
   static ThemeData get light {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: AppColors.brandTeal,
-      brightness: Brightness.light,
+    final colorScheme = ColorScheme.light(
+      primary: AppColors.primary,
+      onPrimary: AppColors.surface,
+      primaryContainer: AppColors.primaryContainer,
+      onPrimaryContainer: AppColors.primaryStrong,
+      secondary: AppColors.secondary,
+      onSecondary: AppColors.textPrimary,
+      secondaryContainer: AppColors.secondaryContainer,
+      onSecondaryContainer: AppColors.textPrimary,
+      tertiary: AppColors.accent,
+      onTertiary: AppColors.surface,
+      tertiaryContainer: AppColors.primaryContainer,
+      onTertiaryContainer: AppColors.accentStrong,
+      error: AppColors.errorStrong,
+      onError: AppColors.surface,
+      errorContainer: AppColors.error.withValues(alpha: 0.14),
+      onErrorContainer: AppColors.errorStrong,
+      surface: AppColors.surface,
+      onSurface: AppColors.textPrimary,
+      surfaceContainerHighest: AppColors.divider,
+      onSurfaceVariant: AppColors.textSecondary,
+      outline: AppColors.border,
+      outlineVariant: AppColors.divider,
+      inverseSurface: AppColors.textPrimary,
+      onInverseSurface: AppColors.surface,
+      inversePrimary: AppColors.primaryContainer,
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: colorScheme.surface,
-      appBarTheme: AppBarTheme(
-        backgroundColor: colorScheme.surface,
-        foregroundColor: colorScheme.onSurface,
+      scaffoldBackgroundColor: AppColors.background,
+      textTheme: const TextTheme(
+        bodyLarge: TextStyle(color: AppColors.textPrimary),
+        bodyMedium: TextStyle(color: AppColors.textPrimary),
+        bodySmall: TextStyle(color: AppColors.textSecondary),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.textPrimary,
         elevation: 0,
         centerTitle: false,
       ),
-      floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: AppColors.brandTeal,
-        foregroundColor: AppColors.onBrandTeal,
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.surface,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.brandTeal,
-          foregroundColor: AppColors.onBrandTeal,
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.surface,
+          disabledBackgroundColor: AppColors.divider,
+          disabledForegroundColor: AppColors.textDisabled,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: AppColors.brandTeal),
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.primaryStrong,
+          disabledForegroundColor: AppColors.textDisabled,
+        ),
       ),
-      navigationBarTheme: NavigationBarThemeData(
-        indicatorColor: AppColors.brandTealLight,
-        backgroundColor: colorScheme.surface,
+      navigationBarTheme: const NavigationBarThemeData(
+        indicatorColor: AppColors.secondaryContainer,
+        backgroundColor: AppColors.surface,
+        selectedIconTheme: IconThemeData(color: AppColors.primaryStrong),
+        unselectedIconTheme: IconThemeData(color: AppColors.icon),
+        selectedLabelTextStyle: TextStyle(color: AppColors.primaryStrong),
+        unselectedLabelTextStyle: TextStyle(color: AppColors.textSecondary),
       ),
       tabBarTheme: const TabBarThemeData(
-        indicatorColor: AppColors.brandTeal,
-        labelColor: AppColors.brandTeal,
+        indicatorColor: AppColors.primary,
+        labelColor: AppColors.primaryStrong,
+        unselectedLabelColor: AppColors.textSecondary,
+      ),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.divider,
+        thickness: 1,
       ),
       inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.surface,
+        hintStyle: const TextStyle(color: AppColors.textSecondary),
+        labelStyle: const TextStyle(color: AppColors.textSecondary),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.brandTeal, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.errorStrong),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.errorStrong, width: 1.5),
         ),
       ),
     );
