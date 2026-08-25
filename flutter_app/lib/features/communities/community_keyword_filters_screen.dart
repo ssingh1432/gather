@@ -63,11 +63,12 @@ class _CommunityKeywordFiltersScreenState extends State<CommunityKeywordFiltersS
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Keyword filters', style: TextStyle(fontWeight: FontWeight.w700))),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.brandTeal,
-        foregroundColor: AppColors.onBrandTeal,
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
         onPressed: _addFilter,
         child: const Icon(Icons.add),
       ),
@@ -89,7 +90,7 @@ class _CommunityKeywordFiltersScreenState extends State<CommunityKeywordFiltersS
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.info_outline, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                            Icon(Icons.info_outline, size: 16, color: scheme.onSurfaceVariant),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -113,16 +114,17 @@ class _CommunityKeywordFiltersScreenState extends State<CommunityKeywordFiltersS
                                     child: Builder(builder: (context) {
                                       final severity = f['severity'] as String? ?? 'flag';
                                       final isBlock = severity == 'block';
+                                      final statusColor = isBlock ? scheme.error : scheme.tertiary;
                                       return ListTile(
                                         leading: Container(
                                           width: 40,
                                           height: 40,
                                           decoration: BoxDecoration(
-                                            color: (isBlock ? Colors.red : Colors.orange).withValues(alpha: 0.14),
+                                            color: statusColor.withValues(alpha: 0.14),
                                             borderRadius: BorderRadius.circular(CommunityTokens.radiusSm),
                                           ),
                                           alignment: Alignment.center,
-                                          child: Icon(isBlock ? Icons.block : Icons.flag_outlined, color: isBlock ? Colors.red : Colors.orange, size: 19),
+                                          child: Icon(isBlock ? Icons.block : Icons.flag_outlined, color: statusColor, size: 19),
                                         ),
                                         title: Text(f['keyword'] as String? ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
                                         subtitle: Text('${f['category']} · $severity'),
@@ -171,6 +173,7 @@ class _AddFilterDialogState extends State<_AddFilterDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
       title: const Text('Add keyword filter'),
       content: SingleChildScrollView(
@@ -198,8 +201,8 @@ class _AddFilterDialogState extends State<_AddFilterDialog> {
               selected: {_severity},
               onSelectionChanged: (s) => setState(() => _severity = s.first),
               style: SegmentedButton.styleFrom(
-                selectedBackgroundColor: AppColors.brandTealLight,
-                selectedForegroundColor: AppColors.onBrandTeal,
+                selectedBackgroundColor: scheme.secondaryContainer,
+                selectedForegroundColor: scheme.onSecondaryContainer,
               ),
             ),
           ],
@@ -209,8 +212,8 @@ class _AddFilterDialogState extends State<_AddFilterDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.brandTeal,
-            foregroundColor: AppColors.onBrandTeal,
+            backgroundColor: scheme.primary,
+            foregroundColor: scheme.onPrimary,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
           ),
           onPressed: () {
