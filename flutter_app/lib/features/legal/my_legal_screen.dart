@@ -5,7 +5,7 @@ import '../data/repositories.dart';
 import 'file_complaint_screen.dart';
 
 /// Tracks the current user's own legal complaints and appeals — the
-/// grievance/appeal side of Phase 4 Nepal legal compliance.
+grievance/appeal side of Phase 4 Nepal legal compliance.
 class MyLegalScreen extends StatefulWidget {
   const MyLegalScreen({super.key});
 
@@ -65,16 +65,17 @@ class _ListPane extends StatelessWidget {
   final String typeKey;
   final String emptyLabel;
 
-  Color _statusColor(String status) {
+  Color _statusColor(BuildContext context, String status) {
+    final scheme = Theme.of(context).colorScheme;
     switch (status) {
       case 'action_taken':
       case 'upheld':
       case 'overturned':
-        return Colors.green;
+        return scheme.tertiary;
       case 'rejected':
-        return Colors.red;
+        return scheme.error;
       default:
-        return Colors.orange;
+        return scheme.secondary;
     }
   }
 
@@ -99,14 +100,15 @@ class _ListPane extends StatelessWidget {
             final status = (row[statusKey] as String?) ?? 'submitted';
             final label = (row[typeKey] as String?) ?? '';
             final createdAt = (row['created_at'] as String?)?.split('T').first ?? '';
+            final statusColor = _statusColor(context, status);
             return Card(
               child: ListTile(
                 title: Text(label.replaceAll('_', ' '), style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: Text(createdAt),
                 trailing: Chip(
                   label: Text(status.replaceAll('_', ' ')),
-                  backgroundColor: _statusColor(status).withValues(alpha: 0.15),
-                  labelStyle: TextStyle(color: _statusColor(status)),
+                  backgroundColor: statusColor.withValues(alpha: 0.15),
+                  labelStyle: TextStyle(color: statusColor),
                 ),
               ),
             );
