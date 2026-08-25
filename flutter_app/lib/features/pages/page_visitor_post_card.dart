@@ -4,8 +4,8 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/supabase_client.dart';
 import '../../shared/utils/time_ago.dart';
+import 'page_comments_ux.dart';
 import 'page_media_gallery.dart';
-import 'page_post_media_ux.dart';
 import 'page_visitor_post_repository.dart';
 
 // Page-only post card. Keep Page UX isolated from normal/community posts.
@@ -75,7 +75,7 @@ class _PageVisitorPostCardState extends State<PageVisitorPostCard> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _CommentsSheet(postId: widget.post['id'] as String),
+      builder: (_) => _CommentsSheet(postId: widget.post['id'] as String, pageId: widget.post['page_id'] as String),
     );
     if (!mounted) return;
     try {
@@ -169,7 +169,14 @@ class _PageVisitorPostCardState extends State<PageVisitorPostCard> {
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
               child: Text(widget.post['content'] as String),
             ),
-          if (media.isNotEmpty) PagePostMediaAttachmentList(items: media),
+          if (media.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: PageMediaGallery(
+                items: media,
+                onOpen: (index) => showPageMediaViewer(context, media, initialIndex: index),
+              ),
+            ),
           if (event != null) PageEventAttachmentCard(event: event),
           Padding(
             padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
@@ -236,8 +243,9 @@ class _Avatar extends StatelessWidget {
 }
 
 class _CommentsSheet extends StatefulWidget {
-  const _CommentsSheet({required this.postId});
+  const _CommentsSheet({required this.postId, required this.pageId});
   final String postId;
+  final String pageId;
 
   @override
   State<_CommentsSheet> createState() => _CommentsSheetState();
@@ -248,9 +256,9 @@ class _CommentsSheetState extends State<_CommentsSheet> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   List<Map<String, dynamic>> _comments = const [];
+  Map<String, dynamic>? _replyingTo;
   bool _loading = true;
   bool _sending = false;
-  Map<String, dynamic>? _replyingTo;
 
   @override
   void initState() {
@@ -267,59 +275,16 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 
   Future<void> _load() async {
     try {
-      _comments = await _repo.listComments(widget.postId);
-    } catch (_) {}
-    if (mounted) setState(() => _loading = false);
-  }
-
-  List<Map<String, dynamic>> get _topLevel => _comments.where((c) => c['parent_comment_id'] == null).toList();
-
-  List<Map<String, dynamic>> _repliesTo(String id) => _comments.where((c) => c['parent_comment_id']?.toString() == id).toList();
-
-  List<Map<String, dynamic>> _threadReplies(String rootId) {
-    final byParent = <String, List<Map<String, dynamic>>>{};
-    for (final comment in _comments) {
-      final parent = comment['parent_comment_id']?.toString();
-      if (parent == null || parent.isEmpty) continue;
-      byParent.putIfAbsent(parent, () => <Map<String, dynamic>>[]).add(comment);
+      final rows = await _repo.listComments(widget.postId);
+      if (!mounted) return;
+      setState(() {
+        _comments = rows;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
     }
-
-    final result = <Map<String, dynamic>>[];
-    final queue = List<Map<String, dynamic>>.from(byParent[rootId] ?? const <Map<String, dynamic>>[]);
-    final seen = <String>{};
-    while (queue.isNotEmpty) {
-      final reply = queue.removeAt(0);
-      final id = reply['id']?.toString();
-      if (id == null || !seen.add(id)) continue;
-      result.add(reply);
-      queue.addAll(byParent[id] ?? const <Map<String, dynamic>>[]);
-    }
-    return result;
   }
-
-  Map<String, dynamic>? _parentOf(Map<String, dynamic> comment) {
-    final parentId = comment['parent_comment_id']?.toString();
-    if (parentId == null || parentId.isEmpty) return null;
-    for (final candidate in _comments) {
-      if (candidate['id']?.toString() == parentId) return candidate;
-    }
-    return null;
-  }
-
-  String _displayName(Map<String, dynamic> comment) {
-    final user = comment['users'] is Map ? Map<String, dynamic>.from(comment['users'] as Map) : <String, dynamic>{};
-    final name = user['display_name']?.toString().trim();
-    final username = user['username']?.toString().trim();
-    return name?.isNotEmpty == true ? name! : '@${username?.isNotEmpty == true ? username : 'user'}';
-  }
-
-  String _username(Map<String, dynamic> comment) {
-    final user = comment['users'] is Map ? Map<String, dynamic>.from(comment['users'] as Map) : <String, dynamic>{};
-    final username = user['username']?.toString().trim();
-    return username?.isNotEmpty == true ? username! : 'user';
-  }
-
-  String _userId(Map<String, dynamic> comment) => comment['user_id']?.toString() ?? '';
 
   void _startReply(Map<String, dynamic> comment) {
     setState(() => _replyingTo = comment);
@@ -329,21 +294,17 @@ class _CommentsSheetState extends State<_CommentsSheet> {
   Future<void> _send() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending) return;
-    final uid = SupabaseConfig.currentUserId;
-    if (uid == null) {
+    if (SupabaseConfig.currentUserId == null) {
       context.push('/login');
       return;
     }
-
     setState(() => _sending = true);
     try {
       // Preserve the exact reply target. A reply to a reply must reference
       // that reply, rather than being silently redirected to the root comment.
-      final parentId = _replyingTo?['id']?.toString();
-      await _repo.addComment(widget.postId, '', text, parentCommentId: parentId);
+      await _repo.addComment(widget.postId, widget.pageId, text, parentCommentId: _replyingTo?['id']?.toString());
       _controller.clear();
       setState(() => _replyingTo = null);
-      _loading = true;
       await _load();
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not post comment. Please retry.')));
@@ -354,252 +315,24 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final height = MediaQuery.sizeOf(context).height * .72;
     return SafeArea(
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * .78,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-              child: Row(
-                children: [
-                  const Expanded(child: Text('Comments', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17))),
-                  Text('${_comments.length}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _topLevel.isEmpty
-                      ? const Center(child: Text('No comments yet. Be the first to reply.'))
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                          itemCount: _topLevel.length,
-                          itemBuilder: (_, i) {
-                            final comment = _topLevel[i];
-                            return _PageCommentThread(
-                              comment: comment,
-                              replies: _threadReplies(comment['id']?.toString() ?? ''),
-                              parentOf: _parentOf,
-                              displayName: _displayName,
-                              username: _username,
-                              userId: _userId,
-                              onReply: _startReply,
-                            );
-                          },
-                        ),
-            ),
-            if (_replyingTo != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 2, 14, 4),
-                child: Material(
-                  color: theme.colorScheme.primaryContainer.withValues(alpha: .35),
-                  borderRadius: BorderRadius.circular(10),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    child: Row(
-                      children: [
-                        Icon(Icons.reply_rounded, size: 16, color: theme.colorScheme.primary),
-                        const SizedBox(width: 6),
-                        Expanded(child: Text('Replying to @${_username(_replyingTo!)}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w600))),
-                        IconButton(icon: const Icon(Icons.close, size: 17), visualDensity: VisualDensity.compact, onPressed: () => setState(() => _replyingTo = null)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(12, 6, 12, MediaQuery.viewInsetsOf(context).bottom + 10),
-              child: Row(
-                children: [
-                  const CircleAvatar(radius: 15, child: Icon(Icons.person_outline, size: 17)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      focusNode: _focusNode,
-                      minLines: 1,
-                      maxLines: 4,
-                      decoration: InputDecoration(
-                        hintText: _replyingTo == null ? 'Write a comment…' : 'Write a reply…',
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-                        filled: true,
-                        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                      ),
-                      onSubmitted: (_) => _send(),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _sending ? null : _send,
-                    icon: _sending ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(Icons.send_rounded, color: theme.colorScheme.primary),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        height: height,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          child: PageCommentsUx(
+            comments: _comments,
+            loading: _loading,
+            sending: _sending,
+            replyingTo: _replyingTo,
+            onReply: _startReply,
+            onCancelReply: () => setState(() => _replyingTo = null),
+            onSubmit: _send,
+            controller: _controller,
+            focusNode: _focusNode,
+          ),
         ),
-      ),
-    );
-  }
-}
-
-class _PageCommentThread extends StatefulWidget {
-  const _PageCommentThread({required this.comment, required this.replies, required this.parentOf, required this.displayName, required this.username, required this.userId, required this.onReply});
-  final Map<String, dynamic> comment;
-  final List<Map<String, dynamic>> replies;
-  final Map<String, dynamic>? Function(Map<String, dynamic>) parentOf;
-  final String Function(Map<String, dynamic>) displayName;
-  final String Function(Map<String, dynamic>) username;
-  final String Function(Map<String, dynamic>) userId;
-  final void Function(Map<String, dynamic>) onReply;
-
-  @override
-  State<_PageCommentThread> createState() => _PageCommentThreadState();
-}
-
-class _PageCommentThreadState extends State<_PageCommentThread> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final replyCount = widget.replies.length;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _PageCommentRow(
-            comment: widget.comment,
-            displayName: widget.displayName(widget.comment),
-            username: widget.username(widget.comment),
-            userId: widget.userId(widget.comment),
-            onReply: () => widget.onReply(widget.comment),
-          ),
-          if (replyCount > 0)
-            Padding(
-              padding: const EdgeInsets.only(left: 42, top: 2),
-              child: TextButton(
-                onPressed: () => setState(() => _expanded = !_expanded),
-                style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                child: Text(_expanded ? 'Hide replies' : 'View $replyCount ${replyCount == 1 ? 'reply' : 'replies'}'),
-              ),
-            ),
-          if (_expanded)
-            Padding(
-              padding: const EdgeInsets.only(left: 32),
-              child: Column(
-                children: [
-                  for (final reply in widget.replies)
-                    _PageCommentRow(
-                      comment: reply,
-                      displayName: widget.displayName(reply),
-                      username: widget.username(reply),
-                      userId: widget.userId(reply),
-                      replyTo: widget.parentOf(reply),
-                      displayNameOf: widget.displayName,
-                      usernameOf: widget.username,
-                      userIdOf: widget.userId,
-                      onReply: () => widget.onReply(reply),
-                    ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PageCommentRow extends StatelessWidget {
-  const _PageCommentRow({required this.comment, required this.displayName, required this.username, required this.userId, required this.onReply, this.replyTo, this.displayNameOf, this.usernameOf, this.userIdOf});
-  final Map<String, dynamic> comment;
-  final String displayName;
-  final String username;
-  final String userId;
-  final VoidCallback onReply;
-  final Map<String, dynamic>? replyTo;
-  final String Function(Map<String, dynamic>)? displayNameOf;
-  final String Function(Map<String, dynamic>)? usernameOf;
-  final String Function(Map<String, dynamic>)? userIdOf;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final user = comment['users'] is Map ? Map<String, dynamic>.from(comment['users'] as Map) : <String, dynamic>{};
-    final avatar = user['profile_photo_url']?.toString();
-    final content = comment['content']?.toString() ?? '';
-    final created = DateTime.tryParse(comment['created_at']?.toString() ?? '');
-    final targetUsername = replyTo == null || usernameOf == null ? null : usernameOf!(replyTo!);
-    final targetUserId = replyTo == null || userIdOf == null ? null : userIdOf!(replyTo!);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            onTap: userId.isEmpty ? null : () => context.push('/user?id=$userId'),
-            child: avatar?.isNotEmpty == true
-                ? ClipOval(child: PageNetworkImage(url: avatar!, width: 30, height: 30))
-                : const CircleAvatar(radius: 15, child: Icon(Icons.person_outline, size: 17)),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (targetUsername != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6, bottom: 3),
-                    child: InkWell(
-                      onTap: targetUserId?.isNotEmpty == true ? () => context.push('/user?id=$targetUserId') : null,
-                      borderRadius: BorderRadius.circular(6),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.reply_rounded, size: 14, color: theme.colorScheme.primary),
-                            const SizedBox(width: 3),
-                            Text('@$targetUsername', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w700, fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-                  decoration: BoxDecoration(color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5), borderRadius: BorderRadius.circular(13)),
-                  child: RichText(
-                    text: TextSpan(
-                      style: theme.textTheme.bodyMedium,
-                      children: [
-                        TextSpan(text: displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        const TextSpan(text: '\n'),
-                        TextSpan(text: content),
-                      ],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 10, top: 2),
-                  child: Row(
-                    children: [
-                      if (created != null) Text(timeAgo(created), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-                      const SizedBox(width: 12),
-                      InkWell(onTap: onReply, child: Text('Reply', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.primary))),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
