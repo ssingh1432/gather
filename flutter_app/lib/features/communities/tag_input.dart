@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/repositories.dart';
-import '../../core/theme/app_theme.dart';
 import 'community_theme.dart';
 
 /// Chip-based tag input: type + submit to add, tap the x to remove.
@@ -76,7 +75,7 @@ class _TagInputState extends State<TagInput> {
                   onDeleted: () => _remove(tag),
                   visualDensity: VisualDensity.compact,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
-                  backgroundColor: AppColors.brandTealLight.withValues(alpha: 0.35),
+                  backgroundColor: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.35),
                   labelStyle: const TextStyle(fontWeight: FontWeight.w600),
                   side: BorderSide.none,
                 ),
