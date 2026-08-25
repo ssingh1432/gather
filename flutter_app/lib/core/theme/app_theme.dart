@@ -8,9 +8,9 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  static const Color primary = Color(0xFF5E6876);
-  static const Color primaryStrong = Color(0xFF46505E);
-  static const Color primaryContainer = Color(0xFFE7EAF0);
+  static const Color primary = Color(0xFF4B4F58);
+  static const Color primaryStrong = Color(0xFF343842);
+  static const Color primaryContainer = Color(0xFFE7E8EC);
   static const Color secondary = Color(0xFF737D8B);
   static const Color secondaryStrong = Color(0xFF56606E);
   static const Color secondaryContainer = Color(0xFFEEF0F4);
@@ -25,19 +25,19 @@ class AppColors {
   static const Color background = Color(0xFFF7F8FA);
   static const Color surface = Color(0xFFFFFFFF);
   static const Color surfaceElevated = Color(0xFFFCFCFD);
-  static const Color textPrimary = Color(0xFF1F242C);
-  static const Color textSecondary = Color(0xFF626B78);
-  static const Color textDisabled = Color(0xFF9AA1AB);
-  static const Color border = Color(0xFF89929F);
-  static const Color divider = Color(0xFFE6E8ED);
-  static const Color icon = Color(0xFF596270);
+  static const Color textPrimary = Color(0xFF20232A);
+  static const Color textSecondary = Color(0xFF5F636D);
+  static const Color textDisabled = Color(0xFF9CA1AA);
+  static const Color border = Color(0xFF888E99);
+  static const Color divider = Color(0xFFE5E7EB);
+  static const Color icon = Color(0xFF4E535D);
 
-  static const Color darkBackground = Color(0xFF111419);
-  static const Color darkSurface = Color(0xFF181C22);
-  static const Color darkSurfaceElevated = Color(0xFF20252D);
-  static const Color darkPrimary = Color(0xFFAAB4C2);
-  static const Color darkPrimaryStrong = Color(0xFFC5CDD8);
-  static const Color darkPrimaryContainer = Color(0xFF303741);
+  static const Color darkBackground = Color(0xFF111318);
+  static const Color darkSurface = Color(0xFF181B21);
+  static const Color darkSurfaceElevated = Color(0xFF20242B);
+  static const Color darkPrimary = Color(0xFFB8BDC7);
+  static const Color darkPrimaryStrong = Color(0xFFD5D9E0);
+  static const Color darkPrimaryContainer = Color(0xFF2C3038);
   static const Color darkSecondary = Color(0xFF929BA8);
   static const Color darkSecondaryStrong = Color(0xFFB7C0CB);
   static const Color darkSecondaryContainer = Color(0xFF293039);
@@ -50,11 +50,11 @@ class AppColors {
   static const Color darkError = Color(0xFFE58A8A);
   static const Color darkErrorStrong = Color(0xFFF0AAAA);
   static const Color darkTextPrimary = Color(0xFFF1F3F6);
-  static const Color darkTextSecondary = Color(0xFFB8BEC8);
-  static const Color darkTextDisabled = Color(0xFF858C98);
-  static const Color darkBorder = Color(0xFF737B86);
-  static const Color darkDivider = Color(0xFF2C323B);
-  static const Color darkIcon = Color(0xFFB8BEC8);
+  static const Color darkTextSecondary = Color(0xFFB0B5BF);
+  static const Color darkTextDisabled = Color(0xFF777D88);
+  static const Color darkBorder = Color(0xFF343942);
+  static const Color darkDivider = Color(0xFF2A2E36);
+  static const Color darkIcon = Color(0xFFC1C5CD);
 
   // Compatibility aliases retained during the staged migration.
   static const Color brandTeal = Color(0xFF1D9E75);
