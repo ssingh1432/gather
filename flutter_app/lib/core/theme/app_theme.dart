@@ -1,22 +1,62 @@
 import 'package:flutter/material.dart';
 
-/// Gather's brand palette and shared theme configuration.
+/// Gather's centralized semantic color tokens and shared theme configuration.
 ///
-/// Single source of truth for the app's teal brand color so every screen
-/// (buttons, FAB, active nav icons, links, selection states) stays visually
-/// consistent without each widget hardcoding its own color values.
+/// The semantic palette is intentionally defined separately from ThemeData so
+/// later visual migrations can map the approved Gather palette into Flutter's
+/// ColorScheme without scattering raw HEX values throughout widgets.
 class AppColors {
   AppColors._();
 
-  /// Primary brand teal — used for the create-post FAB, active states,
-  /// primary buttons, and links.
+  // -------------------------------------------------------------------------
+  // Approved Gather semantic palette
+  // -------------------------------------------------------------------------
+
+  static const Color primary = Color(0xFF5268A8);
+  static const Color primaryStrong = Color(0xFF40558F);
+  static const Color primaryContainer = Color(0xFFE8ECF7);
+
+  static const Color secondary = Color(0xFFA8C4E0);
+  static const Color secondaryStrong = Color(0xFF6F95B8);
+  static const Color secondaryContainer = Color(0xFFEAF3FA);
+
+  static const Color accent = Color(0xFF8274C9);
+  static const Color accentStrong = Color(0xFF6557AE);
+
+  static const Color success = Color(0xFF4CAF72);
+  static const Color successStrong = Color(0xFF2F7D50);
+
+  static const Color warning = Color(0xFFD9A441);
+  static const Color warningStrong = Color(0xFF8A650E);
+
+  static const Color error = Color(0xFFD96B6B);
+  static const Color errorStrong = Color(0xFFA94343);
+
+  static const Color background = Color(0xFFF7F9FC);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surfaceElevated = Color(0xFFFFFFFF);
+
+  static const Color textPrimary = Color(0xFF20242B);
+  static const Color textSecondary = Color(0xFF667085);
+  static const Color textDisabled = Color(0xFF98A2B3);
+
+  static const Color border = Color(0xFFD8DEE8);
+  static const Color divider = Color(0xFFE5E9F0);
+  static const Color icon = Color(0xFF667085);
+
+  // -------------------------------------------------------------------------
+  // Existing compatibility aliases
+  // -------------------------------------------------------------------------
+  // These retain the current public AppColors API during the staged migration.
+  // They are deliberately not removed until widget migration is complete.
+
+  /// Legacy primary brand alias. Kept stable until the Light Theme stage.
   static const Color brandTeal = Color(0xFF1D9E75);
 
-  /// Darker teal for text/icons placed on top of [brandTeal] backgrounds.
+  /// Legacy foreground alias for content on the existing teal brand color.
   static const Color onBrandTeal = Color(0xFF04342C);
 
-  /// Light teal tint, useful for selected chips, story rings, and subtle
-  /// highlight backgrounds.
+  /// Legacy light brand alias used by existing selected/highlight states.
   static const Color brandTealLight = Color(0xFF9FE1CB);
 }
 
