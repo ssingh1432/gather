@@ -111,7 +111,6 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Preview', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -155,13 +154,13 @@ class _PagePreviewScreenState extends State<PagePreviewScreen> {
                           margin: const EdgeInsets.all(PageTokens.spaceLg),
                           padding: const EdgeInsets.symmetric(horizontal: PageTokens.spaceMd, vertical: PageTokens.spaceSm),
                           decoration: BoxDecoration(
-                            color: scheme.warning.withValues(alpha: 0.15),
+                            color: AppColors.warning.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(PageTokens.radiusMd),
-                            border: Border.all(color: scheme.warning.withValues(alpha: 0.4)),
+                            border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.visibility_outlined, size: 18, color: scheme.warning),
+                              const Icon(Icons.visibility_outlined, size: 18, color: AppColors.warning),
                               const SizedBox(width: 8),
                               const Expanded(child: Text('This is a preview. Only you and your team can see this page until you publish it.')),
                             ],
