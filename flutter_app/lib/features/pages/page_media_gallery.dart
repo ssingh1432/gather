@@ -44,14 +44,25 @@ Future<void> showPageMediaViewer(
 }
 
 class PageNetworkImage extends StatefulWidget {
-  const PageNetworkImage({super.key, required this.url, this.width, this.height, this.fit = BoxFit.contain, this.borderRadius, this.errorWidget});
+  const PageNetworkImage({
+    super.key,
+    required this.url,
+    this.width,
+    this.height,
+    this.fit = BoxFit.contain,
+    this.borderRadius,
+    this.errorWidget,
+  });
+
   final String url;
   final double? width;
   final double? height;
   final BoxFit fit;
   final BorderRadius? borderRadius;
   final WidgetBuilder? errorWidget;
-  @override State<PageNetworkImage> createState() => _PageNetworkImageState();
+
+  @override
+  State<PageNetworkImage> createState() => _PageNetworkImageState();
 }
 
 class _PageNetworkImageState extends State<PageNetworkImage> {
@@ -76,35 +87,51 @@ class _PageNetworkImageState extends State<PageNetworkImage> {
 
   @override
   Widget build(BuildContext context) {
-    Widget fallback() => widget.errorWidget?.call(context) ?? Container(
-      width: widget.width,
-      height: widget.height,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      alignment: Alignment.center,
-      child: const Icon(Icons.broken_image_outlined),
-    );
+    Widget fallback() {
+      return widget.errorWidget?.call(context) ?? Container(
+        width: widget.width,
+        height: widget.height,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        alignment: Alignment.center,
+        child: const Icon(Icons.broken_image_outlined),
+      );
+    }
+
     if (widget.url.trim().isEmpty) return fallback();
     final url = _resolvedUrl;
     if (url == null) {
-      return SizedBox(width: widget.width, height: widget.height ?? 240, child: const Center(child: CircularProgressIndicator(strokeWidth: 2)));
+      return SizedBox(
+        width: widget.width,
+        height: widget.height ?? 240,
+        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
     }
+
     final image = Image.network(
       url,
       width: widget.width,
       height: widget.height,
       fit: widget.fit,
-      webHtmlElementStrategy: kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
+      webHtmlElementStrategy: kIsWeb
+          ? WebHtmlElementStrategy.prefer
+          : WebHtmlElementStrategy.never,
       errorBuilder: (_, __, ___) => fallback(),
     );
-    return widget.borderRadius == null ? image : ClipRRect(borderRadius: widget.borderRadius!, child: image);
+
+    return widget.borderRadius == null
+        ? image
+        : ClipRRect(borderRadius: widget.borderRadius!, child: image);
   }
 }
 
 class PageInlineVideo extends StatefulWidget {
   const PageInlineVideo({super.key, required this.url, this.height = 220});
+
   final String url;
   final double height;
-  @override State<PageInlineVideo> createState() => _PageInlineVideoState();
+
+  @override
+  State<PageInlineVideo> createState() => _PageInlineVideoState();
 }
 
 class _PageInlineVideoState extends State<PageInlineVideo> {
@@ -133,17 +160,11 @@ class _PageInlineVideoState extends State<PageInlineVideo> {
     if (mounted) setState(() => _resolvedUrl = url);
   }
 
-  Future<void> _initializeAndPlay() async {
-    if (_loading || _error) return;
-    if (_controller != null) {
-      await _play();
-      return;
-    }
-    final url = _resolvedUrl;
-    if (url == null) return;
+  Future<void> _initialize() async {
+    if (_loading || _error || _resolvedUrl == null) return;
     setState(() => _loading = true);
     try {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      final controller = VideoPlayerController.networkUrl(Uri.parse(_resolvedUrl!));
       await controller.initialize();
       await controller.setVolume(0);
       controller.addListener(_handleVideoState);
@@ -155,9 +176,13 @@ class _PageInlineVideoState extends State<PageInlineVideo> {
         _controller = controller;
         _loading = false;
       });
-      await controller.play();
     } catch (_) {
-      if (mounted) setState(() { _loading = false; _error = true; });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = true;
+        });
+      }
     }
   }
 
@@ -175,7 +200,8 @@ class _PageInlineVideoState extends State<PageInlineVideo> {
   Future<void> _togglePlay() async {
     final controller = _controller;
     if (controller == null) {
-      await _initializeAndPlay();
+      await _initialize();
+      if (_controller != null) await _play();
       return;
     }
     if (controller.value.isPlaying) {
@@ -198,7 +224,10 @@ class _PageInlineVideoState extends State<PageInlineVideo> {
     final controller = _controller;
     if (controller == null || !mounted) return;
     final value = controller.value;
-    if (value.isInitialized && value.duration > Duration.zero && value.position >= value.duration && !_completed) {
+    if (value.isInitialized &&
+        value.duration > Duration.zero &&
+        value.position >= value.duration &&
+        !_completed) {
       _completed = true;
       controller.pause();
     }
@@ -207,7 +236,10 @@ class _PageInlineVideoState extends State<PageInlineVideo> {
 
   @override
   Widget build(BuildContext context) {
-    if (_error) return _MediaError(height: widget.height, label: 'Video unavailable');
+    if (_error) {
+      return _MediaError(height: widget.height, label: 'Video unavailable');
+    }
+
     final controller = _controller;
     if (controller == null) {
       return SizedBox(
@@ -215,12 +247,19 @@ class _PageInlineVideoState extends State<PageInlineVideo> {
         child: Center(
           child: _loading || _resolvedUrl == null
               ? const CircularProgressIndicator(strokeWidth: 2)
-              : IconButton.filled(onPressed: _initializeAndPlay, icon: const Icon(Icons.play_arrow), iconSize: 34),
+              : IconButton.filled(
+                  onPressed: _initialize,
+                  icon: const Icon(Icons.play_arrow),
+                  iconSize: 34,
+                ),
         ),
       );
     }
 
-    final aspectRatio = controller.value.aspectRatio == 0 ? 16 / 9 : controller.value.aspectRatio.clamp(.5625, 1.7778);
+    final aspectRatio = controller.value.aspectRatio == 0
+        ? 16 / 9
+        : controller.value.aspectRatio.clamp(.5625, 1.7778);
+
     return SizedBox(
       height: widget.height,
       child: Center(
@@ -230,12 +269,6 @@ class _PageInlineVideoState extends State<PageInlineVideo> {
             alignment: Alignment.center,
             children: [
               VideoPlayer(controller),
-              Positioned.fill(
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(onTap: _togglePlay),
-                ),
-              ),
               if (!controller.value.isPlaying || _completed)
                 IconButton.filled(
                   onPressed: _togglePlay,
@@ -245,14 +278,9 @@ class _PageInlineVideoState extends State<PageInlineVideo> {
               Positioned(
                 right: 8,
                 bottom: 8,
-                child: Material(
-                  color: Colors.black54,
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    tooltip: _muted ? 'Unmute' : 'Mute',
-                    onPressed: _toggleMute,
-                    icon: Icon(_muted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
-                  ),
+                child: _VideoMuteButton(
+                  muted: _muted,
+                  onPressed: _toggleMute,
                 ),
               ),
             ],
@@ -265,6 +293,7 @@ class _PageInlineVideoState extends State<PageInlineVideo> {
 
 class PageMediaGallery extends StatelessWidget {
   const PageMediaGallery({super.key, required this.items, this.onOpen});
+
   final List<Map<String, dynamic>> items;
   final ValueChanged<int>? onOpen;
 
@@ -281,22 +310,59 @@ class PageMediaGallery extends StatelessWidget {
       }
     }
 
-    Widget tile(Map<String, dynamic> item, double height) => _MediaTile(item: item, height: height, onOpen: openGallery);
+    Widget tile(Map<String, dynamic> item, double height) {
+      return _MediaTile(item: item, height: height, onOpen: openGallery);
+    }
 
-    if (media.length == 1) return _SingleMediaTile(item: media.first, onOpen: openGallery);
+    if (media.length == 1) {
+      return _SingleMediaTile(item: media.first, onOpen: openGallery);
+    }
+
     if (media.length == 2) {
-      return SizedBox(height: 240, child: Row(children: [Expanded(child: tile(media[0], 240)), const SizedBox(width: 3), Expanded(child: tile(media[1], 240))]));
+      return SizedBox(
+        height: 240,
+        child: Row(
+          children: [
+            Expanded(child: tile(media[0], 240)),
+            const SizedBox(width: 3),
+            Expanded(child: tile(media[1], 240)),
+          ],
+        ),
+      );
     }
+
     if (media.length == 3) {
-      return SizedBox(height: 300, child: Row(children: [Expanded(flex: 2, child: tile(media[0], 300)), const SizedBox(width: 3), Expanded(child: Column(children: [Expanded(child: tile(media[1], 148)), const SizedBox(height: 3), Expanded(child: tile(media[2], 149))]))]));
+      return SizedBox(
+        height: 300,
+        child: Row(
+          children: [
+            Expanded(flex: 2, child: tile(media[0], 300)),
+            const SizedBox(width: 3),
+            Expanded(
+              child: Column(
+                children: [
+                  Expanded(child: tile(media[1], 148)),
+                  const SizedBox(height: 3),
+                  Expanded(child: tile(media[2], 149)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
     }
+
     final more = media.length - 4;
     return SizedBox(
       height: 300,
       child: GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
         itemCount: 4,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 3, mainAxisSpacing: 3),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 3,
+          mainAxisSpacing: 3,
+        ),
         itemBuilder: (_, index) {
           return Stack(
             children: [
@@ -307,7 +373,18 @@ class PageMediaGallery extends StatelessWidget {
                     color: Colors.transparent,
                     child: InkWell(
                       onTap: openGallery,
-                      child: Container(color: Colors.black54, alignment: Alignment.center, child: Text('+$more more', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700))),
+                      child: Container(
+                        color: Colors.black54,
+                        alignment: Alignment.center,
+                        child: Text(
+                          '+$more more',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -321,6 +398,7 @@ class PageMediaGallery extends StatelessWidget {
 
 class _SingleMediaTile extends StatelessWidget {
   const _SingleMediaTile({required this.item, required this.onOpen});
+
   final Map<String, dynamic> item;
   final VoidCallback onOpen;
 
@@ -336,16 +414,54 @@ class _SingleMediaTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final type = item['type']?.toString() ?? 'document';
     final url = item['url']?.toString() ?? '';
+
     if (type == 'video') {
-      return ClipRRect(borderRadius: BorderRadius.circular(10), child: Stack(children: [PageInlineVideo(url: url, height: 300), Positioned(right: 10, top: 10, child: _DownloadButton(onPressed: () => _download(context))), Positioned(left: 10, top: 10, child: _GalleryButton(onPressed: onOpen))]));
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: onOpen,
+                child: PageInlineVideo(url: url, height: 300),
+              ),
+            ),
+            Positioned(
+              right: 10,
+              top: 10,
+              child: _DownloadButton(onPressed: () => _download(context)),
+            ),
+          ],
+        ),
+      );
     }
-    final media = type == 'image' || type == 'gif' ? PageNetworkImage(url: url, width: double.infinity, fit: BoxFit.contain) : _DocumentTile(name: item['name']?.toString() ?? 'Attachment');
-    return ClipRRect(borderRadius: BorderRadius.circular(10), child: GestureDetector(onTap: onOpen, child: Stack(children: [Positioned.fill(child: media), Positioned(right: 10, top: 10, child: _DownloadButton(onPressed: () => _download(context)))])));
+
+    final media = type == 'image' || type == 'gif'
+        ? PageNetworkImage(url: url, width: double.infinity, fit: BoxFit.contain)
+        : _DocumentTile(name: item['name']?.toString() ?? 'Attachment');
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: GestureDetector(
+        onTap: onOpen,
+        child: Stack(
+          children: [
+            Positioned.fill(child: media),
+            Positioned(
+              right: 10,
+              top: 10,
+              child: _DownloadButton(onPressed: () => _download(context)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
 class _MediaTile extends StatelessWidget {
   const _MediaTile({required this.item, required this.height, required this.onOpen});
+
   final Map<String, dynamic> item;
   final double height;
   final VoidCallback onOpen;
@@ -362,54 +478,183 @@ class _MediaTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final type = item['type']?.toString() ?? 'document';
     final url = item['url']?.toString() ?? '';
+
     if (type == 'video') {
-      return ClipRRect(borderRadius: BorderRadius.circular(10), child: Stack(children: [PageInlineVideo(url: url, height: height), Positioned(right: 8, top: 8, child: _DownloadButton(onPressed: () => _download(context))), Positioned(left: 8, top: 8, child: _GalleryButton(onPressed: onOpen))]));
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: onOpen,
+                child: PageInlineVideo(url: url, height: height),
+              ),
+            ),
+            Positioned(
+              right: 8,
+              top: 8,
+              child: _DownloadButton(onPressed: () => _download(context)),
+            ),
+          ],
+        ),
+      );
     }
-    final media = type == 'image' || type == 'gif' ? PageNetworkImage(url: url, width: double.infinity, height: height, fit: BoxFit.cover) : _DocumentTile(name: item['name']?.toString() ?? 'Attachment');
-    return ClipRRect(borderRadius: BorderRadius.circular(10), child: GestureDetector(onTap: onOpen, child: Stack(children: [Positioned.fill(child: media), Positioned(right: 8, top: 8, child: _DownloadButton(onPressed: () => _download(context)))])));
+
+    final media = type == 'image' || type == 'gif'
+        ? PageNetworkImage(
+            url: url,
+            width: double.infinity,
+            height: height,
+            fit: BoxFit.cover,
+          )
+        : _DocumentTile(name: item['name']?.toString() ?? 'Attachment');
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: GestureDetector(
+        onTap: onOpen,
+        child: Stack(
+          children: [
+            Positioned.fill(child: media),
+            Positioned(
+              right: 8,
+              top: 8,
+              child: _DownloadButton(onPressed: () => _download(context)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
 class _DocumentTile extends StatelessWidget {
   const _DocumentTile({required this.name});
+
   final String name;
+
   @override
-  Widget build(BuildContext context) => Container(color: Theme.of(context).colorScheme.surfaceContainerHighest, alignment: Alignment.center, padding: const EdgeInsets.all(16), child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.description_outlined, size: 42), const SizedBox(height: 8), Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)]));
+  Widget build(BuildContext context) {
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.description_outlined, size: 42),
+          const SizedBox(height: 8),
+          Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
 }
 
-class _GalleryButton extends StatelessWidget {
-  const _GalleryButton({required this.onPressed});
+class _VideoMuteButton extends StatelessWidget {
+  const _VideoMuteButton({required this.muted, required this.onPressed});
+
+  final bool muted;
   final VoidCallback onPressed;
+
   @override
-  Widget build(BuildContext context) => Material(color: Colors.black54, shape: const CircleBorder(), child: IconButton(tooltip: 'Open gallery', onPressed: onPressed, icon: const Icon(Icons.collections_outlined, color: Colors.white)));
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black54,
+      shape: const CircleBorder(),
+      child: IconButton(
+        tooltip: muted ? 'Unmute' : 'Mute',
+        onPressed: onPressed,
+        icon: Icon(muted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
+      ),
+    );
+  }
 }
 
 class _DownloadButton extends StatelessWidget {
   const _DownloadButton({required this.onPressed});
+
   final VoidCallback onPressed;
+
   @override
-  Widget build(BuildContext context) => Material(color: Colors.black45, shape: const CircleBorder(), child: IconButton(tooltip: 'Download', onPressed: onPressed, icon: const Icon(Icons.download_outlined, color: Colors.white, size: 18)));
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Download',
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: const Padding(
+          padding: EdgeInsets.all(5),
+          child: Icon(Icons.download, color: Colors.white, size: 15),
+        ),
+      ),
+    );
+  }
 }
 
 class PageMediaAttachmentList extends StatelessWidget {
   const PageMediaAttachmentList({super.key, required this.items});
+
   final List<Map<String, dynamic>> items;
+
   @override
   Widget build(BuildContext context) => PageMediaGallery(items: items);
 }
 
 class PageEventAttachmentCard extends StatelessWidget {
   const PageEventAttachmentCard({super.key, required this.event});
+
   final Map<String, dynamic> event;
+
   @override
-  Widget build(BuildContext context) => Container(margin: const EdgeInsets.fromLTRB(12, 0, 12, 10), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)), child: Row(children: [const Icon(Icons.event_outlined), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(event['title']?.toString() ?? 'Event', style: const TextStyle(fontWeight: FontWeight.w700)), if (event['start_time'] != null) Text(DateTime.parse(event['start_time'] as String).toLocal().toString(), style: Theme.of(context).textTheme.bodySmall), if (event['location'] != null) Text(event['location'].toString(), style: Theme.of(context).textTheme.bodySmall)]))]));
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.event_outlined),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  event['title']?.toString() ?? 'Event',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                if (event['start_time'] != null)
+                  Text(
+                    DateTime.parse(event['start_time'] as String).toLocal().toString(),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                if (event['location'] != null)
+                  Text(
+                    event['location'].toString(),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PageMediaViewer extends StatefulWidget {
   const _PageMediaViewer({required this.items, required this.initialIndex});
+
   final List<Map<String, dynamic>> items;
   final int initialIndex;
-  @override State<_PageMediaViewer> createState() => _PageMediaViewerState();
+
+  @override
+  State<_PageMediaViewer> createState() => _PageMediaViewerState();
 }
 
 class _PageMediaViewerState extends State<_PageMediaViewer> {
@@ -437,8 +682,20 @@ class _PageMediaViewerState extends State<_PageMediaViewer> {
     final item = widget.items[_index];
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, title: Text('${_index + 1} / ${widget.items.length}', style: const TextStyle(fontSize: 15))),
-      body: PageView.builder(controller: _controller, itemCount: widget.items.length, onPageChanged: (index) => setState(() => _index = index), itemBuilder: (_, index) => _ViewerItem(item: widget.items[index])),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(
+          '${_index + 1} / ${widget.items.length}',
+          style: const TextStyle(fontSize: 15),
+        ),
+      ),
+      body: PageView.builder(
+        controller: _controller,
+        itemCount: widget.items.length,
+        onPageChanged: (index) => setState(() => _index = index),
+        itemBuilder: (_, index) => _ViewerItem(item: widget.items[index]),
+      ),
       floatingActionButton: _ViewerOpen(item: item),
     );
   }
@@ -446,37 +703,71 @@ class _PageMediaViewerState extends State<_PageMediaViewer> {
 
 class _ViewerOpen extends StatelessWidget {
   const _ViewerOpen({required this.item});
+
   final Map<String, dynamic> item;
+
   Future<void> _open(BuildContext context) async {
     final raw = item['url']?.toString() ?? '';
     if (raw.isEmpty) return;
     final url = await PageMediaUrlResolver.resolve(raw);
-    if (context.mounted) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    if (context.mounted) {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    }
   }
+
   @override
   Widget build(BuildContext context) {
     final type = item['type']?.toString() ?? 'document';
-    return type == 'image' || type == 'gif' || type == 'video' ? const SizedBox.shrink() : FloatingActionButton.extended(onPressed: () => _open(context), icon: const Icon(Icons.open_in_new), label: const Text('Open file'));
+    if (type == 'image' || type == 'gif' || type == 'video') {
+      return const SizedBox.shrink();
+    }
+    return FloatingActionButton.extended(
+      onPressed: () => _open(context),
+      icon: const Icon(Icons.open_in_new),
+      label: const Text('Open file'),
+    );
   }
 }
 
 class _ViewerItem extends StatelessWidget {
   const _ViewerItem({required this.item});
+
   final Map<String, dynamic> item;
+
   @override
   Widget build(BuildContext context) {
     final type = item['type']?.toString() ?? 'document';
     final url = item['url']?.toString() ?? '';
-    if (type == 'image' || type == 'gif') return Center(child: InteractiveViewer(maxScale: 5, child: PageNetworkImage(url: url, fit: BoxFit.contain)));
-    if (type == 'video') return Center(child: PageInlineVideo(url: url, height: MediaQuery.sizeOf(context).height * .8));
-    return Center(child: _DocumentTile(name: item['name']?.toString() ?? 'Attachment'));
+    if (type == 'image' || type == 'gif') {
+      return Center(
+        child: InteractiveViewer(
+          maxScale: 5,
+          child: PageNetworkImage(url: url, fit: BoxFit.contain),
+        ),
+      );
+    }
+    if (type == 'video') {
+      return Center(
+        child: PageInlineVideo(
+          url: url,
+          height: MediaQuery.sizeOf(context).height * .8,
+        ),
+      );
+    }
+    return Center(
+      child: _DocumentTile(name: item['name']?.toString() ?? 'Attachment'),
+    );
   }
 }
 
 class _MediaError extends StatelessWidget {
   const _MediaError({required this.height, required this.label});
+
   final double height;
   final String label;
+
   @override
-  Widget build(BuildContext context) => SizedBox(height: height, child: Center(child: Text(label)));
+  Widget build(BuildContext context) {
+    return SizedBox(height: height, child: Center(child: Text(label)));
+  }
 }
