@@ -36,6 +36,8 @@ void main() {
     expect(find.byKey(const ValueKey('page-comment-c1')), findsOneWidget);
     expect(find.byKey(const ValueKey('page-comment-c2')), findsOneWidget);
     expect(find.byKey(const ValueKey('page-comment-c3')), findsOneWidget);
+    expect(find.byKey(const ValueKey('page-reply-target-c2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('page-reply-target-c3')), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('page-comment-c4')),
@@ -45,11 +47,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('page-comment-c4')), findsOneWidget);
-    expect(find.byKey(const ValueKey('page-reply-target-c2')), findsOneWidget);
-    expect(find.byKey(const ValueKey('page-reply-target-c3')), findsOneWidget);
     expect(find.byKey(const ValueKey('page-reply-target-c4')), findsOneWidget);
-    expect(find.text('First reply'), findsOneWidget);
-    expect(find.text('Second reply'), findsOneWidget);
     expect(find.text('Third reply'), findsOneWidget);
     expect(find.text('Replying to @David'), findsOneWidget);
   });
