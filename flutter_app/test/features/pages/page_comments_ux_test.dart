@@ -33,9 +33,12 @@ void main() {
       ),
     ));
 
+    // Each reply row identifies its immediate parent. The active composer
+    // also displays the currently selected target, so that target can appear
+    // twice in the widget tree without representing a second reply edge.
     expect(find.text('@John'), findsOneWidget);
     expect(find.text('@Mary'), findsOneWidget);
-    expect(find.text('@David'), findsOneWidget);
+    expect(find.text('@David'), findsNWidgets(2));
     expect(find.text('First reply'), findsOneWidget);
     expect(find.text('Second reply'), findsOneWidget);
     expect(find.text('Third reply'), findsOneWidget);
