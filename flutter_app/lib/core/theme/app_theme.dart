@@ -123,13 +123,22 @@ class AppTheme {
           disabledForegroundColor: AppColors.textDisabled,
         ),
       ),
-      navigationBarTheme: const NavigationBarThemeData(
+      navigationBarTheme: NavigationBarThemeData(
         indicatorColor: AppColors.secondaryContainer,
         backgroundColor: AppColors.surface,
-        selectedIconTheme: IconThemeData(color: AppColors.primaryStrong),
-        unselectedIconTheme: IconThemeData(color: AppColors.icon),
-        selectedLabelTextStyle: TextStyle(color: AppColors.primaryStrong),
-        unselectedLabelTextStyle: TextStyle(color: AppColors.textSecondary),
+        iconTheme: WidgetStateProperty.resolveWith<IconThemeData?>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const IconThemeData(color: AppColors.primaryStrong);
+          }
+          return const IconThemeData(color: AppColors.icon);
+        }),
+        labelTextStyle:
+            WidgetStateProperty.resolveWith<TextStyle?>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const TextStyle(color: AppColors.primaryStrong);
+          }
+          return const TextStyle(color: AppColors.textSecondary);
+        }),
       ),
       tabBarTheme: const TabBarThemeData(
         indicatorColor: AppColors.primary,
