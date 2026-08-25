@@ -48,24 +48,25 @@ class _MediaViewerScreenState extends State<MediaViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: Colors.white),
+        foregroundColor: scheme.onInverseSurface,
+        iconTheme: IconThemeData(color: scheme.onInverseSurface),
         actions: [
           IconButton(
             onPressed: _downloading ? null : _download,
             icon: _downloading
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: scheme.onInverseSurface))
                 : const Icon(Icons.download_outlined),
             tooltip: 'Download',
           ),
         ],
       ),
       body: widget.url.isEmpty
-          ? const Center(child: Text('Media unavailable', style: TextStyle(color: Colors.white70)))
+          ? Center(child: Text('Media unavailable', style: TextStyle(color: scheme.onInverseSurface.withValues(alpha: 0.7))))
           : widget.isVideo
               ? _VideoViewer(url: widget.url)
               : _ImageViewer(url: widget.url),
@@ -78,18 +79,21 @@ class _ImageViewer extends StatelessWidget {
   final String url;
 
   @override
-  Widget build(BuildContext context) => InteractiveViewer(
-        minScale: 1,
-        maxScale: 5,
-        child: Center(
-          child: CachedNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.contain,
-            placeholder: (context, url) => const CircularProgressIndicator(),
-            errorWidget: (context, url, error) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
-          ),
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InteractiveViewer(
+      minScale: 1,
+      maxScale: 5,
+      child: Center(
+        child: CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.contain,
+          placeholder: (context, url) => CircularProgressIndicator(color: scheme.primary),
+          errorWidget: (context, url, error) => Icon(Icons.broken_image_outlined, color: scheme.onInverseSurface.withValues(alpha: 0.55), size: 48),
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _VideoViewer extends StatefulWidget {
@@ -161,11 +165,12 @@ class _VideoViewerState extends State<_VideoViewer> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     if (_error) {
-      return const Center(child: Text('Could not play this video.', style: TextStyle(color: Colors.white70)));
+      return Center(child: Text('Could not play this video.', style: TextStyle(color: scheme.onInverseSurface.withValues(alpha: 0.7))));
     }
     if (!_ready) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(child: CircularProgressIndicator(color: scheme.primary));
     }
 
     return GestureDetector(
@@ -184,7 +189,7 @@ class _VideoViewerState extends State<_VideoViewer> {
               if (_controlsVisible) ...[
                 IconButton(
                   iconSize: 56,
-                  color: Colors.white,
+                  color: scheme.onInverseSurface,
                   onPressed: _togglePlay,
                   icon: Icon(_controller.value.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
                 ),
@@ -194,24 +199,24 @@ class _VideoViewerState extends State<_VideoViewer> {
                   bottom: 0,
                   child: Container(
                     padding: const EdgeInsets.fromLTRB(12, 20, 12, 8),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black87]),
                     ),
                     child: Row(
                       children: [
-                        Text(_formatDuration(_controller.value.position), style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        Text(_formatDuration(_controller.value.position), style: TextStyle(color: scheme.onInverseSurface, fontSize: 12)),
                         Expanded(
                           child: VideoProgressIndicator(
                             _controller,
                             allowScrubbing: true,
                             padding: const EdgeInsets.symmetric(horizontal: 8),
-                            colors: VideoProgressColors(playedColor: Theme.of(context).colorScheme.primary, backgroundColor: Colors.white24),
+                            colors: VideoProgressColors(playedColor: scheme.primary, backgroundColor: scheme.onInverseSurface.withValues(alpha: 0.24)),
                           ),
                         ),
-                        Text(_formatDuration(_controller.value.duration), style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        Text(_formatDuration(_controller.value.duration), style: TextStyle(color: scheme.onInverseSurface, fontSize: 12)),
                         IconButton(
                           onPressed: _toggleFullscreen,
-                          icon: Icon(_fullscreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.white),
+                          icon: Icon(_fullscreen ? Icons.fullscreen_exit : Icons.fullscreen, color: scheme.onInverseSurface),
                           tooltip: 'Fullscreen',
                         ),
                       ],
