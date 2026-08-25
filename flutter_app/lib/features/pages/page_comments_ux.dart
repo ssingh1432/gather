@@ -5,8 +5,7 @@ import '../../shared/utils/time_ago.dart';
 import '../../shared/widgets/reusables.dart';
 
 /// Page-only comment/reply presentation.
-/// Keeps reply chains visually flat while preserving the exact parent
-/// relationship supplied by the Page-post caller.
+/// Reply chains are visually flat; parent_comment_id remains authoritative.
 class PageCommentsUx extends StatelessWidget {
   const PageCommentsUx({
     super.key,
@@ -84,8 +83,10 @@ class PageCommentsUx extends StatelessWidget {
     final targetId = replyTo == null ? '' : _userId(replyTo);
     final targetUsername = replyTo == null ? null : _username(replyTo);
     final created = DateTime.tryParse(comment['created_at']?.toString() ?? '');
+    final commentId = comment['id']?.toString() ?? 'unknown';
 
     return Padding(
+      key: ValueKey('page-comment-$commentId'),
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -101,6 +102,7 @@ class PageCommentsUx extends StatelessWidget {
               children: [
                 if (targetUsername != null)
                   InkWell(
+                    key: ValueKey('page-reply-target-$commentId'),
                     onTap: targetId.isEmpty ? null : () => context.push('/user?id=$targetId'),
                     borderRadius: BorderRadius.circular(6),
                     child: Padding(
@@ -154,50 +156,56 @@ class PageCommentsUx extends StatelessWidget {
     }
 
     final theme = Theme.of(context);
-    return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .55),
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
-      decoration: BoxDecoration(color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .35), borderRadius: BorderRadius.circular(12)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(
-          child: loading
-              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-              : rows.isEmpty
-                  ? Center(child: Text('No comments yet. Be the first to comment.', style: theme.textTheme.bodySmall))
-                  : ListView(padding: const EdgeInsets.symmetric(horizontal: 4), children: rows),
-        ),
-        if (replyingTo != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
-            child: Row(children: [
-              Icon(Icons.reply_rounded, size: 16, color: theme.colorScheme.primary),
-              const SizedBox(width: 5),
-              Expanded(child: Text('Replying to @${_username(replyingTo!)}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w600))),
-              IconButton(onPressed: onCancelReply, icon: const Icon(Icons.close, size: 17), visualDensity: VisualDensity.compact),
-            ]),
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * .55,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+        decoration: BoxDecoration(color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .35), borderRadius: BorderRadius.circular(12)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: loading
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                : rows.isEmpty
+                    ? Center(child: Text('No comments yet. Be the first to comment.', style: theme.textTheme.bodySmall))
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        itemCount: rows.length,
+                        itemBuilder: (_, index) => rows[index],
+                      ),
           ),
-        Row(children: [
-          ProfileAvatar(radius: 15),
-          const SizedBox(width: 8),
-          Expanded(child: TextField(
-            controller: controller,
-            focusNode: focusNode,
-            minLines: 1,
-            maxLines: 4,
-            textInputAction: TextInputAction.send,
-            onSubmitted: (_) => onSubmit(),
-            decoration: InputDecoration(
-              hintText: replyingTo == null ? 'Write a comment…' : 'Write a reply…',
-              isDense: true,
-              filled: true,
-              fillColor: theme.colorScheme.surface,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          if (replyingTo != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+              child: Row(children: [
+                Icon(Icons.reply_rounded, size: 16, color: theme.colorScheme.primary),
+                const SizedBox(width: 5),
+                Expanded(child: Text('Replying to @${_username(replyingTo!)}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w600))),
+                IconButton(onPressed: onCancelReply, icon: const Icon(Icons.close, size: 17), visualDensity: VisualDensity.compact),
+              ]),
             ),
-          )),
-          IconButton(onPressed: sending ? null : onSubmit, icon: sending ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(Icons.send_rounded, color: theme.colorScheme.primary)),
+          Row(children: [
+            ProfileAvatar(radius: 15),
+            const SizedBox(width: 8),
+            Expanded(child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              minLines: 1,
+              maxLines: 4,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => onSubmit(),
+              decoration: InputDecoration(
+                hintText: replyingTo == null ? 'Write a comment…' : 'Write a reply…',
+                isDense: true,
+                filled: true,
+                fillColor: theme.colorScheme.surface,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              ),
+            )),
+            IconButton(onPressed: sending ? null : onSubmit, icon: sending ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(Icons.send_rounded, color: theme.colorScheme.primary)),
+          ]),
         ]),
-      ]),
+      ),
     );
   }
 }
