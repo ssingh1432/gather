@@ -45,6 +45,42 @@ class AppColors {
   static const Color icon = Color(0xFF667085);
 
   // -------------------------------------------------------------------------
+  // Dark semantic palette
+  // -------------------------------------------------------------------------
+
+  static const Color darkBackground = Color(0xFF151820);
+  static const Color darkSurface = Color(0xFF1D212B);
+  static const Color darkSurfaceElevated = Color(0xFF252A35);
+
+  static const Color darkPrimary = Color(0xFF91A5E0);
+  static const Color darkPrimaryStrong = Color(0xFFAFC0F0);
+  static const Color darkPrimaryContainer = Color(0xFF303A58);
+
+  static const Color darkSecondary = Color(0xFFA8C4E0);
+  static const Color darkSecondaryStrong = Color(0xFFC1D8EE);
+  static const Color darkSecondaryContainer = Color(0xFF2B3A4A);
+
+  static const Color darkAccent = Color(0xFFA59BE0);
+  static const Color darkAccentStrong = Color(0xFFC0B9EF);
+
+  static const Color darkSuccess = Color(0xFF70C990);
+  static const Color darkSuccessStrong = Color(0xFF9BE0B4);
+
+  static const Color darkWarning = Color(0xFFE3B85E);
+  static const Color darkWarningStrong = Color(0xFFF0CE83);
+
+  static const Color darkError = Color(0xFFE58A8A);
+  static const Color darkErrorStrong = Color(0xFFF0AAAA);
+
+  static const Color darkTextPrimary = Color(0xFFF1F3F7);
+  static const Color darkTextSecondary = Color(0xFFB5BDCA);
+  static const Color darkTextDisabled = Color(0xFF7E8795);
+
+  static const Color darkBorder = Color(0xFF3A414E);
+  static const Color darkDivider = Color(0xFF303641);
+  static const Color darkIcon = Color(0xFFB5BDCA);
+
+  // -------------------------------------------------------------------------
   // Existing compatibility aliases
   // -------------------------------------------------------------------------
   // These retain the current public AppColors API during the staged migration.
@@ -173,6 +209,128 @@ class AppTheme {
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppColors.errorStrong, width: 1.5),
+        ),
+      ),
+    );
+  }
+
+  static ThemeData get dark {
+    final colorScheme = ColorScheme.dark(
+      primary: AppColors.darkPrimary,
+      onPrimary: AppColors.darkBackground,
+      primaryContainer: AppColors.darkPrimaryContainer,
+      onPrimaryContainer: AppColors.darkPrimaryStrong,
+      secondary: AppColors.darkSecondary,
+      onSecondary: AppColors.darkBackground,
+      secondaryContainer: AppColors.darkSecondaryContainer,
+      onSecondaryContainer: AppColors.darkTextPrimary,
+      tertiary: AppColors.darkAccent,
+      onTertiary: AppColors.darkBackground,
+      tertiaryContainer: AppColors.darkPrimaryContainer,
+      onTertiaryContainer: AppColors.darkAccentStrong,
+      error: AppColors.darkError,
+      onError: AppColors.darkBackground,
+      errorContainer: Color(0xFF482B30),
+      onErrorContainer: AppColors.darkErrorStrong,
+      surface: AppColors.darkSurface,
+      onSurface: AppColors.darkTextPrimary,
+      surfaceContainerHighest: AppColors.darkDivider,
+      onSurfaceVariant: AppColors.darkTextSecondary,
+      outline: AppColors.darkBorder,
+      outlineVariant: AppColors.darkDivider,
+      inverseSurface: AppColors.darkTextPrimary,
+      onInverseSurface: AppColors.darkBackground,
+      inversePrimary: AppColors.primary,
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: AppColors.darkBackground,
+      textTheme: const TextTheme(
+        bodyLarge: TextStyle(color: AppColors.darkTextPrimary),
+        bodyMedium: TextStyle(color: AppColors.darkTextPrimary),
+        bodySmall: TextStyle(color: AppColors.darkTextSecondary),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: AppColors.darkSurface,
+        foregroundColor: AppColors.darkTextPrimary,
+        elevation: 0,
+        centerTitle: false,
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: AppColors.darkPrimary,
+        foregroundColor: AppColors.darkBackground,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.darkPrimary,
+          foregroundColor: AppColors.darkBackground,
+          disabledBackgroundColor: AppColors.darkDivider,
+          disabledForegroundColor: AppColors.darkTextDisabled,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.darkPrimaryStrong,
+          disabledForegroundColor: AppColors.darkTextDisabled,
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        indicatorColor: AppColors.darkSecondaryContainer,
+        backgroundColor: AppColors.darkSurface,
+        iconTheme: WidgetStateProperty.resolveWith<IconThemeData?>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const IconThemeData(color: AppColors.darkPrimaryStrong);
+          }
+          return const IconThemeData(color: AppColors.darkIcon);
+        }),
+        labelTextStyle:
+            WidgetStateProperty.resolveWith<TextStyle?>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const TextStyle(color: AppColors.darkPrimaryStrong);
+          }
+          return const TextStyle(color: AppColors.darkTextSecondary);
+        }),
+      ),
+      tabBarTheme: const TabBarThemeData(
+        indicatorColor: AppColors.darkPrimary,
+        labelColor: AppColors.darkPrimaryStrong,
+        unselectedLabelColor: AppColors.darkTextSecondary,
+      ),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.darkDivider,
+        thickness: 1,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.darkSurface,
+        hintStyle: const TextStyle(color: AppColors.darkTextSecondary),
+        labelStyle: const TextStyle(color: AppColors.darkTextSecondary),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.darkBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.darkBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide:
+              const BorderSide(color: AppColors.darkPrimary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.darkErrorStrong),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide:
+              const BorderSide(color: AppColors.darkErrorStrong, width: 1.5),
         ),
       ),
     );
