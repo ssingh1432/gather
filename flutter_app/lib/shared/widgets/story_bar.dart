@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
+import '../../core/theme/app_theme.dart';
 import '../models/models.dart';
 import '../services/media/web_safe_pick.dart';
 import '../services/media_upload_service.dart';
@@ -194,6 +195,7 @@ class _AddStoryTile extends StatelessWidget {
     final own = ownEntry;
     final thumbUrl = own != null && (own.latestThumbnailUrl?.isNotEmpty ?? false) ? own.latestThumbnailUrl : own?.authorAvatarUrl;
     final hasThumb = thumbUrl != null && thumbUrl.isNotEmpty;
+    final scheme = Theme.of(context).colorScheme;
 
     return GestureDetector(
       onTap: uploading ? null : (own != null ? onViewOwn : onAdd),
@@ -207,13 +209,13 @@ class _AddStoryTile extends StatelessWidget {
               child: Container(
                 width: 76,
                 height: 124,
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                color: scheme.surfaceContainerHighest,
                 alignment: Alignment.center,
                 child: uploading
                     ? const CircularProgressIndicator(strokeWidth: 2)
                     : hasThumb
                         ? Image.network(thumbUrl, fit: BoxFit.cover, width: 76, height: 124)
-                        : Icon(Icons.add_a_photo_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        : Icon(Icons.add_a_photo_outlined, color: scheme.onSurfaceVariant),
               ),
             ),
             if (own != null && !uploading)
@@ -223,12 +225,12 @@ class _AddStoryTile extends StatelessWidget {
                 bottom: 0,
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(colors: [Colors.transparent, Colors.black87], begin: Alignment.topCenter, end: Alignment.bottomCenter),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [Colors.transparent, scheme.inverseSurface], begin: Alignment.topCenter, end: Alignment.bottomCenter),
                   ),
                   child: Text(
                     'Your story',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.onInverseSurface, fontWeight: FontWeight.w600),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
@@ -243,8 +245,8 @@ class _AddStoryTile extends StatelessWidget {
                   onTap: onAdd,
                   child: Container(
                     padding: const EdgeInsets.all(3),
-                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-                    child: const Icon(Icons.add, size: 14, color: Colors.white),
+                    decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle, border: Border.all(color: scheme.surface, width: 2)),
+                    child: Icon(Icons.add, size: 14, color: scheme.onPrimary),
                   ),
                 ),
               ),
@@ -279,6 +281,7 @@ class _StoryTile extends StatelessWidget {
         ? entry.latestThumbnailUrl
         : entry.authorAvatarUrl;
     final hasImage = imageUrl != null && imageUrl.isNotEmpty;
+    final scheme = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -288,9 +291,9 @@ class _StoryTile extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           gradient: entry.hasUnseen
-              ? const LinearGradient(colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)], begin: Alignment.topLeft, end: Alignment.bottomRight)
+              ? LinearGradient(colors: [scheme.primary, scheme.tertiary, scheme.secondary], begin: Alignment.topLeft, end: Alignment.bottomRight)
               : null,
-          color: entry.hasUnseen ? null : Theme.of(context).colorScheme.outlineVariant,
+          color: entry.hasUnseen ? null : scheme.outlineVariant,
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(11.5),
@@ -298,10 +301,10 @@ class _StoryTile extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               Container(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                color: scheme.surfaceContainerHighest,
                 child: hasImage
                     ? Image.network(imageUrl, fit: BoxFit.cover)
-                    : Icon(Icons.person, size: 32, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    : Icon(Icons.person, size: 32, color: scheme.onSurfaceVariant),
               ),
               Positioned(
                 left: 0,
@@ -309,12 +312,12 @@ class _StoryTile extends StatelessWidget {
                 bottom: 0,
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(colors: [Colors.transparent, Colors.black87], begin: Alignment.topCenter, end: Alignment.bottomCenter),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [Colors.transparent, scheme.inverseSurface], begin: Alignment.topCenter, end: Alignment.bottomCenter),
                   ),
                   child: Text(
                     entry.authorUsername,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.onInverseSurface, fontWeight: FontWeight.w600),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
