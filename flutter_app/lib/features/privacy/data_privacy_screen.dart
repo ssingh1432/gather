@@ -119,7 +119,7 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(dialogContext).colorScheme.error),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Schedule deletion'),
           ),
@@ -163,6 +163,7 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
     }
 
     final pendingPurgeAt = _profile?['scheduled_purge_at'] as String?;
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Data & Privacy')),
@@ -211,7 +212,7 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
                   if (status == 'ready' && filePath != null) {
                     return Row(
                       children: [
-                        const Icon(Icons.check_circle_outline, color: Colors.green, size: 18),
+                        Icon(Icons.check_circle_outline, color: scheme.tertiary, size: 18),
                         const SizedBox(width: 6),
                         const Expanded(child: Text('Your export is ready — link valid for 7 days.')),
                         TextButton(
@@ -224,7 +225,7 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
                   if (status == 'failed') {
                     return Text(
                       'Last attempt failed: ${latest['error_message'] ?? 'unknown error'}. Try again below.',
-                      style: const TextStyle(color: Colors.red),
+                      style: TextStyle(color: scheme.error),
                     );
                   }
                   return Text('Last request: $status', style: Theme.of(context).textTheme.bodySmall);
@@ -257,7 +258,7 @@ class _DataPrivacyScreenState extends State<DataPrivacyScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                    style: OutlinedButton.styleFrom(foregroundColor: scheme.error),
                     onPressed: _busy ? null : _requestDeletion,
                     child: const Text('Delete my account'),
                   ),
