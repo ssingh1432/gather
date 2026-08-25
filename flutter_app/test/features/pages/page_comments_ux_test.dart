@@ -33,12 +33,13 @@ void main() {
       ),
     ));
 
-    // Each reply row identifies its immediate parent. The active composer
-    // also displays the currently selected target, so that target can appear
-    // twice in the widget tree without representing a second reply edge.
-    expect(find.text('@John'), findsOneWidget);
-    expect(find.text('@Mary'), findsOneWidget);
-    expect(find.text('@David'), findsNWidgets(2));
+    expect(find.byKey(const ValueKey('page-comment-c1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('page-comment-c2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('page-comment-c3')), findsOneWidget);
+    expect(find.byKey(const ValueKey('page-comment-c4')), findsOneWidget);
+    expect(find.byKey(const ValueKey('page-reply-target-c2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('page-reply-target-c3')), findsOneWidget);
+    expect(find.byKey(const ValueKey('page-reply-target-c4')), findsOneWidget);
     expect(find.text('First reply'), findsOneWidget);
     expect(find.text('Second reply'), findsOneWidget);
     expect(find.text('Third reply'), findsOneWidget);
