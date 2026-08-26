@@ -56,10 +56,12 @@ class AppColors {
   static const Color darkDivider = Color(0xFF292D33);
   static const Color darkIcon = Color(0xFF9BA0A9);
 
-  // Compatibility aliases retained during the staged migration.
-  static const Color brandTeal = Color(0xFF1D9E75);
-  static const Color onBrandTeal = Color(0xFF04342C);
-  static const Color brandTealLight = Color(0xFF9FE1CB);
+  // Compatibility aliases retained during the staged migration. These
+  // aliases now resolve to the Gather gray primary system so legacy widgets
+  // cannot reintroduce the retired teal/primary appearance.
+  static const Color brandTeal = primary;
+  static const Color onBrandTeal = Color(0xFFFBFBFD);
+  static const Color brandTealLight = primaryContainer;
 }
 
 class AppTheme {
