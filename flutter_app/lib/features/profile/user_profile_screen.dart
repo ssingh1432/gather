@@ -337,16 +337,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
                   child: ((u['is_private'] as bool?) ?? false) && !bundle.isFollowing && u['id'] != SupabaseConfig.currentUserId
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 32),
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 32),
                           child: Center(
                             child: Column(
                               children: [
-                                Icon(Icons.lock_outline, size: 40, color: Colors.grey),
-                                SizedBox(height: 8),
-                                Text('This account is private', style: TextStyle(fontWeight: FontWeight.w600)),
-                                SizedBox(height: 4),
-                                Text('Follow to see their posts', style: TextStyle(color: Colors.grey)),
+                                Icon(Icons.lock_outline, size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                const SizedBox(height: 8),
+                                const Text('This account is private', style: TextStyle(fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 4),
+                                Text('Follow to see their posts', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                               ],
                             ),
                           ),

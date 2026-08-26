@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../core/theme/app_theme.dart';
 
 import '../../core/supabase_client.dart';
 import '../../shared/models/models.dart';
@@ -174,9 +175,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     children: [
                       if (isProfileBare) ...[
                         Card(
-                          color: const Color(0xFF1D9E75).withValues(alpha: 0.08),
+                          color: AppColors.brandTeal.withValues(alpha: 0.08),
                           child: ListTile(
-                            leading: const Icon(Icons.person_add_alt_1, color: Color(0xFF1D9E75)),
+                            leading: const Icon(Icons.person_add_alt_1, color: AppColors.brandTeal),
                             title: const Text('Complete your profile'),
                             subtitle: const Text('Add a photo, bio, and interests so others can find you'),
                             trailing: const Icon(Icons.chevron_right),

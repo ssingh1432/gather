@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../core/theme/app_theme.dart';
 
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
@@ -179,7 +180,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       // nothing. A SnackBar makes the failure unmissable.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message), backgroundColor: Colors.red, duration: const Duration(seconds: 6)),
+          SnackBar(content: Text(message), backgroundColor: Theme.of(context).colorScheme.error, duration: const Duration(seconds: 6)),
         );
       }
     } finally {
@@ -210,7 +211,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           if (_error != null) ...[
-            Text(_error!, style: const TextStyle(color: Colors.red)),
+            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             const SizedBox(height: 12),
           ],
           _CoverAndAvatarPicker(
@@ -257,9 +258,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           const SizedBox(height: 24),
           const Text('Account type', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Creator accounts unlock monetization tools once eligible. Anyone can switch back anytime.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
+            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
           SegmentedButton<String>(
@@ -357,7 +358,7 @@ class _CoverAndAvatarPicker extends StatelessWidget {
               width: double.infinity,
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
-                color: const Color(0xFF1D9E75).withValues(alpha: 0.12),
+                color: AppColors.brandTeal.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
                 image: (coverPick == null && existingCoverUrl != null)
                     ? DecorationImage(image: NetworkImage(existingCoverUrl!), fit: BoxFit.cover)
@@ -368,7 +369,7 @@ class _CoverAndAvatarPicker extends StatelessWidget {
                 children: [
                   if (coverPick != null) PickedImagePreview(bytesFuture: coverPick!.readAsBytes()),
                   if (coverPick == null && existingCoverUrl == null)
-                    const Center(child: Icon(Icons.add_photo_alternate_outlined, size: 32, color: Color(0xFF1D9E75))),
+                    const Center(child: Icon(Icons.add_photo_alternate_outlined, size: 32, color: AppColors.brandTeal)),
                   Positioned(
                     right: 6,
                     bottom: 6,
@@ -399,10 +400,10 @@ class _CoverAndAvatarPicker extends StatelessWidget {
                         child: avatarPick != null
                             ? PickedImagePreview(bytesFuture: avatarPick!.readAsBytes())
                             : Container(
-                                color: const Color(0xFF1D9E75).withValues(alpha: 0.15),
+                                color: AppColors.brandTeal.withValues(alpha: 0.15),
                                 child: existingAvatarUrl != null
                                     ? Image(image: NetworkImage(existingAvatarUrl!), fit: BoxFit.cover)
-                                    : const Icon(Icons.person, size: 36, color: Color(0xFF1D9E75)),
+                                    : const Icon(Icons.person, size: 36, color: AppColors.brandTeal),
                               ),
                       ),
                     ),
@@ -412,7 +413,7 @@ class _CoverAndAvatarPicker extends StatelessWidget {
                     bottom: 0,
                     child: Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Color(0xFF1D9E75), shape: BoxShape.circle),
+                      decoration: const BoxDecoration(color: AppColors.brandTeal, shape: BoxShape.circle),
                       child: const Icon(Icons.camera_alt_outlined, size: 14, color: Colors.white),
                     ),
                   ),
