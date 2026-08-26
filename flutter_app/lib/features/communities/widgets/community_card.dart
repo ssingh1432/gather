@@ -71,7 +71,7 @@ class CommunityCard extends StatelessWidget {
                           ),
                           if (isVerified) ...[
                             const SizedBox(width: 4),
-                            const Icon(Icons.verified, size: 15, color: AppColors.brandTeal),
+                            Icon(Icons.verified, size: 15, color: AppColors.accentStrong),
                           ],
                           if (isPrivate) ...[
                             const SizedBox(width: 4),
@@ -150,8 +150,8 @@ class _JoinButton extends StatelessWidget {
     return FilledButton(
       onPressed: onPressed,
       style: FilledButton.styleFrom(
-        backgroundColor: AppColors.brandTeal,
-        foregroundColor: AppColors.onBrandTeal,
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.surface,
         visualDensity: VisualDensity.compact,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
         padding: const EdgeInsets.symmetric(horizontal: 14),
