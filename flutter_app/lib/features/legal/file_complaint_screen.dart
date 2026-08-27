@@ -78,6 +78,8 @@ class _FileComplaintScreenState extends State<FileComplaintScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (_submitted) {
       return Scaffold(
         appBar: AppBar(title: const Text('Complaint filed')),
@@ -108,11 +110,11 @@ class _FileComplaintScreenState extends State<FileComplaintScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const Text(
+                Text(
                   'Use this form for formal complaints — illegal content, privacy violations, '
                   "defamation, or impersonation — that need a documented legal review, "
                   'rather than a quick community-standards report.',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
