@@ -9,7 +9,6 @@ import '../features/auth/reset_password_screen.dart';
 import '../features/auth/signup_screen.dart';
 import '../features/auth/verify_email_screen.dart';
 import '../features/auth/verify_phone_screen.dart';
-import '../features/beta/beta_feedback_button.dart';
 import '../features/beta/beta_gate.dart';
 import '../features/bookmarks/bookmarks_screen.dart';
 import '../features/communities/communities_screen.dart';
@@ -273,7 +272,6 @@ class MainNav extends StatelessWidget {
 
     if (Breakpoints.isDesktop(context)) {
       return Scaffold(
-        floatingActionButton: const BetaFeedbackButton(),
         body: Row(
           children: [
             NavigationRail(
@@ -300,7 +298,6 @@ class MainNav extends StatelessWidget {
       body: BetaGate(
         child: Breakpoints.isTablet(context) ? ResponsiveCenter(child: child) : child,
       ),
-      floatingActionButton: const BetaFeedbackButton(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: index,
         onTap: (i) => context.go(_tabs[i]),
