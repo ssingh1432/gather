@@ -10,6 +10,7 @@ import '../moderation/my_moderation_screen.dart';
 import '../privacy/data_privacy_screen.dart';
 import '../privacy/mute_list_screen.dart';
 import '../privacy/restricted_accounts_screen.dart';
+import '../beta/beta_feedback_button.dart';
 import 'blocked_accounts_screen.dart';
 
 /// Full settings screen: privacy/audience controls, notification
@@ -324,6 +325,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyModerationScreen())),
             ),
+
+            const _SectionHeader('Help & Feedback'),
+            const BetaFeedbackButton(),
 
             const _SectionHeader('Legal & Policies'),
             const _LegalLinkTile(
