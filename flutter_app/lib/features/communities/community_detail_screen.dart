@@ -87,12 +87,6 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
         final announcementPostId = community['pinned_announcement_post_id'] as String?;
         _announcementText = announcementPostId == null ? null : await communityRepo.getPostPreview(announcementPostId);
       }
-
-      // Only fetch posts if we can actually see them: a private community's
-      // feed is server-gated to members/site staff anyway (get_community_feed,
-      // migration 049), but skipping the call for a non-member avoids a
-      // pointless empty round-trip and lets us show a clearer "request to
-      // join" state instead of a bare empty list.
       if (!_isPrivate || _isMember) {
         final posts = await _fetchPage(0);
         _posts = posts;
@@ -225,7 +219,6 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
     try {
       recentPosts = await communityRepo.listRecentCommunityPosts(widget.communityId);
     } catch (_) {
-      // fall through with an empty list; dialog still lets you clear
     }
     if (!mounted) return;
     final choice = await showDialog<String?>(
@@ -279,40 +272,14 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
         title: Text(c?['name'] as String? ?? 'Community', style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           if (_canViewAnalytics)
-            IconButton(
-              icon: const Icon(Icons.insights_outlined),
-              tooltip: 'Insights',
-              onPressed: () => context.push(
-                '/community-analytics?id=${widget.communityId}&name=${Uri.encodeComponent(c?['name'] as String? ?? '')}',
-              ),
-            ),
-          IconButton(
-            icon: const Icon(Icons.event_outlined),
-            tooltip: 'Events',
-            onPressed: () => context.push(
-              '/community-events?id=${widget.communityId}&name=${Uri.encodeComponent(c?['name'] as String? ?? '')}',
-            ),
-          ),
+            IconButton(icon: const Icon(Icons.insights_outlined), tooltip: 'Insights', onPressed: () => context.push('/community-analytics?id=${widget.communityId}&name=${Uri.encodeComponent(c?['name'] as String? ?? '')}')),
+          IconButton(icon: const Icon(Icons.event_outlined), tooltip: 'Events', onPressed: () => context.push('/community-events?id=${widget.communityId}&name=${Uri.encodeComponent(c?['name'] as String? ?? '')}')),
           if (_isMember)
-            IconButton(
-              icon: const Icon(Icons.forum_outlined),
-              tooltip: 'Chat',
-              onPressed: () => context.push(
-                '/community-chat?id=${widget.communityId}&name=${Uri.encodeComponent(c?['name'] as String? ?? '')}',
-              ),
-            ),
+            IconButton(icon: const Icon(Icons.forum_outlined), tooltip: 'Chat', onPressed: () => context.push('/community-chat?id=${widget.communityId}&name=${Uri.encodeComponent(c?['name'] as String? ?? '')}')),
           if (_isMember)
-            IconButton(
-              icon: const Icon(Icons.people_outline),
-              tooltip: 'Members',
-              onPressed: () => context.push('/community-members?id=${widget.communityId}'),
-            ),
+            IconButton(icon: const Icon(Icons.people_outline), tooltip: 'Members', onPressed: () => context.push('/community-members?id=${widget.communityId}')),
           if (_canManagePosts)
-            IconButton(
-              icon: const Icon(Icons.campaign_outlined),
-              tooltip: 'Manage announcement',
-              onPressed: _openAnnouncementPicker,
-            ),
+            IconButton(icon: const Icon(Icons.campaign_outlined), tooltip: 'Manage announcement', onPressed: _openAnnouncementPicker),
           if (_canManage)
             IconButton(
               icon: const Icon(Icons.settings_outlined),
@@ -340,12 +307,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                           if (_isMember)
                             SliverToBoxAdapter(
                               child: Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  CommunityTokens.spaceLg,
-                                  CommunityTokens.spaceSm,
-                                  CommunityTokens.spaceLg,
-                                  CommunityTokens.spaceMd,
-                                ),
+                                padding: const EdgeInsets.fromLTRB(CommunityTokens.spaceLg, CommunityTokens.spaceSm, CommunityTokens.spaceLg, CommunityTokens.spaceMd),
                                 child: Container(
                                   padding: const EdgeInsets.all(CommunityTokens.spaceMd),
                                   decoration: BoxDecoration(
@@ -370,7 +332,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                                         ),
                                         focusedBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(CommunityTokens.radiusSm),
-                                          borderSide: const BorderSide(color: AppColors.brandTeal, width: 1.5),
+                                          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5),
                                         ),
                                       ),
                                     ),
@@ -380,13 +342,13 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                                       child: FilledButton(
                                         onPressed: _posting ? null : _publishCommunityPost,
                                         style: FilledButton.styleFrom(
-                                          backgroundColor: AppColors.brandTeal,
-                                          foregroundColor: AppColors.onBrandTeal,
+                                          backgroundColor: Theme.of(context).colorScheme.primary,
+                                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
                                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                                         ),
                                         child: _posting
-                                            ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrandTeal))
+                                            ? SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary))
                                             : const Text('Post', style: TextStyle(fontWeight: FontWeight.w600)),
                                       ),
                                     ),
@@ -399,15 +361,11 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                               child: EmptyState(
                                 icon: Icons.lock_outline,
                                 title: 'This community is private',
-                                message: _joinRequestPending
-                                    ? 'Your request to join has been sent.'
-                                    : 'Request to join to see posts and take part in the conversation.',
+                                message: _joinRequestPending ? 'Your request to join has been sent.' : 'Request to join to see posts and take part in the conversation.',
                               ),
                             )
                           else if (_posts.isEmpty)
-                            const SliverFillRemaining(
-                              child: EmptyState(icon: Icons.forum_outlined, title: 'No posts', message: 'Be the first to start this community conversation.'),
-                            )
+                            const SliverFillRemaining(child: EmptyState(icon: Icons.forum_outlined, title: 'No posts', message: 'Be the first to start this community conversation.'))
                           else
                             SliverList(
                               delegate: SliverChildBuilderDelegate(
@@ -426,11 +384,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                                         redirectToLogin(context, redirect: '/community?id=${widget.communityId}', message: 'Please log in or create an account to like posts.');
                                         return;
                                       }
-                                      if (liked.contains(p.id) || p.isLiked) {
-                                        await repo.unlikePost(p.id, uid);
-                                      } else {
-                                        await repo.likePost(p.id, uid);
-                                      }
+                                      if (liked.contains(p.id) || p.isLiked) await repo.unlikePost(p.id, uid); else await repo.likePost(p.id, uid);
                                       await _refreshStates(_posts.map((e) => e.id).toList());
                                       if (mounted) setState(() {});
                                     },
@@ -448,11 +402,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                                         redirectToLogin(context, redirect: '/community?id=${widget.communityId}', message: 'Please log in or create an account to save posts.');
                                         return;
                                       }
-                                      if (bookmarked.contains(p.id) || p.isBookmarked) {
-                                        await repo.unbookmarkPost(p.id, uid);
-                                      } else {
-                                        await repo.bookmarkPost(p.id, uid);
-                                      }
+                                      if (bookmarked.contains(p.id) || p.isBookmarked) await repo.unbookmarkPost(p.id, uid); else await repo.bookmarkPost(p.id, uid);
                                       await _refreshStates(_posts.map((e) => e.id).toList());
                                       if (mounted) setState(() {});
                                     },
@@ -506,9 +456,7 @@ class _Header extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 3,
-              child: hasBanner
-                  ? Image.network(bannerUrl, fit: BoxFit.cover)
-                  : Container(decoration: BoxDecoration(gradient: CommunityColors.bannerFallbackGradient(context))),
+              child: hasBanner ? Image.network(bannerUrl, fit: BoxFit.cover) : Container(decoration: BoxDecoration(gradient: CommunityColors.bannerFallbackGradient(context))),
             ),
             Positioned(
               left: CommunityTokens.spaceLg,
@@ -517,10 +465,7 @@ class _Header extends StatelessWidget {
                 width: 76,
                 height: 76,
                 padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                ),
+                decoration: BoxDecoration(shape: BoxShape.circle, color: Theme.of(context).scaffoldBackgroundColor),
                 child: Container(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
@@ -558,22 +503,13 @@ class _Header extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Flexible(
-                  child: Text(
-                    community['name'] ?? '',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                Flexible(child: Text(community['name'] ?? '', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800), overflow: TextOverflow.ellipsis)),
                 if (isPrivate) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.lock_outline, size: 16)),
                 if (community['is_verified'] == true) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.verified, size: 16, color: AppColors.brandTeal)),
               ]),
               if ((community['category'] as String?)?.isNotEmpty ?? false) ...[
                 const SizedBox(height: 2),
-                Text(
-                  community['category'] as String,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                ),
+                Text(community['category'] as String, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ],
               if ((community['description'] as String?)?.isNotEmpty ?? false) ...[
                 const SizedBox(height: CommunityTokens.spaceSm),
@@ -586,18 +522,9 @@ class _Header extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   CommunityStatChip(icon: Icons.groups_outlined, label: '$memberCount member${memberCount == 1 ? '' : 's'}'),
-                  if (activitySummary != null)
-                    CommunityStatChip(
-                      icon: Icons.local_fire_department_outlined,
-                      label: '${activitySummary!['posts_last_24h'] ?? 0} posts today',
-                    ),
-                  if (activitySummary != null)
-                    CommunityStatChip(
-                      icon: Icons.person_add_alt_outlined,
-                      label: '${activitySummary!['new_members_last_7d'] ?? 0} new this week',
-                    ),
-                  if (myRole != null && myRole != 'member')
-                    CommunityStatChip(icon: Icons.shield_outlined, label: myRole!, color: AppColors.brandTeal),
+                  if (activitySummary != null) CommunityStatChip(icon: Icons.local_fire_department_outlined, label: '${activitySummary!['posts_last_24h'] ?? 0} posts today'),
+                  if (activitySummary != null) CommunityStatChip(icon: Icons.person_add_alt_outlined, label: '${activitySummary!['new_members_last_7d'] ?? 0} new this week'),
+                  if (myRole != null && myRole != 'member') CommunityStatChip(icon: Icons.shield_outlined, label: myRole!, color: AppColors.brandTeal),
                 ],
               ),
               if (tags.isNotEmpty) ...[
@@ -609,10 +536,7 @@ class _Header extends StatelessWidget {
                     for (final t in tags)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: CommunityColors.border(context)),
-                          borderRadius: BorderRadius.circular(CommunityTokens.radiusPill),
-                        ),
+                        decoration: BoxDecoration(border: Border.all(color: CommunityColors.border(context)), borderRadius: BorderRadius.circular(CommunityTokens.radiusPill)),
                         child: Text('#$t', style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600)),
                       ),
                   ],
@@ -622,12 +546,7 @@ class _Header extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-            CommunityTokens.spaceLg,
-            CommunityTokens.spaceLg,
-            CommunityTokens.spaceLg,
-            CommunityTokens.spaceSm,
-          ),
+          padding: const EdgeInsets.fromLTRB(CommunityTokens.spaceLg, CommunityTokens.spaceLg, CommunityTokens.spaceLg, CommunityTokens.spaceSm),
           child: SizedBox(
             width: double.infinity,
             child: myRole == 'owner'
@@ -640,12 +559,7 @@ class _Header extends StatelessWidget {
                       side: BorderSide(color: isMember ? CommunityColors.border(context) : AppColors.brandTeal),
                       foregroundColor: isMember ? null : AppColors.brandTeal,
                     ),
-                    child: joining
-                        ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Text(
-                            isMember ? 'Leave community' : (visibility == 'private' ? 'Request to join' : (isPrivate ? 'Ask for an invite' : 'Join community')),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
+                    child: joining ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(isMember ? 'Leave community' : (visibility == 'private' ? 'Request to join' : (isPrivate ? 'Ask for an invite' : 'Join community')), style: const TextStyle(fontWeight: FontWeight.w600)),
                   ),
           ),
         ),
