@@ -175,9 +175,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     children: [
                       if (isProfileBare) ...[
                         Card(
-                          color: AppColors.brandTeal.withValues(alpha: 0.08),
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
                           child: ListTile(
-                            leading: const Icon(Icons.person_add_alt_1, color: AppColors.brandTeal),
+                            leading: Icon(Icons.person_add_alt_1, color: Theme.of(context).colorScheme.primary),
                             title: const Text('Complete your profile'),
                             subtitle: const Text('Add a photo, bio, and interests so others can find you'),
                             trailing: const Icon(Icons.chevron_right),
