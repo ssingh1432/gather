@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../data/repositories.dart';
 
 /// Formal grievance / legal complaint form — for illegal content, privacy
