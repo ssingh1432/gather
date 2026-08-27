@@ -145,10 +145,12 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Enter it below to activate your account.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
