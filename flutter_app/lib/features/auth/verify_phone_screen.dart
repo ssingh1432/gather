@@ -117,10 +117,10 @@ class _VerifyPhoneScreenState extends ConsumerState<VerifyPhoneScreen> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Enter it below to verify your number.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
               if (_sendError != null) ...[
                 const SizedBox(height: 12),
