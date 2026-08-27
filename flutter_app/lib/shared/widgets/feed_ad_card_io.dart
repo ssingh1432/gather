@@ -67,7 +67,9 @@ class _FeedAdCardState extends State<FeedAdCard> {
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: Text(
               'Sponsored',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.grey),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           SizedBox(
