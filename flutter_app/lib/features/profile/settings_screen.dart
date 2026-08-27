@@ -409,6 +409,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const _SectionHeader('Account'),
             ListTile(
+              leading: const Icon(Icons.lock_reset_outlined),
+              title: const Text('Change password'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/forgot'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.phone_android_outlined),
+              title: const Text('Verify phone number'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/verify-phone'),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
               leading: Icon(Icons.person_off_outlined, color: Theme.of(context).colorScheme.error),
               title: Text('Deactivate account', style: TextStyle(color: Theme.of(context).colorScheme.error)),
               onTap: _confirmDeactivate,
