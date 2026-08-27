@@ -228,14 +228,20 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       const TextSpan(text: 'I agree to the '),
                       TextSpan(
                         text: 'Privacy Policy',
-                        style: const TextStyle(color: Colors.teal, decoration: TextDecoration.underline),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          decoration: TextDecoration.underline,
+                        ),
                         recognizer: TapGestureRecognizer()
                           ..onTap = () => openExternalLink(context, kPrivacyPolicyUrl),
                       ),
                       const TextSpan(text: ' and '),
                       TextSpan(
                         text: 'Terms of Service',
-                        style: const TextStyle(color: Colors.teal, decoration: TextDecoration.underline),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          decoration: TextDecoration.underline,
+                        ),
                         recognizer: TapGestureRecognizer()
                           ..onTap = () => openExternalLink(context, kTermsOfServiceUrl),
                       ),
