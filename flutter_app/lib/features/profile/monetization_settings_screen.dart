@@ -323,11 +323,11 @@ class _MonetizationSettingsScreenState extends State<MonetizationSettingsScreen>
           children: [
             Text('Payout preference', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'For manual payouts once you\'re earning. Only enter the last 4 digits of your '
               'account — never your full account number, PIN, password, or OTP. We will never ask '
               'for those.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -383,7 +383,7 @@ class _CheckRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(met ? Icons.check_circle_outline : Icons.radio_button_unchecked,
-              size: 18, color: met ? Colors.green : Colors.grey),
+              size: 18, color: met ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
           Expanded(child: Text(hint == null ? label : '$label ($hint)')),
         ],
