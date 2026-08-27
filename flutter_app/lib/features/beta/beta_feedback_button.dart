@@ -3,22 +3,28 @@ import 'package:flutter/material.dart';
 import '../../core/supabase_client.dart';
 import '../../shared/services/beta_feedback_service.dart';
 
-/// Phase 4 beta-only floating feedback entry point.
+/// Beta-only feedback entry point shown from Settings.
 class BetaFeedbackButton extends StatelessWidget {
   const BetaFeedbackButton({super.key});
+
+  void _open(BuildContext context) {
+    if (SupabaseConfig.currentUserId == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _BetaFeedbackSheet(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     if (SupabaseConfig.currentUserId == null) return const SizedBox.shrink();
-    return FloatingActionButton.extended(
-      heroTag: 'beta-feedback',
-      onPressed: () => showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder: (_) => const _BetaFeedbackSheet(),
-      ),
-      icon: const Icon(Icons.feedback_outlined),
-      label: const Text('Beta feedback'),
+    return ListTile(
+      leading: const Icon(Icons.feedback_outlined),
+      title: const Text('Beta feedback'),
+      subtitle: const Text('Tell us what broke, confused you, or could be improved'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => _open(context),
     );
   }
 }
