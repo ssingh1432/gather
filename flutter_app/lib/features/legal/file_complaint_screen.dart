@@ -83,15 +83,15 @@ class _FileComplaintScreenState extends State<FileComplaintScreen> {
     if (_submitted) {
       return Scaffold(
         appBar: AppBar(title: const Text('Complaint filed')),
-        body: const Center(
+        body: Center(
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.check_circle_outline, size: 48, color: Colors.green),
-                SizedBox(height: 12),
-                Text(
+                Icon(Icons.check_circle_outline, size: 48, color: AppColors.success),
+                const SizedBox(height: 12),
+                const Text(
                   "We've received your complaint and will review it. You can track its status "
                   'under Settings > Grievances & legal requests.',
                   textAlign: TextAlign.center,
