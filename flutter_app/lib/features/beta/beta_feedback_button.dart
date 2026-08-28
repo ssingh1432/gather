@@ -3,18 +3,22 @@ import 'package:flutter/material.dart';
 import '../../core/supabase_client.dart';
 import '../../shared/services/beta_feedback_service.dart';
 
-/// Beta-only feedback entry point shown from Settings.
+/// Opens the beta feedback sheet from an explicit in-app action.
+///
+/// Beta feedback is intentionally not rendered as a global/floating control.
+/// Call this from a contextual location such as the current user's profile.
+void openBetaFeedback(BuildContext context) {
+  if (SupabaseConfig.currentUserId == null) return;
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => const _BetaFeedbackSheet(),
+  );
+}
+
+/// Beta-only feedback entry point for screens that want a normal settings row.
 class BetaFeedbackButton extends StatelessWidget {
   const BetaFeedbackButton({super.key});
-
-  void _open(BuildContext context) {
-    if (SupabaseConfig.currentUserId == null) return;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => const _BetaFeedbackSheet(),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +28,7 @@ class BetaFeedbackButton extends StatelessWidget {
       title: const Text('Beta feedback'),
       subtitle: const Text('Tell us what broke, confused you, or could be improved'),
       trailing: const Icon(Icons.chevron_right),
-      onTap: () => _open(context),
+      onTap: () => openBetaFeedback(context),
     );
   }
 }
