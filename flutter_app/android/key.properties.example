@@ -1,0 +1,7 @@
+# Copy this to android/key.properties (gitignored) and fill in real values
+# for a local release build. In CI, this file is generated from GitHub
+# Actions secrets instead — see .github/workflows/flutter-ci.yml.
+storePassword=
+keyPassword=
+keyAlias=gather_release
+storeFile=../gather_release.jks
