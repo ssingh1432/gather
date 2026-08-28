@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../shared/providers/app_providers.dart';
@@ -19,6 +20,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _loading = false;
+  bool _googleLoading = false;
   bool _obscurePassword = true;
   bool _rememberMe = true;
 
@@ -55,6 +57,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _submitGoogle() async {
+    setState(() => _googleLoading = true);
+    try {
+      final auth = ref.read(authServiceProvider);
+      if (auth.isNativeGoogleSignInSupported) {
+        await auth.signInWithGoogle();
+        RememberMeService.instance.setRemembered(_rememberMe);
+        if (mounted) context.go(_safeRedirect(widget.redirect) ?? '/');
+      } else {
+        // Desktop: opens the system browser; the app regains control (and
+        // this screen's redirect no longer applies) via the deep-link
+        // handler in main.dart once the person finishes in the browser.
+        await auth.signInWithGoogleOAuth();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google sign-in failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final signupLocation = widget.redirect == null || widget.redirect!.isEmpty
@@ -78,6 +105,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: (_loading || _googleLoading) ? null : _submitGoogle,
+                icon: _googleLoading
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const FaIcon(FontAwesomeIcons.google, size: 18),
+                label: const Text('Continue with Google'),
+                style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('or', style: Theme.of(context).textTheme.bodySmall),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _email,
                 decoration: const InputDecoration(

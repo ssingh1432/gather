@@ -41,6 +41,24 @@
 	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Gather uses this to show ads that are more relevant to you.</string>
+	<!-- Required by google_sign_in's iOS SDK for the native account-picker
+	     flow. Replace REPLACE_WITH_REVERSED_CLIENT_ID with the
+	     "REVERSED_CLIENT_ID" value from the iOS OAuth client you create in
+	     Google Cloud Console (Application type: iOS, bundle ID
+	     com.eiquoab.gather) — it looks like
+	     com.googleusercontent.apps.XXXXXXXXXXXX-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+	     reversed. Do NOT use the Web client ID here. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>REPLACE_WITH_REVERSED_CLIENT_ID</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

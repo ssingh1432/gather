@@ -1,7 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart' show LaunchMode;
 
+import '../../core/env.dart';
 import '../../core/legal_constants.dart';
 import '../../core/supabase_client.dart';
 import 'analytics_service.dart';
@@ -124,6 +128,69 @@ class AuthService {
       unawaited(_client.rpc('record_login_attempt', params: {'p_email': normalizedEmail, 'p_success': false}));
       rethrow;
     }
+  }
+
+  /// Whether the native (in-app, no browser) Google Sign-In flow is
+  /// available on this platform. Android, iOS, and Web all have first-class
+  /// native/embedded Google account-picker support via the google_sign_in
+  /// plugin. Desktop (macOS/Windows/Linux) has no such SDK and falls back
+  /// to [signInWithGoogleOAuth] instead.
+  bool get isNativeGoogleSignInSupported =>
+      kIsWeb || defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS;
+
+  /// Signs in (or signs up, the first time) with Google using the
+  /// platform's native account picker — the user never leaves the app,
+  /// matching the rest of our auth flows. Android, iOS, and Web only; see
+  /// [signInWithGoogleOAuth] for desktop.
+  ///
+  /// Note: unlike email/password signup, this is NOT gated by the closed
+  /// beta allowlist — any Google account can create an account this way
+  /// (product decision, 2026-08-27).
+  Future<AuthResponse> signInWithGoogle() async {
+    final googleSignIn = GoogleSignIn(serverClientId: AppEnv.googleWebClientId);
+    final googleUser = await googleSignIn.signIn();
+    if (googleUser == null) {
+      throw Exception('Google sign-in was cancelled.');
+    }
+    final googleAuth = await googleUser.authentication;
+    final idToken = googleAuth.idToken;
+    if (idToken == null) {
+      throw Exception('Google did not return an ID token. Check the OAuth client configuration.');
+    }
+
+    final res = await _client.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+      accessToken: googleAuth.accessToken,
+    );
+    await _afterOAuthSignIn(res);
+    return res;
+  }
+
+  /// Desktop (macOS/Windows/Linux) Google sign-in: opens the system browser
+  /// for the OAuth consent screen, then returns to the app via the
+  /// `io.eiquoab.gather://login-callback` deep link (caught in main.dart,
+  /// which finishes the session with `getSessionFromUrl`). The resulting
+  /// session arrives asynchronously — listen to `authChanges()` rather than
+  /// awaiting a return value here.
+  Future<void> signInWithGoogleOAuth() async {
+    await _client.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: 'io.eiquoab.gather://login-callback',
+      authScreenLaunchMode: LaunchMode.externalApplication,
+    );
+  }
+
+  Future<void> _afterOAuthSignIn(AuthResponse res) async {
+    final uid = res.user?.id;
+    if (uid == null) return;
+    final user = await _client.from('users').select('status').eq('id', uid).maybeSingle();
+    if (user?['status'] == 'banned' || user?['status'] == 'suspended') {
+      await signOut();
+      throw Exception('Account not active');
+    }
+    AnalyticsService.instance.userLoggedIn();
+    AnalyticsService.instance.dailyActiveUser();
   }
 
   /// Converts a normalized 10-digit Nepali number into E.164 for Supabase/Twilio.

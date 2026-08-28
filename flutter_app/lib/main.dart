@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -65,6 +67,31 @@ Future<void> main() async {
         await maybeInitAds();
       } catch (error, stack) {
         BetaErrorLoggingService.instance.record(error, stack, context: 'RemoteConfigService/AdsService.initialize');
+      }
+      // Desktop-only: Android/iOS/Web use google_sign_in's native picker
+      // (see AuthService.signInWithGoogle) and never leave the app, so they
+      // don't need this. macOS/Windows/Linux have no native Google SDK, so
+      // AuthService.signInWithGoogleOAuth() opens the system browser and the
+      // OAuth result comes back via the io.eiquoab.gather:// deep link,
+      // which we catch here and hand to Supabase to finish the sign-in.
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.macOS ||
+              defaultTargetPlatform == TargetPlatform.windows ||
+              defaultTargetPlatform == TargetPlatform.linux)) {
+        try {
+          final appLinks = AppLinks();
+          appLinks.uriLinkStream.listen((uri) async {
+            if (uri.scheme == 'io.eiquoab.gather') {
+              try {
+                await SupabaseConfig.client.auth.getSessionFromUrl(uri);
+              } catch (error, stack) {
+                BetaErrorLoggingService.instance.record(error, stack, context: 'Google OAuth deep link');
+              }
+            }
+          });
+        } catch (error, stack) {
+          BetaErrorLoggingService.instance.record(error, stack, context: 'AppLinks listener setup');
+        }
       }
     } else {
       debugPrint("⚠️ Supabase URL or Anon Key is missing in .env");

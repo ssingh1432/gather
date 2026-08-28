@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/legal_constants.dart';
@@ -26,6 +27,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final confirmPassword = TextEditingController();
   final username = TextEditingController();
   bool _loading = false;
+  bool _googleLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _agreedToPolicy = false;
@@ -132,6 +134,34 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
   }
 
+  Future<void> _submitGoogle() async {
+    if (!_agreedToPolicy) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please agree to the Privacy Policy and Terms of Service to continue.')),
+      );
+      return;
+    }
+
+    setState(() => _googleLoading = true);
+    try {
+      final auth = ref.read(authServiceProvider);
+      if (auth.isNativeGoogleSignInSupported) {
+        await auth.signInWithGoogle();
+        if (mounted) context.go(_safeRedirect(widget.redirect) ?? '/');
+      } else {
+        // Desktop: opens the system browser; main.dart's deep-link handler
+        // finishes the sign-in once the person returns to the app.
+        await auth.signInWithGoogleOAuth();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Google sign-up failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final loginLocation = _loginLocation(widget.redirect);
@@ -153,6 +183,30 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: (_loading || _googleLoading) ? null : _submitGoogle,
+                icon: _googleLoading
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const FaIcon(FontAwesomeIcons.google, size: 18),
+                label: const Text('Continue with Google'),
+                style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('or', style: Theme.of(context).textTheme.bodySmall),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: username,
                 decoration: const InputDecoration(
@@ -273,3 +327,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 String _loginLocation(String? redirect) => redirect == null || redirect.isEmpty
     ? '/login'
     : '/login?redirect=${Uri.encodeComponent(redirect)}';
+
+String? _safeRedirect(String? redirect) {
+  if (redirect == null || redirect.isEmpty) return null;
+  final uri = Uri.tryParse(redirect);
+  if (uri == null || !uri.hasAbsolutePath || uri.hasScheme || uri.hasAuthority) {
+    return null;
+  }
+  return uri.toString();
+}

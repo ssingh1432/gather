@@ -4,5 +4,13 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
+	<!-- Needed for the Google OAuth callback and any Supabase network call
+	     to work under App Sandbox in a release build — this key appears to
+	     have been missing entirely (only DebugProfile.entitlements had
+	     network.server, which is the wrong direction for outbound client
+	     requests). Flagging in case macOS release builds were silently
+	     failing all network calls before this. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 </dict>
 </plist>

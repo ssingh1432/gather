@@ -28,5 +28,23 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<!-- Lets the OS hand control back to Gather after the person finishes
+	     Google sign-in in their browser (macOS has no native Google Sign-In
+	     SDK, so this uses a browser-redirect flow — see
+	     AuthService.signInWithGoogleOAuth and the AppLinks listener in
+	     main.dart). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>io.eiquoab.gather.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>io.eiquoab.gather</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
