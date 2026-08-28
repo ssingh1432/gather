@@ -10,6 +10,7 @@ import '../../shared/providers/app_providers.dart';
 import '../../shared/utils/external_link.dart';
 import '../../shared/widgets/profile_view.dart';
 import '../../shared/widgets/reusables.dart';
+import '../beta/beta_feedback_button.dart';
 import '../data/repositories.dart';
 
 /// The current user's own profile tab (bottom nav "Profile"). Distinct from
@@ -116,15 +117,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             onSelected: (value) {
               if (value == 'share') {
                 Share.share('Check out my profile on Gather: https://eiquoab.xyz/user?id=$uid');
+              } else if (value == 'feedback') {
+                openBetaFeedback(context);
               } else if (value == 'signout') {
                 _confirmAndSignOut();
               }
             },
             itemBuilder: (context) => const [
-              PopupMenuItem(value: 'share', child: ListTile(leading: Icon(Icons.ios_share), title: Text('Share profile'), contentPadding: EdgeInsets.zero)),
+              PopupMenuItem(
+                value: 'share',
+                child: ListTile(
+                  leading: Icon(Icons.ios_share),
+                  title: Text('Share profile'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'feedback',
+                child: ListTile(
+                  leading: Icon(Icons.feedback_outlined),
+                  title: Text('Beta feedback'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
               PopupMenuItem(
                 value: 'signout',
-                child: ListTile(leading: Icon(Icons.logout), title: Text('Sign out'), contentPadding: EdgeInsets.zero),
+                child: ListTile(
+                  leading: Icon(Icons.logout),
+                  title: Text('Sign out'),
+                  contentPadding: EdgeInsets.zero,
+                ),
               ),
             ],
           ),
