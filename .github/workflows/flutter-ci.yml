@@ -100,15 +100,23 @@ jobs:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         if: env.RELEASE_KEYSTORE_BASE64 != ''
         run: |
-          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > android/gather_release.jks
+          # Strip any stray whitespace/newlines the secret might carry (a
+          # common cause of "corrupted keystore" errors after copy-paste)
+          # before decoding.
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > android/gather_release.jks
           cat > android/key.properties <<KEYPROPS
           storePassword=${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           keyPassword=${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           keyAlias=gather_release
           storeFile=../gather_release.jks
           KEYPROPS
+          echo "Decoded keystore SHA-256: $(sha256sum android/gather_release.jks | cut -d' ' -f1)"
+          echo "Decoded keystore size (bytes): $(stat -c%s android/gather_release.jks)"
         # If these secrets aren't set, build.gradle.kts falls back to debug
         # signing automatically — this step just no-ops in that case.
+        # The SHA-256/size lines above are safe to log (they're not the
+        # secret itself) and let us confirm the decoded file is intact
+        # without exposing any key material.
 
       - name: Build release APK (ARM64)
         run: flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation
