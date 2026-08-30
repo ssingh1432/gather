@@ -68,6 +68,16 @@ class _C extends State<CommunitiesScreen> {
       if (_verifiedOnly) data = data.where((c) => c['is_verified'] == true).toList();
     }
 
+    // Trending and recently-active are ranked server-side and intentionally
+    // do not accept a tag parameter. Resolve the selected tag's community IDs
+    // through the existing filtered repository, then preserve the ranking
+    // order from the original result set.
+    if (_selectedTagId != null && (_sort != _DiscoverySort.popular || (query.isNotEmpty && _selectedCategoryId == null))) {
+      final tagged = await repo.listCommunitiesFiltered(tagId: _selectedTagId);
+      final taggedIds = tagged.map((c) => c['id'].toString()).toSet();
+      data = data.where((c) => taggedIds.contains(c['id'].toString())).toList();
+    }
+
     final uid = SupabaseConfig.currentUserId;
     if (uid != null && data.isNotEmpty) {
       joined = await repo.joinedStates(data.map((e) => e['id'].toString()).toList(), uid);
