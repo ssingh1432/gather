@@ -110,7 +110,15 @@ class AuthService {
       throw Exception('Google sign-in is not configured: GOOGLE_WEB_CLIENT_ID is missing.');
     }
 
-    final googleSignIn = GoogleSignIn(serverClientId: AppEnv.googleWebClientId);
+    // On Flutter Web, google_sign_in needs `clientId` — it silently
+    // ignores `serverClientId`, which is what native Android/iOS uses
+    // instead. Passing only serverClientId (as before) left web with no
+    // client ID at all, crashing with a generic null-check error before
+    // the account picker ever showed.
+    final googleSignIn = GoogleSignIn(
+      clientId: kIsWeb ? AppEnv.googleWebClientId : null,
+      serverClientId: kIsWeb ? null : AppEnv.googleWebClientId,
+    );
     final googleUser = await googleSignIn.signIn();
     if (googleUser == null) {
       throw Exception('Google sign-in was cancelled.');
