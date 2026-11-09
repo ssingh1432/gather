@@ -61,10 +61,14 @@ import 'responsive.dart';
 import '../features/reports/report_screen.dart';
 import '../features/search/search_screen.dart';
 import 'supabase_client.dart';
+import '../features/auth/mfa_challenge_screen.dart';
+import '../features/profile/security_screen.dart';
+import '../shared/services/mfa_service.dart';
 
 final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 final appRouter = GoRouter(
+  refreshListenable: MfaGate.pending,
   errorBuilder: (context, state) {
     final text = state.error?.toString() ?? '';
     final isAuthLinkError = text.contains('otp_expired') ||
@@ -108,6 +112,15 @@ final appRouter = GoRouter(
     final onAuth = _authRoutes.contains(path);
     final protected = _protectedRoutes.contains(path);
 
+    // 2FA: a signed-in AAL1 session with a verified factor on an untrusted
+    // device may only see the challenge screen.
+    if (authed && MfaGate.pending.value) {
+      return path == '/mfa-challenge' ? null : '/mfa-challenge';
+    }
+    if (path == '/mfa-challenge') {
+      return authed ? '/' : '/login';
+    }
+
     if (!authed && protected) {
       return _loginLocation(redirect: state.uri.toString());
     }
@@ -141,6 +154,8 @@ final appRouter = GoRouter(
     GoRoute(path: '/signup', builder: (_, s) => SignupScreen(redirect: s.uri.queryParameters['redirect'])),
     GoRoute(path: '/register', builder: (_, s) => SignupScreen(redirect: s.uri.queryParameters['redirect'])),
     GoRoute(path: '/forgot', builder: (_, __) => ForgotPasswordScreen()),
+    GoRoute(path: '/mfa-challenge', builder: (_, __) => const MfaChallengeScreen()),
+    GoRoute(path: '/security', builder: (_, __) => const SecurityScreen()),
     GoRoute(path: '/reset-password', builder: (_, __) => const ResetPasswordScreen()),
     GoRoute(path: '/verify-phone', builder: (_, s) => VerifyPhoneScreen(phone: s.uri.queryParameters['phone'] ?? '')),
     GoRoute(
@@ -326,6 +341,7 @@ const _protectedRoutes = {
   '/profile',
   '/edit-profile',
   '/settings',
+  '/security',
   '/bookmarks',
   '/notifications',
   '/my-pages',
