@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/supabase_client.dart';
 import '../../shared/models/models.dart';
 import '../../shared/utils/external_link.dart';
+import '../../shared/widgets/profile_extras.dart';
 import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/profile_view.dart';
 import '../../shared/widgets/reusables.dart';
@@ -268,7 +269,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   isVerified: (u['is_verified'] as bool?) ?? false,
                   pronouns: u['pronouns'] as String?,
                   isPrivate: (u['is_private'] as bool?) ?? false,
+                  profileTheme: u['profile_theme'] as String?,
                 ),
+                if (u['id'] is String) ProfileExtras(userId: u['id'] as String, profileTheme: u['profile_theme'] as String?),
                 const SizedBox(height: 12),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),

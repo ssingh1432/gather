@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/supabase_client.dart';
+import '../../shared/services/media_upload_service.dart';
 import '../data/repositories.dart';
 
 /// Admin-only dashboard for Phase 4 Nepal legal compliance: review
@@ -253,6 +254,29 @@ class _AppealsTab extends StatelessWidget {
   }
 }
 
+/// Opens the private ID document through a short-lived signed URL. Storage
+/// RLS (migration 123) decides whether the caller may read it.
+Future<void> _viewDocument(BuildContext context, String? path) async {
+  if (path == null || path.isEmpty) return;
+  try {
+    final url = await MediaUploadService().createVerificationDocSignedUrl(path);
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        child: InteractiveViewer(child: Image.network(url, errorBuilder: (_, __, ___) => const Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('Could not display this document.'),
+        ))),
+      ),
+    );
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open document.')));
+    }
+  }
+}
+
 class _VerificationTab extends StatelessWidget {
   const _VerificationTab({required this.rows, required this.onReview});
   final List<Map<String, dynamic>> rows;
@@ -273,6 +297,11 @@ class _VerificationTab extends StatelessWidget {
             title: Text('@$username'),
             subtitle: Text(row['id_document_type'] as String? ?? ''),
             trailing: Wrap(spacing: 4, children: [
+              IconButton(
+                tooltip: 'View document',
+                icon: const Icon(Icons.badge_outlined),
+                onPressed: () => _viewDocument(context, row['id_document_url'] as String?),
+              ),
               IconButton(
                 icon: const Icon(Icons.check, color: Colors.green),
                 onPressed: () => onReview(row, 'approved'),
