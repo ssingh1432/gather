@@ -26,6 +26,8 @@ import '../features/pages/page_chat_screen.dart';
 import '../features/pages/page_content_screen.dart';
 import '../features/pages/page_discovery_screen.dart';
 import '../features/pages/page_followers_screen.dart';
+import '../features/messages/dm_chat_screen.dart';
+import '../features/messages/dm_inbox_screen.dart';
 import '../features/pages/page_inbox_screen.dart';
 import '../features/pages/page_manage_screen.dart';
 import '../features/pages/page_marketplace_screen.dart';
@@ -195,6 +197,15 @@ final appRouter = GoRouter(
       builder: (_, s) => PageAnalyticsScreen(pageId: s.uri.queryParameters['id'] ?? '', pageName: s.uri.queryParameters['name']),
     ),
     GoRoute(path: '/followed-pages', builder: (_, __) => const FollowedPagesScreen()),
+    GoRoute(path: '/messages', builder: (_, __) => const DmInboxScreen()),
+    GoRoute(
+      path: '/dm-chat',
+      builder: (_, s) => DmChatScreen(
+        conversationId: s.uri.queryParameters['id'] ?? '',
+        otherUserId: s.uri.queryParameters['user'] ?? '',
+        otherUsername: s.uri.queryParameters['name'],
+      ),
+    ),
     GoRoute(path: '/page-inbox', builder: (_, s) => PageInboxScreen(pageId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/page-chat', builder: (_, s) => PageChatScreen(pageId: s.uri.queryParameters['id'] ?? '')),
     GoRoute(path: '/page-messaging-settings', builder: (_, s) => PageMessagingSettingsScreen(pageId: s.uri.queryParameters['id'] ?? '')),
@@ -363,6 +374,8 @@ const _protectedRoutes = {
   '/page-subscriptions',
   '/page-marketplace',
   '/page-analytics',
+  '/messages',
+  '/dm-chat',
   '/page-inbox',
   '/page-chat',
   '/page-messaging-settings',

@@ -257,6 +257,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.chat_bubble_outline),
+                        title: const Text('Messages'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/messages'),
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.bookmark_outline),
                         title: const Text('Bookmarks'),
                         trailing: const Icon(Icons.chevron_right),

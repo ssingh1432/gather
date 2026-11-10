@@ -10,6 +10,8 @@ import '../../shared/widgets/auth_redirects.dart';
 import '../../shared/widgets/profile_view.dart';
 import '../../shared/widgets/reusables.dart';
 import '../data/repositories.dart';
+import '../messages/dm_models.dart';
+import '../messages/dm_repository.dart';
 
 /// Someone else's profile — cover/avatar, bio, member-since/location/
 /// website, stats, a Follow/Unfollow toggle, and their post grid. Distinct
@@ -63,6 +65,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final next = _load();
     await next;
     if (mounted) setState(() => _future = next);
+  }
+
+  Future<void> _openDirectMessage() async {
+    try {
+      final id = await DmRepository().getOrCreateConversation(widget.userId);
+      if (!mounted) return;
+      context.push('/dm-chat?id=${Uri.encodeComponent(id)}&user=${Uri.encodeComponent(widget.userId)}');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(dmErrorMessage(e))));
+    }
   }
 
   Future<void> _toggleFollow(_OtherProfileBundle bundle) async {
@@ -327,6 +340,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   : null,
                             ),
                           ),
+                          const SizedBox(width: 8),
+                          IconButton.outlined(tooltip: 'Message', onPressed: _openDirectMessage, icon: const Icon(Icons.chat_bubble_outline)),
                           const SizedBox(width: 8),
                           IconButton.outlined(onPressed: () => _openMoreMenu(bundle), icon: const Icon(Icons.more_horiz)),
                         ],
