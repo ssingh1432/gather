@@ -413,6 +413,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const _SectionHeader('Account'),
             ListTile(
+              leading: const Icon(Icons.alternate_email),
+              title: const Text('Change username'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/change-username'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.verified_outlined),
+              title: const Text('Get verified'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/request-verification'),
+            ),
+            ListTile(
               leading: const Icon(Icons.verified_user_outlined),
               title: const Text('Security & devices'),
               subtitle: const Text('Two-factor authentication, signed-in devices'),

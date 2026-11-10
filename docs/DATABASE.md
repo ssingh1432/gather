@@ -304,3 +304,17 @@ noted inline above.
   to authenticated` — there's deliberately no blanket default-privileges
   rule, since that would silently expose future admin-only tables the
   moment they're created.
+
+## Phase 12 additions (migrations 122-123)
+
+| Table / function | Purpose |
+|---|---|
+| `user_devices` + `register_device`, `list_my_devices`, `is_device_trusted`, `set_device_trust`, `revoke_device` | Device registry, trusted devices, new-device security event. |
+| `require_aal2_if_enrolled()` | Server-side step-up guard: raises `mfa_required` when 2FA is on but the session is not AAL2. |
+| `username_history`, `change_username()`, `validate_username()` | Username change: format rules, 30-day cooldown, 90-day reservation of released names. Direct `users.username` updates are blocked by `guard_profile_identity_columns`. |
+| `user_links` | Up to 5 profile links (http/https only), visibility follows blocks and private-profile rules. |
+| `users.is_verified`, `verified_at` | Set only by `apply_verification_decision` (trigger on request approval). |
+| `badges`, `user_badges`, `admin_award_badge`, `admin_revoke_badge` | Badge catalog; only admins award or revoke, with audit log entries. |
+| `users.profile_theme` | One of default, ocean, forest, sunset, rose, midnight. |
+| Storage bucket `verification-docs` | Private ID documents; owner and staff read only. |
+

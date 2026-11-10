@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_theme.dart';
+import 'profile_links_editor.dart';
 
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
@@ -39,6 +42,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _displayName = TextEditingController();
   final _bio = TextEditingController();
   final _website = TextEditingController();
+  final _links = ProfileLinksController();
+  String _profileTheme = 'default';
   final _customInterest = TextEditingController();
   final _pronouns = TextEditingController();
 
@@ -70,6 +75,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _displayName.dispose();
     _bio.dispose();
     _website.dispose();
+    _links.dispose();
     _customInterest.dispose();
     _pronouns.dispose();
     super.dispose();
@@ -80,11 +86,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     if (uid == null) return;
     try {
       final profile = await ProfileRepository().loadProfile(uid);
+      unawaited(_links.load(uid));
       if (profile != null && mounted) {
         setState(() {
           _displayName.text = (profile['display_name'] as String?) ?? '';
           _bio.text = (profile['bio'] as String?) ?? '';
           _website.text = (profile['website_url'] as String?) ?? '';
+          _profileTheme = (profile['profile_theme'] as String?) ?? 'default';
           _location = profile['location'] as String?;
           _language = (profile['language_preference'] as String?) ?? 'ne';
           _interests.addAll(((profile['interests'] as List?) ?? []).cast<String>());
@@ -143,6 +151,15 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       _error = null;
     });
 
+    final linkError = _links.validate();
+    if (linkError != null) {
+      setState(() {
+        _saving = false;
+        _error = linkError;
+      });
+      return;
+    }
+
     try {
       final repo = ProfileRepository();
       String? avatarUrl = _existingAvatarUrl;
@@ -165,9 +182,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         'pronouns': _pronouns.text.trim().isEmpty ? null : _pronouns.text.trim(),
         'is_private': _isPrivate,
         'account_mode': _accountMode,
+        'profile_theme': _profileTheme,
         if (avatarUrl != null) 'profile_photo_url': avatarUrl,
         if (coverUrl != null) 'cover_photo_url': coverUrl,
       });
+
+      await _links.save(uid);
 
       if (!mounted) return;
       ref.invalidate(currentUserProfileProvider);
@@ -255,6 +275,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             decoration: const InputDecoration(labelText: 'Website / link', hintText: 'https://...'),
             keyboardType: TextInputType.url,
           ),
+          const SizedBox(height: 16),
+          ProfileLinksEditor(controller: _links),
+          const SizedBox(height: 16),
+          ProfileThemePicker(selected: _profileTheme, onChanged: (v) => setState(() => _profileTheme = v)),
           const SizedBox(height: 24),
           const Text('Account type', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),

@@ -38,6 +38,7 @@ class MediaUploadService {
   static const String avatarsBucket = 'avatars';
   static const String storyBucket = 'story-media';
   static const String evidenceBucket = 'moderation-evidence';
+  static const String verificationDocsBucket = 'verification-docs'; // private; migration 123
   static const String communityMediaBucket = 'community-media';
   static const String communityChatMediaBucket = 'community-chat-media';
   static const String pageMediaBucket = 'page-media';
@@ -384,6 +385,26 @@ class MediaUploadService {
       await prepared.original.uploadTo(storage, path, options);
       return path;
     });
+  }
+
+  /// Uploads an ID document to the private `verification-docs` bucket at
+  /// `{userId}/{timestamp}.{ext}` and returns the storage **path** (never a
+  /// public URL). Staff view it through [createVerificationDocSignedUrl].
+  Future<String> uploadVerificationDoc({required String userId, required XFile image}) async {
+    await _assertWithinLimit(image, 5 * 1024 * 1024, 'ID document'); // matches bucket limit
+    final prepared = await preparer.preparePostImage(image);
+    return _withAuthRetry(() async {
+      final options = FileOptions(contentType: prepared.contentType, cacheControl: '3600', upsert: false);
+      final storage = _client.storage.from(verificationDocsBucket);
+      final ext = prepared.contentType.contains('png') ? 'png' : 'jpg';
+      final path = '$userId/${DateTime.now().millisecondsSinceEpoch}.$ext';
+      await prepared.original.uploadTo(storage, path, options);
+      return path;
+    });
+  }
+
+  Future<String> createVerificationDocSignedUrl(String path) async {
+    return _withAuthRetry(() => _client.storage.from(verificationDocsBucket).createSignedUrl(path, 300));
   }
 
   /// Short-lived signed URL for viewing a private evidence object. RLS on

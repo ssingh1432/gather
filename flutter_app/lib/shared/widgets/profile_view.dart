@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/models.dart';
+import '../utils/profile_themes.dart';
 import 'format_toolbar.dart';
 import 'reusables.dart';
 
@@ -21,8 +22,10 @@ class ProfileCoverAndIdentity extends StatelessWidget {
     this.isVerified = false,
     this.pronouns,
     this.isPrivate = false,
+    this.profileTheme,
   });
 
+  final String? profileTheme;
   final String? coverUrl;
   final String? avatarUrl;
   final String displayName;
@@ -41,7 +44,7 @@ class ProfileCoverAndIdentity extends StatelessWidget {
         Stack(
           clipBehavior: Clip.none,
           children: [
-            _CoverPhoto(url: coverUrl),
+            _CoverPhoto(url: coverUrl, accent: ProfileThemes.accentFor(profileTheme)),
             Positioned(
               bottom: -40,
               left: 16,
@@ -94,8 +97,9 @@ class ProfileCoverAndIdentity extends StatelessWidget {
 }
 
 class _CoverPhoto extends StatelessWidget {
-  const _CoverPhoto({required this.url});
+  const _CoverPhoto({required this.url, this.accent});
   final String? url;
+  final Color? accent;
 
   @override
   Widget build(BuildContext context) {
@@ -107,7 +111,7 @@ class _CoverPhoto extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [theme.colorScheme.primary.withValues(alpha: 0.35), theme.colorScheme.primary.withValues(alpha: 0.12)],
+          colors: [(accent ?? theme.colorScheme.primary).withValues(alpha: 0.35), (accent ?? theme.colorScheme.primary).withValues(alpha: 0.12)],
         ),
       ),
       child: (url != null && url!.isNotEmpty)

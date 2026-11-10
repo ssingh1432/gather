@@ -63,6 +63,8 @@ import '../features/search/search_screen.dart';
 import 'supabase_client.dart';
 import '../features/auth/mfa_challenge_screen.dart';
 import '../features/profile/security_screen.dart';
+import '../features/profile/change_username_screen.dart';
+import '../features/profile/request_verification_screen.dart';
 import '../shared/services/mfa_service.dart';
 
 final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -156,6 +158,8 @@ final appRouter = GoRouter(
     GoRoute(path: '/forgot', builder: (_, __) => ForgotPasswordScreen()),
     GoRoute(path: '/mfa-challenge', builder: (_, __) => const MfaChallengeScreen()),
     GoRoute(path: '/security', builder: (_, __) => const SecurityScreen()),
+    GoRoute(path: '/change-username', builder: (_, __) => const ChangeUsernameScreen()),
+    GoRoute(path: '/request-verification', builder: (_, __) => const RequestVerificationScreen()),
     GoRoute(path: '/reset-password', builder: (_, __) => const ResetPasswordScreen()),
     GoRoute(path: '/verify-phone', builder: (_, s) => VerifyPhoneScreen(phone: s.uri.queryParameters['phone'] ?? '')),
     GoRoute(
@@ -342,6 +346,8 @@ const _protectedRoutes = {
   '/edit-profile',
   '/settings',
   '/security',
+  '/change-username',
+  '/request-verification',
   '/bookmarks',
   '/notifications',
   '/my-pages',
