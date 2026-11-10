@@ -119,7 +119,12 @@ jobs:
         # without exposing any key material.
 
       - name: Build release APK (ARM64)
-        run: flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation
+        run: |
+          set -o pipefail
+          flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation 2>&1 | tee /tmp/apk-build.log || {
+            echo "::error title=APK build failed::$(grep -E -A12 'What went wrong|Error:|error:|FAILURE' /tmp/apk-build.log | head -40 | tr '\n' '|' | cut -c1-3000)"
+            exit 1
+          }
         # ARM64 is the production Android architecture used by modern phones.
         # Building one ABI avoids compiling and packaging unnecessary native
         # architectures in CI, significantly reducing release-build time.
