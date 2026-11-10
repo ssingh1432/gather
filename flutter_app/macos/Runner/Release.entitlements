@@ -10,6 +10,8 @@
 	     network.server, which is the wrong direction for outbound client
 	     requests). Flagging in case macOS release builds were silently
 	     failing all network calls before this. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
 </dict>
