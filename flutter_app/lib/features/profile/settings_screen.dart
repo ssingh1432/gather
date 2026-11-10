@@ -413,6 +413,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const _SectionHeader('Account'),
             ListTile(
+              leading: const Icon(Icons.verified_user_outlined),
+              title: const Text('Security & devices'),
+              subtitle: const Text('Two-factor authentication, signed-in devices'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/security'),
+            ),
+            ListTile(
               leading: const Icon(Icons.lock_reset_outlined),
               title: const Text('Change password'),
               trailing: const Icon(Icons.chevron_right),

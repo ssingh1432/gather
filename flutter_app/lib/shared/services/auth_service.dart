@@ -10,6 +10,8 @@ import '../../core/legal_constants.dart';
 import '../../core/supabase_client.dart';
 import 'analytics_service.dart';
 import 'beta_access_service.dart';
+import 'device_service.dart';
+import 'mfa_service.dart';
 import 'push_notification_service.dart';
 
 class AuthService {
@@ -89,6 +91,8 @@ class AuthService {
         AnalyticsService.instance.userLoggedIn();
         AnalyticsService.instance.dailyActiveUser();
         unawaited(_client.rpc('record_login_attempt', params: {'p_email': normalizedEmail, 'p_success': true}));
+        await DeviceService.instance.registerCurrentDevice();
+        await MfaGate.refresh();
       }
       return res;
     } on AuthApiException {
@@ -163,6 +167,8 @@ class AuthService {
     }
     AnalyticsService.instance.userLoggedIn();
     AnalyticsService.instance.dailyActiveUser();
+    await DeviceService.instance.registerCurrentDevice();
+    await MfaGate.refresh();
   }
 
   String toE164(String normalizedPhone) => '+977$normalizedPhone';
@@ -205,6 +211,7 @@ class AuthService {
       await PushNotificationService.instance.clearTokenForCurrentUser();
     } catch (_) {}
     await _client.auth.signOut();
+    MfaGate.clear();
   }
 
   Future<void> resetPassword(String email) async {

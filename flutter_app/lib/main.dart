@@ -14,6 +14,8 @@ import 'core/supabase_client.dart';
 import 'core/theme/app_theme.dart';
 import 'shared/services/analytics_service.dart';
 import 'shared/services/beta_error_logging_service.dart';
+import 'shared/services/device_service.dart';
+import 'shared/services/mfa_service.dart';
 import 'shared/services/push_notification_service.dart';
 import 'shared/services/remember_me_service.dart';
 import 'shared/services/remote_config_service.dart';
@@ -53,6 +55,12 @@ Future<void> main() async {
         BetaErrorLoggingService.instance.record(error, stack, context: 'SupabaseConfig.initialize');
       }
       try {
+        // Restored session at AAL1 with 2FA enabled must still pass the challenge.
+        await MfaGate.refresh();
+      } catch (error, stack) {
+        BetaErrorLoggingService.instance.record(error, stack, context: 'MfaGate.refresh');
+      }
+      try {
         await PushNotificationService.instance.initialize();
       } catch (error, stack) {
         BetaErrorLoggingService.instance.record(error, stack, context: 'PushNotificationService.initialize');
@@ -84,6 +92,8 @@ Future<void> main() async {
             if (uri.scheme == 'io.eiquoab.gather') {
               try {
                 await SupabaseConfig.client.auth.getSessionFromUrl(uri);
+                await DeviceService.instance.registerCurrentDevice();
+                await MfaGate.refresh();
               } catch (error, stack) {
                 BetaErrorLoggingService.instance.record(error, stack, context: 'Google OAuth deep link');
               }
