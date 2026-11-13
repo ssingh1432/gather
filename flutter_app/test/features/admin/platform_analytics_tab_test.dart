@@ -106,8 +106,16 @@ class _FakeAdminRepo extends AdminRepository {
 
 Widget _host(AdminRepository repo) => MaterialApp(home: Scaffold(body: PlatformAnalyticsTab(repo: repo)));
 
+void _tallViewport(WidgetTester tester) {
+  // ListView builds lazily; a tall surface renders every section.
+  tester.view.physicalSize = const Size(1000, 8000);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+}
+
 void main() {
   testWidgets('renders KPIs, retention and sections', (tester) async {
+    _tallViewport(tester);
     await tester.pumpWidget(_host(_FakeAdminRepo()));
     await tester.pumpAndSettle();
 
@@ -119,6 +127,7 @@ void main() {
   });
 
   testWidgets('a failing section does not blank the page', (tester) async {
+    _tallViewport(tester);
     await tester.pumpWidget(_host(_FakeAdminRepo(failCrashes: true)));
     await tester.pumpAndSettle();
 
@@ -127,6 +136,7 @@ void main() {
   });
 
   testWidgets('charts expose a text alternative to screen readers', (tester) async {
+    _tallViewport(tester);
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(_host(_FakeAdminRepo()));
     await tester.pumpAndSettle();
