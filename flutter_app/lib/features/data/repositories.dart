@@ -3086,6 +3086,43 @@ class AdminRepository {
     return Map<String, dynamic>.from(data as Map);
   }
 
+  // ---- Platform analytics (Phase 15) ----
+
+  Future<Map<String, dynamic>> platformKpis() async {
+    final data = await _c.rpc('admin_platform_kpis');
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> activitySeries({int days = 30}) async {
+    final data = await _c.rpc('admin_activity_series', params: {'p_days': days});
+    return (data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> retentionCohorts({int weeks = 8}) async {
+    final data = await _c.rpc('admin_retention_cohorts', params: {'p_weeks': weeks});
+    return (data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> engagementSummary({int days = 30}) async {
+    final data = await _c.rpc('admin_engagement_summary', params: {'p_days': days});
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<Map<String, dynamic>> moderationAnalytics({int days = 30}) async {
+    final data = await _c.rpc('admin_moderation_analytics', params: {'p_days': days});
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> uploadsSeries({int days = 30}) async {
+    final data = await _c.rpc('admin_uploads_series', params: {'p_days': days});
+    return (data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> crashAnalytics({int days = 14}) async {
+    final data = await _c.rpc('admin_crash_analytics', params: {'p_days': days});
+    return Map<String, dynamic>.from(data as Map);
+  }
+
   // ---- Users ----
 
   Future<List<Map<String, dynamic>>> searchUsers({String? query, int limit = 50}) async {

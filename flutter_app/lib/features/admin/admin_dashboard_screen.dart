@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/responsive.dart';
 import '../../core/supabase_client.dart';
 import '../data/repositories.dart';
+import 'platform_analytics_tab.dart';
 
 /// Phase 8: unified Admin Panel shell.
 ///
@@ -172,7 +173,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case _Section.auditLogs:
         return _AuditLogTab(repo: _repo);
       case _Section.analytics:
-        return _OverviewTab(repo: _repo, analyticsMode: true);
+        return PlatformAnalyticsTab(repo: _repo);
       case _Section.security:
         return _SecurityTab(repo: _repo);
       case _Section.storage:
@@ -253,9 +254,8 @@ class _ComingSoonTab extends StatelessWidget {
 }
 
 class _OverviewTab extends StatefulWidget {
-  const _OverviewTab({required this.repo, this.analyticsMode = false});
+  const _OverviewTab({required this.repo});
   final AdminRepository repo;
-  final bool analyticsMode;
 
   @override
   State<_OverviewTab> createState() => _OverviewTabState();
