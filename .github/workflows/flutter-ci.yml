@@ -36,7 +36,12 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Run Flutter tests
-        run: flutter test --reporter github
+        run: |
+          set -o pipefail
+          flutter test --reporter expanded 2>&1 | tee /tmp/flutter-test.log || {
+            echo "::error title=Flutter tests failed::$(grep -E -A12 '\[E\]|EXCEPTION CAUGHT|Expected:' /tmp/flutter-test.log | head -60 | tr '\n' '|' | cut -c1-3500)"
+            exit 1
+          }
 
   build-android-apk:
     name: Build Android APK
