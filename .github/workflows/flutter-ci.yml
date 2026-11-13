@@ -36,7 +36,7 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Run Flutter tests
-        run: flutter test
+        run: flutter test --reporter github
 
   build-android-apk:
     name: Build Android APK
