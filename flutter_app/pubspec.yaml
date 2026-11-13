@@ -9,6 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  shared_preferences: ^2.3.3
   web: ^1.1.0    
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.9.1

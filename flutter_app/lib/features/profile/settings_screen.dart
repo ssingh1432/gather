@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/l10n/app_l10n.dart';
 import '../../core/supabase_client.dart';
 import '../../core/responsive.dart';
 import '../../shared/utils/external_link.dart';
@@ -151,7 +152,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text(AppL10n.of(context).settingsTitle),
         actions: [
           if (_saving)
             const Padding(
@@ -171,6 +172,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
+            ListTile(
+              leading: const Icon(Icons.accessibility_new),
+              title: Text(AppL10n.of(context).settingsAccessibility),
+              subtitle: Text(AppL10n.of(context).settingsAccessibilitySub),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/settings/accessibility'),
+            ),
             const _SectionHeader('Privacy'),
             SwitchListTile(
               title: const Text('Private account'),

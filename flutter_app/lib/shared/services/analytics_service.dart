@@ -19,7 +19,12 @@ class AnalyticsService {
   SupabaseClient? get _client => SupabaseConfig.maybeClient;
 
   void userSignedUp() => _track('user_signed_up');
-  void userLoggedIn() => _track('user_logged_in');
+  void userLoggedIn() {
+    _track('user_logged_in');
+    // Cold starts only stamp DAU for already-signed-in users; stamp it here too
+    // so people who sign in during the session are counted.
+    dailyActiveUser();
+  }
   void postCreated({required String postId, String? communityId}) {
     _track('post_created', postId: postId, communityId: communityId);
     firstActionCompleted(action: 'post_created');
@@ -47,10 +52,21 @@ class AnalyticsService {
         metadata: {'had_text': hadText, 'had_image': hadImage},
       );
 
+  /// `<userId>:<utcDate>` of the last successful DAU stamp in this process.
+  /// The server is idempotent per user per UTC day; this just avoids a network
+  /// call on every app resume.
+  String? _dauStampedFor;
+
   void dailyActiveUser() {
     final client = _client;
-    if (client?.auth.currentUser == null) return;
-    unawaited(_safeRpc(() => client!.rpc('track_daily_active_user')));
+    final uid = client?.auth.currentUser?.id;
+    if (client == null || uid == null) return;
+    final key = '$uid:${DateTime.now().toUtc().toIso8601String().substring(0, 10)}';
+    if (_dauStampedFor == key) return;
+    unawaited(_safeRpc(() async {
+      await client.rpc('track_daily_active_user');
+      _dauStampedFor = key;
+    }));
   }
 
   void _track(String eventName, {String? postId, String? communityId, Map<String, dynamic>? metadata}) {

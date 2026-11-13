@@ -55,7 +55,9 @@ import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/user_profile_screen.dart';
 import '../features/profile/monetization_settings_screen.dart';
+import '../features/profile/accessibility_settings_screen.dart';
 import '../features/profile/settings_screen.dart';
+import 'l10n/app_l10n.dart';
 import '../features/profile/close_friends_screen.dart';
 import '../features/privacy/data_privacy_screen.dart';
 import '../features/privacy/mute_list_screen.dart';
@@ -238,6 +240,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/edit-profile', builder: (_, __) => const EditProfileScreen()),
     GoRoute(path: '/monetization', builder: (_, __) => const MonetizationSettingsScreen()),
     GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+    GoRoute(path: '/settings/accessibility', builder: (_, __) => const AccessibilitySettingsScreen()),
     GoRoute(path: '/scheduled-posts', builder: (_, __) => const ScheduledPostsScreen()),
     GoRoute(path: '/close-friends', builder: (_, __) => const CloseFriendsScreen()),
     GoRoute(path: '/post', builder: (_, s) => PostDetailScreen(postId: s.uri.queryParameters['id'] ?? '')),
@@ -286,7 +289,6 @@ class MainNav extends StatelessWidget {
     Icons.search,
     Icons.person_outline,
   ];
-  static const _labels = ['Home', 'Communities', 'Create Post', 'Search', 'Profile'];
 
   int _indexFor(String location) {
     if (location.startsWith('/communities')) return 1;
@@ -299,6 +301,8 @@ class MainNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final index = _indexFor(location);
+    final l = AppL10n.of(context);
+    final labels = [l.navHome, l.navCommunities, l.navCreatePost, l.navSearch, l.navProfile];
 
     if (Breakpoints.isDesktop(context)) {
       return Scaffold(
@@ -309,8 +313,8 @@ class MainNav extends StatelessWidget {
               onDestinationSelected: (i) => context.go(_tabs[i]),
               labelType: NavigationRailLabelType.all,
               destinations: [
-                for (int i = 0; i < _labels.length; i++)
-                  NavigationRailDestination(icon: Icon(_icons[i]), label: Text(_labels[i])),
+                for (int i = 0; i < labels.length; i++)
+                  NavigationRailDestination(icon: Icon(_icons[i]), label: Text(labels[i])),
               ],
             ),
             const VerticalDivider(width: 1),
@@ -333,8 +337,8 @@ class MainNav extends StatelessWidget {
         onTap: (i) => context.go(_tabs[i]),
         type: BottomNavigationBarType.fixed,
         items: [
-          for (int i = 0; i < _labels.length; i++)
-            BottomNavigationBarItem(icon: Icon(_icons[i]), label: _labels[i]),
+          for (int i = 0; i < labels.length; i++)
+            BottomNavigationBarItem(icon: Icon(_icons[i]), label: labels[i], tooltip: labels[i]),
         ],
       ),
     );

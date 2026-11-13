@@ -4,11 +4,15 @@ import 'dart:ui';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
+import 'core/accessibility/accessibility_settings.dart';
+import 'core/accessibility/accessible_theme.dart';
 import 'core/env.dart';
+import 'core/l10n/app_l10n.dart';
 import 'core/router.dart';
 import 'core/supabase_client.dart';
 import 'core/theme/app_theme.dart';
@@ -113,20 +117,31 @@ Future<void> main() async {
   });
 }
 
-class GatherApp extends StatefulWidget {
+class GatherApp extends ConsumerStatefulWidget {
   const GatherApp({super.key});
 
   @override
-  State<GatherApp> createState() => _GatherAppState();
+  ConsumerState<GatherApp> createState() => _GatherAppState();
 }
 
-class _GatherAppState extends State<GatherApp> {
+class _GatherAppState extends ConsumerState<GatherApp> with WidgetsBindingObserver {
   StreamSubscription<List<SharedMediaFile>>? _shareSub;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _listenForSharedContent();
+  }
+
+  /// Long-lived sessions (web tabs, backgrounded mobile apps) cross UTC day
+  /// boundaries without a cold start. Re-stamping the daily-active event on
+  /// resume keeps DAU/MAU accurate; the service de-duplicates per user per day.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      AnalyticsService.instance.dailyActiveUser();
+    }
   }
 
   void _listenForSharedContent() {
@@ -147,17 +162,50 @@ class _GatherAppState extends State<GatherApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _shareSub?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final prefs = ref.watch(accessibilityProvider);
     return MaterialApp.router(
       title: 'Gather',
       routerConfig: appRouter,
-      theme: AppTheme.light,
+      theme: AccessibleTheme.resolve(AppTheme.light, highContrast: prefs.highContrast, reduceMotion: prefs.reduceMotion),
+      darkTheme: AccessibleTheme.resolve(AppTheme.dark, highContrast: prefs.highContrast, reduceMotion: prefs.reduceMotion),
+      themeMode: prefs.themeMode,
+      locale: prefs.locale,
+      supportedLocales: AppL10n.supportedLocales,
+      localizationsDelegates: const [
+        AppL10n.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       scaffoldMessengerKey: rootScaffoldMessengerKey,
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        // The user's in-app text size multiplies the operating-system setting
+        // so people who already use a large system font are never shrunk.
+        final systemScale = mq.textScaler.scale(100) / 100;
+        final scale = (systemScale * prefs.textScale).clamp(0.8, 3.0).toDouble();
+        return MediaQuery(
+          data: mq.copyWith(
+            textScaler: TextScaler.linear(scale),
+            boldText: mq.boldText || prefs.boldText,
+            highContrast: mq.highContrast || prefs.highContrast,
+            disableAnimations: mq.disableAnimations || prefs.reduceMotion,
+          ),
+          // Reading-order traversal gives predictable Tab / arrow-key
+          // navigation on web and desktop.
+          child: FocusTraversalGroup(
+            policy: ReadingOrderTraversalPolicy(),
+            child: child ?? const SizedBox.shrink(),
+          ),
+        );
+      },
     );
   }
 }

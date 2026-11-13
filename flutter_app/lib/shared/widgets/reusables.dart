@@ -14,6 +14,7 @@ import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../core/supabase_client.dart';
+import '../../core/l10n/app_l10n.dart';
 import '../../features/data/repositories.dart';
 import 'format_toolbar.dart';
 import '../models/models.dart';
@@ -520,7 +521,12 @@ class _SensitiveContentGateState extends State<_SensitiveContentGate> {
   Widget build(BuildContext context) {
     if (_revealed) return widget.child;
     final theme = Theme.of(context);
-    return GestureDetector(
+    return Semantics(
+      button: true,
+      label: AppL10n.of(context).postSensitiveHidden,
+      excludeSemantics: true,
+      onTap: () => setState(() => _revealed = true),
+      child: GestureDetector(
       onTap: () => setState(() => _revealed = true),
       child: Stack(
         alignment: Alignment.center,
@@ -542,6 +548,7 @@ class _SensitiveContentGateState extends State<_SensitiveContentGate> {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -605,6 +612,7 @@ class _PostAudioCardState extends State<_PostAudioCard> {
         children: [
           IconButton(
             icon: Icon(_playing ? Icons.pause_circle_filled : Icons.play_circle_filled, size: 36),
+            tooltip: _playing ? AppL10n.of(context).audioPause : AppL10n.of(context).audioPlay,
             onPressed: _toggle,
           ),
           Expanded(
@@ -842,7 +850,13 @@ class _PollOptionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final pct = total == 0 ? 0.0 : voteCount / total;
     final color = Theme.of(context).colorScheme.primary;
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: votedByMe,
+      label: showResults ? AppL10n.of(context).pollVotesPct(text, voteCount, (pct * 100).round()) : text,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
       child: Stack(
@@ -870,6 +884,7 @@ class _PollOptionBar extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -1673,18 +1688,28 @@ class _PostHeader extends StatelessWidget {
     final outlineStyle = Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline);
     final visibilityEntry = _kVisibilityIcons[post.visibility];
     return Row(children: [
-      GestureDetector(
-        onTap: onTapAuthor,
-        child: ProfileAvatar(url: post.authorAvatarUrl, radius: 19),
+      // The avatar duplicates the name link for assistive tech, so it is
+      // hidden from the semantics tree; the name below is the labelled button.
+      ExcludeSemantics(
+        child: GestureDetector(
+          onTap: onTapAuthor,
+          child: ProfileAvatar(url: post.authorAvatarUrl, radius: 19),
+        ),
       ),
       const SizedBox(width: 10),
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            GestureDetector(
+            Semantics(
+              button: true,
+              label: AppL10n.of(context).postViewProfile(post.authorUsername ?? 'Unknown'),
+              excludeSemantics: true,
               onTap: onTapAuthor,
-              child: Text(post.authorUsername ?? 'Unknown', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              child: GestureDetector(
+                onTap: onTapAuthor,
+                child: Text(post.authorUsername ?? 'Unknown', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              ),
             ),
             Row(children: [
               Text(timeAgo(post.createdAt), style: outlineStyle),
@@ -1703,7 +1728,7 @@ class _PostHeader extends StatelessWidget {
         ),
       ),
       _PostFollowButton(post: post),
-      IconButton(onPressed: onTapMore, icon: const Icon(Icons.more_horiz), tooltip: 'More'),
+      IconButton(onPressed: onTapMore, icon: const Icon(Icons.more_horiz), tooltip: AppL10n.of(context).postMore),
     ]);
   }
 }
@@ -1796,7 +1821,12 @@ class _ExpandableTextState extends State<_ExpandableText> {
     final base = DefaultTextStyle.of(context).style;
     final span = MarkdownLiteText(widget.text).buildTextSpan(base);
     return LayoutBuilder(builder: (context, constraints) {
-      final painter = TextPainter(text: span, maxLines: _ExpandableText._collapsedMaxLines, textDirection: ui.TextDirection.ltr)
+      final painter = TextPainter(
+        text: span,
+        maxLines: _ExpandableText._collapsedMaxLines,
+        textDirection: ui.TextDirection.ltr,
+        textScaler: MediaQuery.textScalerOf(context),
+      )
         ..layout(maxWidth: constraints.maxWidth);
       final couldCollapse = painter.didExceedMaxLines;
       return Column(
@@ -1804,6 +1834,7 @@ class _ExpandableTextState extends State<_ExpandableText> {
         children: [
           RichText(
             text: span,
+            textScaler: MediaQuery.textScalerOf(context),
             maxLines: _expanded ? null : _ExpandableText._collapsedMaxLines,
             overflow: _expanded ? TextOverflow.visible : TextOverflow.clip,
           ),
@@ -2032,52 +2063,67 @@ class _PostActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l = AppL10n.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        _CountedAction(
-          icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-          iconColor: liked ? Colors.redAccent : null,
-          count: post.likeCount,
-          onTapIcon: onLike,
-          onTapCount: onShowLikers,
-        ),
-        const SizedBox(width: 16),
-        _CountedAction(
-          icon: Icons.chat_bubble_outline_rounded,
-          count: post.commentCount,
-          onTapIcon: onComment,
-          onTapCount: onComment,
-        ),
-        if (post.replyCount > 0) ...[
-          const SizedBox(width: 16),
-          _CountedAction(
-            icon: Icons.forum_outlined,
-            count: post.replyCount,
-            onTapIcon: () => context.push('/post/replies?id=${post.id}'),
-            onTapCount: () => context.push('/post/replies?id=${post.id}'),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Wrap (not Row) so the action set reflows instead of overflowing when
+        // the user increases text size.
+        Expanded(
+          child: Wrap(
+            spacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _CountedAction(
+                icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                iconColor: liked ? Colors.redAccent : null,
+                count: post.likeCount,
+                onTapIcon: onLike,
+                onTapCount: onShowLikers,
+                iconLabel: liked ? l.postUnlike : l.postLike,
+                countLabel: '${l.postLikesCount(post.likeCount)}. ${l.postShowLikers}',
+                selected: liked,
+              ),
+              _CountedAction(
+                icon: Icons.chat_bubble_outline_rounded,
+                count: post.commentCount,
+                onTapIcon: onComment,
+                onTapCount: onComment,
+                iconLabel: l.postComment,
+                countLabel: l.postCommentsCount(post.commentCount),
+              ),
+              if (post.replyCount > 0)
+                _CountedAction(
+                  icon: Icons.forum_outlined,
+                  count: post.replyCount,
+                  onTapIcon: () => context.push('/post/replies?id=${post.id}'),
+                  onTapCount: () => context.push('/post/replies?id=${post.id}'),
+                  iconLabel: l.postReplies,
+                  countLabel: l.postRepliesCount(post.replyCount),
+                ),
+              _CountedAction(
+                icon: Icons.send_outlined,
+                count: post.shareCount,
+                onTapIcon: onShare,
+                onTapCount: onShowSharers,
+                iconLabel: l.postShare,
+                countLabel: '${l.postSharesCount(post.shareCount)}. ${l.postShowSharers}',
+              ),
+              if (post.downloadCount > 0)
+                _CountedAction(
+                  icon: Icons.file_download_outlined,
+                  count: post.downloadCount,
+                  onTapIcon: onShowDownloaders,
+                  onTapCount: onShowDownloaders,
+                  iconLabel: l.postDownloads,
+                  countLabel: '${l.postDownloadsCount(post.downloadCount)}. ${l.postShowDownloaders}',
+                ),
+            ],
           ),
-        ],
-        const SizedBox(width: 16),
-        _CountedAction(
-          icon: Icons.send_outlined,
-          count: post.shareCount,
-          onTapIcon: onShare,
-          onTapCount: onShowSharers,
         ),
-        if (post.downloadCount > 0) ...[
-          const SizedBox(width: 16),
-          _CountedAction(
-            icon: Icons.file_download_outlined,
-            count: post.downloadCount,
-            onTapIcon: onShowDownloaders,
-            onTapCount: onShowDownloaders,
-          ),
-        ],
-        const Spacer(),
         IconButton(
           onPressed: onBookmark,
           icon: Icon(bookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, color: bookmarked ? theme.colorScheme.primary : null),
-          tooltip: 'Save',
+          tooltip: bookmarked ? l.postUnsave : l.postSave,
         ),
       ]),
       if (post.viewCount > 0)
@@ -2098,32 +2144,66 @@ class _PostActionBar extends StatelessWidget {
 /// the old ad-hoc mix of separately-padded InkWells with inconsistent
 /// 4px gaps between them.
 class _CountedAction extends StatelessWidget {
-  const _CountedAction({required this.icon, required this.count, required this.onTapIcon, required this.onTapCount, this.iconColor});
+  const _CountedAction({
+    required this.icon,
+    required this.count,
+    required this.onTapIcon,
+    required this.onTapCount,
+    this.iconColor,
+    this.iconLabel,
+    this.countLabel,
+    this.selected = false,
+  });
   final IconData icon;
   final int count;
   final Color? iconColor;
   final VoidCallback onTapIcon;
   final VoidCallback onTapCount;
 
+  /// Screen-reader names. Without these the icon-only taps are announced as
+  /// unlabeled buttons.
+  final String? iconLabel;
+  final String? countLabel;
+  final bool selected;
+
   @override
   Widget build(BuildContext context) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(20),
+          Semantics(
+            button: true,
+            selected: selected,
+            label: iconLabel,
+            excludeSemantics: iconLabel != null,
             onTap: onTapIcon,
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Icon(icon, size: 21, color: iconColor),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: onTapIcon,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                child: Center(child: Icon(icon, size: 21, color: iconColor)),
+              ),
             ),
           ),
           if (count > 0)
-            InkWell(
-              borderRadius: BorderRadius.circular(10),
+            Semantics(
+              button: true,
+              label: countLabel,
+              excludeSemantics: countLabel != null,
               onTap: onTapCount,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
-                child: Text('$count', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: onTapCount,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 40),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Center(
+                      widthFactor: 1,
+                      child: Text('$count', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
+                    ),
+                  ),
+                ),
               ),
             ),
         ],
