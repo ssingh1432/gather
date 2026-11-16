@@ -113,19 +113,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Deactivate account?'),
-        content: const Text(
-          'Your profile and posts will be hidden from other people on Gather. '
-          "Contact support to reactivate. This won't delete your data.",
-        ),
+        title: Text(AppL10n.of(context).setDeactivateQ),
+        content: Text(AppL10n.of(context).setDeactivateBody),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(AppL10n.of(context).commonCancel)),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(dialogContext).colorScheme.error,
             ),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Deactivate'),
+            child: Text(AppL10n.of(context).setDeactivateBtn),
           ),
         ],
       ),
@@ -179,10 +176,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/settings/accessibility'),
             ),
-            const _SectionHeader('Privacy'),
+            _SectionHeader(AppL10n.of(context).setPrivacy),
             SwitchListTile(
-              title: const Text('Private account'),
-              subtitle: const Text('Only approved followers can see your posts'),
+              title: Text(AppL10n.of(context).setPrivateAccount),
+              subtitle: Text(AppL10n.of(context).setPrivateAccountSub),
               value: _isPrivate,
               onChanged: (v) {
                 setState(() => _isPrivate = v);
@@ -190,7 +187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             _OptionTile(
-              title: 'Who can see your posts by default',
+              title: AppL10n.of(context).setWhoPosts,
               value: _defaultPostVisibility,
               options: const {'public': 'Public', 'followers': 'Followers', 'friends': 'Close friends', 'private': 'Only me'},
               onChanged: (v) {
@@ -199,7 +196,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             _OptionTile(
-              title: 'Who can see your friends list',
+              title: AppL10n.of(context).setWhoFriends,
               value: _friendsListVisibility,
               options: const {'everyone': 'Everyone', 'friends': 'Friends', 'only_me': 'Only me'},
               onChanged: (v) {
@@ -208,7 +205,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             _OptionTile(
-              title: 'Who can message you',
+              title: AppL10n.of(context).setWhoMessage,
               value: _messagePrivacy,
               options: const {'everyone': 'Everyone', 'friends': 'Friends', 'no_one': 'No one'},
               onChanged: (v) {
@@ -217,7 +214,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             _OptionTile(
-              title: 'Who can @mention or tag you',
+              title: AppL10n.of(context).setWhoMention,
               value: _tagPrivacy,
               options: const {'everyone': 'Everyone', 'friends': 'Friends', 'no_one': 'No one'},
               onChanged: (v) {
@@ -226,8 +223,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             SwitchListTile(
-              title: const Text('Show activity status'),
-              subtitle: const Text('Let friends see when you\u2019re active on Gather'),
+              title: Text(AppL10n.of(context).setActivityStatus),
+              subtitle: Text(AppL10n.of(context).setActivityStatusSub),
               value: _showActivityStatus,
               onChanged: (v) {
                 setState(() => _showActivityStatus = v);
@@ -235,8 +232,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             SwitchListTile(
-              title: const Text('Read receipts'),
-              subtitle: const Text('Let others see when you\u2019ve read their messages'),
+              title: Text(AppL10n.of(context).setReadReceipts),
+              subtitle: Text(AppL10n.of(context).setReadReceiptsSub),
               value: _showReadReceipts,
               onChanged: (v) {
                 setState(() => _showReadReceipts = v);
@@ -244,7 +241,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             _OptionTile(
-              title: 'Who can find you in search',
+              title: AppL10n.of(context).setWhoSearch,
               value: _searchVisibility,
               options: const {'everyone': 'Everyone', 'friends': 'Friends', 'no_one': 'No one'},
               onChanged: (v) {
@@ -253,8 +250,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             SwitchListTile(
-              title: const Text('Show last seen'),
-              subtitle: const Text('Let friends see when you were last active'),
+              title: Text(AppL10n.of(context).setLastSeen),
+              subtitle: Text(AppL10n.of(context).setLastSeenSub),
               value: _showLastSeen,
               onChanged: (v) {
                 setState(() => _showLastSeen = v);
@@ -263,32 +260,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.schedule_outlined),
-              title: const Text('Scheduled posts'),
+              title: Text(AppL10n.of(context).setScheduledPosts),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/scheduled-posts'),
             ),
             ListTile(
               leading: const Icon(Icons.block_outlined),
-              title: const Text('Blocked accounts'),
+              title: Text(AppL10n.of(context).setBlocked),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BlockedAccountsScreen())),
             ),
             ListTile(
               leading: const Icon(Icons.volume_off_outlined),
-              title: const Text('Muted accounts'),
+              title: Text(AppL10n.of(context).setMuted),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MuteListScreen())),
             ),
             ListTile(
               leading: const Icon(Icons.shield_outlined),
-              title: const Text('Restricted accounts'),
+              title: Text(AppL10n.of(context).setRestricted),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RestrictedAccountsScreen())),
             ),
             SwitchListTile(
               secondary: const Icon(Icons.visibility_off_outlined),
-              title: const Text('Safe search'),
-              subtitle: const Text('Hide posts marked as sensitive content from your feed'),
+              title: Text(AppL10n.of(context).setSafeSearch),
+              subtitle: Text(AppL10n.of(context).setSafeSearchSub),
               value: _safeSearchEnabled,
               onChanged: _childSafetyMode
                   ? null
@@ -299,8 +296,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             SwitchListTile(
               secondary: const Icon(Icons.family_restroom),
-              title: const Text('Child safety mode'),
-              subtitle: const Text('Locks safe search on and limits messages to friends only'),
+              title: Text(AppL10n.of(context).setChildSafety),
+              subtitle: Text(AppL10n.of(context).setChildSafetySub),
               value: _childSafetyMode,
               onChanged: (v) async {
                 await _patch({'child_safety_mode': v});
@@ -311,150 +308,150 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
 
-            const _SectionHeader('Data & Privacy'),
+            _SectionHeader(AppL10n.of(context).setDataPrivacyHeader),
             ListTile(
               leading: const Icon(Icons.privacy_tip_outlined),
-              title: const Text('Data, consent & account deletion'),
-              subtitle: const Text('Download your data, review consent history, or delete your account'),
+              title: Text(AppL10n.of(context).setDataConsent),
+              subtitle: Text(AppL10n.of(context).setDataConsentSub),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DataPrivacyScreen())),
             ),
             ListTile(
               leading: const Icon(Icons.gavel_outlined),
-              title: const Text('Grievances & legal requests'),
-              subtitle: const Text('File or track a complaint, illegal content report, or appeal'),
+              title: Text(AppL10n.of(context).setGrievances),
+              subtitle: Text(AppL10n.of(context).setGrievancesSub),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyLegalScreen())),
             ),
             ListTile(
               leading: const Icon(Icons.shield_outlined),
-              title: const Text('Moderation history'),
-              subtitle: const Text('Warnings, strikes, suspensions or bans on your account — and appeals'),
+              title: Text(AppL10n.of(context).setModerationHistory),
+              subtitle: Text(AppL10n.of(context).setModerationHistorySub),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyModerationScreen())),
             ),
 
-            const _SectionHeader('Help & Feedback'),
+            _SectionHeader(AppL10n.of(context).setHelp),
             const BetaFeedbackButton(),
 
-            const _SectionHeader('Legal & Policies'),
-            const _LegalLinkTile(
+            _SectionHeader(AppL10n.of(context).setLegal),
+            _LegalLinkTile(
               icon: Icons.description_outlined,
-              title: 'Privacy Policy',
+              title: AppL10n.of(context).setPrivacyPolicy,
               url: 'https://eiquoab.xyz/privacy-policy/',
             ),
-            const _LegalLinkTile(
+            _LegalLinkTile(
               icon: Icons.rule_outlined,
-              title: 'Terms of Service',
+              title: AppL10n.of(context).setTerms,
               url: 'https://eiquoab.xyz/terms/',
             ),
-            const _LegalLinkTile(
+            _LegalLinkTile(
               icon: Icons.diversity_3_outlined,
-              title: 'Community Guidelines',
+              title: AppL10n.of(context).setGuidelines,
               url: 'https://eiquoab.xyz/community-guidelines/',
             ),
-            const _LegalLinkTile(
+            _LegalLinkTile(
               icon: Icons.cookie_outlined,
-              title: 'Cookie Policy',
+              title: AppL10n.of(context).setCookie,
               url: 'https://eiquoab.xyz/cookie-policy/',
             ),
-            const _LegalLinkTile(
+            _LegalLinkTile(
               icon: Icons.copyright_outlined,
-              title: 'Copyright & IP Policy',
+              title: AppL10n.of(context).setCopyright,
               url: 'https://eiquoab.xyz/copyright-policy/',
             ),
-            const _LegalLinkTile(
+            _LegalLinkTile(
               icon: Icons.local_police_outlined,
-              title: 'Law Enforcement Requests',
+              title: AppL10n.of(context).setLawEnforcement,
               url: 'https://eiquoab.xyz/law-enforcement-requests/',
             ),
 
-            const _SectionHeader('Notifications'),
+            _SectionHeader(AppL10n.of(context).setNotifications),
             SwitchListTile(
-              title: const Text('Likes'),
+              title: Text(AppL10n.of(context).setNotifLikes),
               value: _notif('likes'),
               onChanged: (v) => _setNotif('likes', v),
             ),
             SwitchListTile(
-              title: const Text('Comments'),
+              title: Text(AppL10n.of(context).setNotifComments),
               value: _notif('comments'),
               onChanged: (v) => _setNotif('comments', v),
             ),
             SwitchListTile(
-              title: const Text('Friend requests'),
+              title: Text(AppL10n.of(context).setNotifFriendRequests),
               value: _notif('friend_requests'),
               onChanged: (v) => _setNotif('friend_requests', v),
             ),
             SwitchListTile(
-              title: const Text('Mentions'),
+              title: Text(AppL10n.of(context).setNotifMentions),
               value: _notif('mentions'),
               onChanged: (v) => _setNotif('mentions', v),
             ),
             SwitchListTile(
-              title: const Text('Messages'),
+              title: Text(AppL10n.of(context).setNotifMessages),
               value: _notif('messages'),
               onChanged: (v) => _setNotif('messages', v),
             ),
             SwitchListTile(
-              title: const Text('Community activity'),
+              title: Text(AppL10n.of(context).setNotifCommunity),
               value: _notif('community_activity'),
               onChanged: (v) => _setNotif('community_activity', v),
             ),
             SwitchListTile(
-              title: const Text('Moderation & appeal updates'),
-              subtitle: const Text('Reports you filed, appeals you filed, and actions on your account'),
+              title: Text(AppL10n.of(context).setNotifModeration),
+              subtitle: Text(AppL10n.of(context).setNotifModerationSub),
               value: _notif('moderation_alerts'),
               onChanged: (v) => _setNotif('moderation_alerts', v),
             ),
             SwitchListTile(
-              title: const Text('Announcements'),
-              subtitle: const Text('Broadcasts sent by Gather admins'),
+              title: Text(AppL10n.of(context).setNotifAnnouncements),
+              subtitle: Text(AppL10n.of(context).setNotifAnnouncementsSub),
               value: _notif('admin_broadcasts'),
               onChanged: (v) => _setNotif('admin_broadcasts', v),
             ),
-            const ListTile(
+            ListTile(
               leading: Icon(Icons.shield_outlined),
-              title: Text('Security & login alerts'),
-              subtitle: Text('Always on to keep your account safe — can\u2019t be turned off'),
+              title: Text(AppL10n.of(context).setNotifSecurity),
+              subtitle: Text(AppL10n.of(context).setNotifSecuritySub),
               enabled: false,
             ),
 
-            const _SectionHeader('Account'),
+            _SectionHeader(AppL10n.of(context).setAccount),
             ListTile(
               leading: const Icon(Icons.alternate_email),
-              title: const Text('Change username'),
+              title: Text(AppL10n.of(context).setChangeUsername),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/change-username'),
             ),
             ListTile(
               leading: const Icon(Icons.verified_outlined),
-              title: const Text('Get verified'),
+              title: Text(AppL10n.of(context).setGetVerified),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/request-verification'),
             ),
             ListTile(
               leading: const Icon(Icons.verified_user_outlined),
-              title: const Text('Security & devices'),
-              subtitle: const Text('Two-factor authentication, signed-in devices'),
+              title: Text(AppL10n.of(context).setSecurityDevices),
+              subtitle: Text(AppL10n.of(context).setSecurityDevicesSub),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/security'),
             ),
             ListTile(
               leading: const Icon(Icons.lock_reset_outlined),
-              title: const Text('Change password'),
+              title: Text(AppL10n.of(context).setChangePassword),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/forgot'),
             ),
             ListTile(
               leading: const Icon(Icons.phone_android_outlined),
-              title: const Text('Verify phone number'),
+              title: Text(AppL10n.of(context).setVerifyPhone),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/verify-phone'),
             ),
             const SizedBox(height: 12),
             ListTile(
               leading: Icon(Icons.person_off_outlined, color: Theme.of(context).colorScheme.error),
-              title: Text('Deactivate account', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              title: Text(AppL10n.of(context).setDeactivate, style: TextStyle(color: Theme.of(context).colorScheme.error)),
               onTap: _confirmDeactivate,
             ),
             const SizedBox(height: 24),

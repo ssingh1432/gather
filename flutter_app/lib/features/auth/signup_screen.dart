@@ -1,3 +1,4 @@
+import '../../core/l10n/app_l10n.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,7 +63,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
     if (name.isEmpty || mail.isEmpty || pass.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Username, email, and password are required.')),
+        SnackBar(content: Text(AppL10n.of(context).authRequiredSignup)),
       );
       return;
     }
@@ -72,7 +73,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       normalizedPhone = _normalizedPhoneOrNull(phoneRaw);
       if (normalizedPhone == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enter a valid 10-digit mobile number (e.g. 98XXXXXXXX), or leave it blank.')),
+          SnackBar(content: Text(AppL10n.of(context).authPhoneInvalid)),
         );
         return;
       }
@@ -86,13 +87,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
     if (pass != confirmPass) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match.')),
+        SnackBar(content: Text(AppL10n.of(context).authPwMismatch)),
       );
       return;
     }
     if (!_agreedToPolicy) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please agree to the Privacy Policy and Terms of Service to continue.')),
+        SnackBar(content: Text(AppL10n.of(context).authAgreeTerms)),
       );
       return;
     }
@@ -115,7 +116,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           context.go('/verify-phone?phone=$normalizedPhone');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Welcome to Gather!')),
+            SnackBar(content: Text(AppL10n.of(context).authWelcome)),
           );
           context.go('/');
         }
@@ -137,7 +138,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   Future<void> _submitGoogle() async {
     if (!_agreedToPolicy) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please agree to the Privacy Policy and Terms of Service to continue.')),
+        SnackBar(content: Text(AppL10n.of(context).authAgreeTerms)),
       );
       return;
     }
@@ -167,7 +168,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final loginLocation = _loginLocation(widget.redirect);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create account')),
+      appBar: AppBar(title: Text(AppL10n.of(context).authCreateAccount)),
       body: ResponsiveCenter(
         maxWidth: 420,
         child: SingleChildScrollView(
@@ -192,7 +193,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const FaIcon(FontAwesomeIcons.google, size: 18),
-                label: const Text('Continue with Google'),
+                label: Text(AppL10n.of(context).authContinueGoogle),
                 style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
               ),
               const SizedBox(height: 16),
@@ -201,7 +202,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   const Expanded(child: Divider()),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('or', style: Theme.of(context).textTheme.bodySmall),
+                    child: Text(AppL10n.of(context).authOr, style: Theme.of(context).textTheme.bodySmall),
                   ),
                   const Expanded(child: Divider()),
                 ],
@@ -209,8 +210,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: username,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
+                decoration: InputDecoration(
+                  labelText: AppL10n.of(context).authUsername,
                   prefixIcon: Icon(Icons.person_outline),
                   border: OutlineInputBorder(),
                 ),
@@ -218,8 +219,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               const SizedBox(height: 14),
               TextField(
                 controller: email,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
+                decoration: InputDecoration(
+                  labelText: AppL10n.of(context).authEmail,
                   prefixIcon: Icon(Icons.email_outlined),
                   border: OutlineInputBorder(),
                 ),
@@ -228,8 +229,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               const SizedBox(height: 14),
               TextField(
                 controller: phone,
-                decoration: const InputDecoration(
-                  labelText: 'Mobile number (optional)',
+                decoration: InputDecoration(
+                  labelText: AppL10n.of(context).authMobileOptional,
                   hintText: '98XXXXXXXX',
                   helperText: "Add it now or later — required only for monetization",
                   prefixIcon: Icon(Icons.phone_outlined),
@@ -243,8 +244,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 controller: password,
                 obscureText: _obscurePassword,
                 decoration: InputDecoration(
-                  labelText: 'Password',
-                  helperText: 'At least 8 characters, with upper, lower case and a number',
+                  labelText: AppL10n.of(context).authPassword,
+                  helperText: AppL10n.of(context).authPwHelper,
                   helperMaxLines: 2,
                   prefixIcon: const Icon(Icons.lock_outline),
                   border: const OutlineInputBorder(),
@@ -259,7 +260,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 controller: confirmPassword,
                 obscureText: _obscureConfirm,
                 decoration: InputDecoration(
-                  labelText: 'Confirm password',
+                  labelText: AppL10n.of(context).authConfirmPw,
                   prefixIcon: const Icon(Icons.lock_outline),
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
@@ -281,7 +282,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     children: [
                       const TextSpan(text: 'I agree to the '),
                       TextSpan(
-                        text: 'Privacy Policy',
+                        text: AppL10n.of(context).setPrivacyPolicy,
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.primary,
                           decoration: TextDecoration.underline,
@@ -291,7 +292,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       ),
                       const TextSpan(text: ' and '),
                       TextSpan(
-                        text: 'Terms of Service',
+                        text: AppL10n.of(context).setTerms,
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.primary,
                           decoration: TextDecoration.underline,
@@ -309,12 +310,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                 child: _loading
                     ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Create account'),
+                    : Text(AppL10n.of(context).authCreateAccount),
               ),
               const SizedBox(height: 8),
               TextButton(
                 onPressed: () => context.push(loginLocation),
-                child: const Text('Already have an account? Log in'),
+                child: Text(AppL10n.of(context).authHaveAccount),
               ),
             ],
           ),
