@@ -42,6 +42,8 @@ class _PlatformAnalyticsTabState extends State<PlatformAnalyticsTab> {
   _Res<Map<String, dynamic>>? _moderation;
   _Res<List<Map<String, dynamic>>>? _uploads;
   _Res<Map<String, dynamic>>? _crashes;
+  _Res<Map<String, dynamic>>? _performance;
+  _Res<Map<String, dynamic>>? _revenue;
 
   @override
   void initState() {
@@ -60,6 +62,8 @@ class _PlatformAnalyticsTabState extends State<PlatformAnalyticsTab> {
       _guard(() => repo.moderationAnalytics(days: _days)),
       _guard(() => repo.uploadsSeries(days: _days)),
       _guard(() => repo.crashAnalytics(days: _days < 14 ? 14 : _days)),
+      _guard(() => repo.performanceAnalytics(days: _days < 14 ? 14 : _days)),
+      _guard(() => repo.revenueReadiness(days: _days)),
     ]);
     if (!mounted) return;
     setState(() {
@@ -70,6 +74,8 @@ class _PlatformAnalyticsTabState extends State<PlatformAnalyticsTab> {
       _moderation = results[4] as _Res<Map<String, dynamic>>;
       _uploads = results[5] as _Res<List<Map<String, dynamic>>>;
       _crashes = results[6] as _Res<Map<String, dynamic>>;
+      _performance = results[7] as _Res<Map<String, dynamic>>;
+      _revenue = results[8] as _Res<Map<String, dynamic>>;
       _loading = false;
     });
   }
@@ -97,6 +103,10 @@ class _PlatformAnalyticsTabState extends State<PlatformAnalyticsTab> {
           _uploadsCard(),
           _sectionTitle('Crashes & errors'),
           _crashCard(),
+          _sectionTitle('App performance (client-side)'),
+          _performanceCard(),
+          _sectionTitle('Revenue readiness · last $_days days'),
+          _revenueCard(),
         ],
       ),
     );
@@ -376,6 +386,121 @@ class _PlatformAnalyticsTabState extends State<PlatformAnalyticsTab> {
               subtitle: Text('${_n(e['count'])} occurrences · ${_n(e['users'])} users'),
             ),
         ],
+      ],
+    );
+  }
+
+  Widget _performanceCard() {
+    final r = _performance;
+    if (r == null) return const SizedBox.shrink();
+    if (r.error != null) return _errorBox(r.error);
+    final p = r.data!;
+    final byMetric = (p['by_metric'] as List?) ?? const [];
+    final byPlatform = (p['by_platform'] as List?) ?? const [];
+    if (byMetric.isEmpty) {
+      return const Text(
+        'No performance samples yet. They are collected from signed-in sessions running this release '
+        '(app start, first frame, feed load).',
+      );
+    }
+    const labels = {
+      'app_start': 'App start',
+      'first_frame': 'First frame',
+      'feed_load': 'Feed load',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('${_n(p['samples'])} samples in the last ${_n(p['window_days'])} days'),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            columns: const [
+              DataColumn(label: Text('Metric')),
+              DataColumn(label: Text('Samples'), numeric: true),
+              DataColumn(label: Text('p50 (ms)'), numeric: true),
+              DataColumn(label: Text('p75 (ms)'), numeric: true),
+              DataColumn(label: Text('p95 (ms)'), numeric: true),
+            ],
+            rows: [
+              for (final m in byMetric)
+                DataRow(cells: [
+                  DataCell(Text(labels['${(m as Map)['metric']}'] ?? '${m['metric']}')),
+                  DataCell(Text(_n(m['count']))),
+                  DataCell(Text(_n(m['p50_ms']))),
+                  DataCell(Text(_n(m['p75_ms']))),
+                  DataCell(Text(_n(m['p95_ms']))),
+                ]),
+            ],
+          ),
+        ),
+        if (byPlatform.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('p75 by platform', style: Theme.of(context).textTheme.titleSmall),
+          _KeyValueCard(rows: [
+            for (final e in byPlatform)
+              (
+                '${labels['${(e as Map)['metric']}'] ?? e['metric']} · ${e['platform']} (${_n(e['count'])} samples)',
+                '${_n(e['p75_ms'])} ms',
+              ),
+          ]),
+        ],
+      ],
+    );
+  }
+
+  Widget _revenueCard() {
+    final r = _revenue;
+    if (r == null) return const SizedBox.shrink();
+    if (r.error != null) return _errorBox(r.error);
+    final v = r.data!;
+    final stuck = _d(v['payments_pending_over_24h']).round();
+    final completed = _d(v['payments_completed']).round();
+    final purposes = (v['by_purpose'] as Map?) ?? const {};
+    final gateways = (v['by_gateway'] as Map?) ?? const {};
+    String money(dynamic cents) => '${v['currency'] ?? 'NPR'} ${(_d(cents) / 100).toStringAsFixed(2)}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (completed == 0 && stuck > 0)
+          Card(
+            color: Theme.of(context).colorScheme.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  'No payment has completed, and $stuck have been pending for over 24 hours. '
+                  'Check the payment gateway callback / verification flow before launching monetization.',
+                  style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
+                ),
+              ),
+            ),
+          ),
+        _KeyValueCard(rows: [
+          ('Payments started', _n(v['payments_initiated'])),
+          ('Completed', _n(v['payments_completed'])),
+          ('Failed / cancelled', _n(v['payments_failed'])),
+          ('Still pending', _n(v['payments_pending'])),
+          ('Pending over 24h (all time)', _n(v['payments_pending_over_24h'])),
+          ('Completion rate', '${_n(v['conversion_pct'])}%'),
+          ('Completed revenue', money(v['completed_amount_cents'])),
+          for (final e in purposes.entries)
+            (
+              'Purpose · ${e.key}',
+              '${_n((e.value as Map)['completed'])} of ${_n(e.value['initiated'])} · ${money(e.value['completed_amount_cents'])}',
+            ),
+          for (final e in gateways.entries)
+            ('Gateway · ${e.key}', '${_n((e.value as Map)['completed'])} of ${_n(e.value['initiated'])}'),
+          ..._mapRows('Subscribers', v['subscribers_by_status']),
+          ..._mapRows('Marketplace orders', v['orders_by_status']),
+          ..._mapRows('Donations', v['donations_by_status']),
+          ..._mapRows('Ad campaigns', v['campaigns_by_status']),
+          ('Creator ad impressions', _n(v['creator_ad_impressions'])),
+          ('Users opted in to monetization', _n(v['monetization_opt_in_users'])),
+          ..._mapRows('Monetization status', v['monetization_status']),
+        ]),
       ],
     );
   }

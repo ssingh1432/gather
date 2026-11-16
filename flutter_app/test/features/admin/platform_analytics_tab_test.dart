@@ -88,6 +88,45 @@ class _FakeAdminRepo extends AdminRepository {
       ];
 
   @override
+  Future<Map<String, dynamic>> performanceAnalytics({int days = 14}) async => {
+        'window_days': 14,
+        'samples': 5,
+        'by_metric': [
+          {'metric': 'feed_load', 'count': 5, 'avg_ms': 900, 'p50_ms': 800, 'p75_ms': 1000, 'p95_ms': 2500},
+        ],
+        'by_platform': [
+          {'metric': 'feed_load', 'platform': 'web', 'count': 5, 'p75_ms': 1000},
+        ],
+        'daily_p75': [],
+      };
+
+  @override
+  Future<Map<String, dynamic>> revenueReadiness({int days = 30}) async => {
+        'window_days': 30,
+        'currency': 'NPR',
+        'payments_initiated': 4,
+        'payments_completed': 0,
+        'payments_failed': 0,
+        'payments_pending': 4,
+        'payments_pending_over_24h': 4,
+        'completed_amount_cents': 0,
+        'conversion_pct': 0,
+        'by_purpose': {
+          'donation': {'initiated': 4, 'completed': 0, 'completed_amount_cents': 0},
+        },
+        'by_gateway': {
+          'esewa': {'initiated': 4, 'completed': 0},
+        },
+        'subscribers_by_status': {},
+        'orders_by_status': {},
+        'donations_by_status': {},
+        'campaigns_by_status': {},
+        'creator_ad_impressions': 0,
+        'monetization_opt_in_users': 1,
+        'monetization_status': {'not_started': 6},
+      };
+
+  @override
   Future<Map<String, dynamic>> crashAnalytics({int days = 14}) async {
     if (failCrashes) throw Exception('boom');
     return {
@@ -124,6 +163,8 @@ void main() {
     expect(find.text('Retention (weekly signup cohorts)'), findsOneWidget);
     expect(find.text('50%'), findsWidgets); // day-1 retention 5/10
     expect(find.text('–'), findsWidgets); // day-7/30 not yet eligible
+    expect(find.text('Feed load'), findsWidgets); // performance table
+    expect(find.textContaining('No payment has completed'), findsOneWidget); // revenue warning
   });
 
   testWidgets('a failing section does not blank the page', (tester) async {

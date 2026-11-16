@@ -9,7 +9,7 @@
 ## Phase 15
 Migration `125_phase15_platform_analytics.sql` adds admin/moderator-only RPCs: `admin_platform_kpis`, `admin_activity_series`, `admin_retention_cohorts`, `admin_engagement_summary`, `admin_moderation_analytics`, `admin_uploads_series`, `admin_crash_analytics`. DAU = one `daily_active_user` event per user per UTC day; MAU is distinct users over 30 days; day-N retention counts users active exactly N days after signup (only eligible users counted). UI: Admin > Analytics (`platform_analytics_tab.dart`), with a text alternative for every chart. The client now stamps DAU on login and app resume.
 
-Not yet covered: revenue readiness and performance (web-vitals/latency) dashboards.
+Part 2 (migration 126): `client_performance_events` + `track_performance_metric` (sampled client telemetry: app start, first frame, feed load; capped 120/user/hour) and `admin_performance_analytics` (p50/p75/p95 by metric and platform). `admin_revenue_readiness` reports payment-pipeline health (started/completed/pending, completion rate, per purpose and gateway, subscribers, orders, donations, campaigns, ad impressions, monetization opt-ins) and warns when payments are stuck pending. `purge_old_performance_events()` removes samples older than 90 days (schedule it if pg_cron is enabled).
 
 ## Migrations in CI
 `scripts/apply_migrations.py` applies files not recorded in `public.repo_migrations` (one request per file, rolled back on failure) before deploy. Requires the `SUPABASE_ACCESS_TOKEN` repo secret; without it CI warns and continues. Never edit an applied migration; add a new one.
