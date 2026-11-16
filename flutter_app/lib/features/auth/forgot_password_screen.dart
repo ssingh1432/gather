@@ -1,3 +1,4 @@
+import '../../core/l10n/app_l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,7 +30,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     final email = _email.text.trim();
     if (email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter your email address.')),
+        SnackBar(content: Text(AppL10n.of(context).authEnterEmail)),
       );
       return;
     }
@@ -52,25 +53,25 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset password')),
+      appBar: AppBar(title: Text(AppL10n.of(context).authResetTitle)),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_sent) ...[
-              const Text('If an account exists for that email, a reset link is on its way.'),
+              Text(AppL10n.of(context).authResetSent),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () => context.go('/login'),
-                child: const Text('Back to login'),
+                child: Text(AppL10n.of(context).authBackLogin),
               ),
             ] else ...[
-              const Text('Enter your account email and we will send you a reset link.'),
+              Text(AppL10n.of(context).authResetPrompt),
               const SizedBox(height: 16),
               TextField(
                 controller: _email,
-                decoration: const InputDecoration(labelText: 'Email'),
+                decoration: InputDecoration(labelText: AppL10n.of(context).authEmail),
                 keyboardType: TextInputType.emailAddress,
                 onSubmitted: (_) => _loading ? null : _submit(),
               ),
@@ -83,12 +84,12 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                         width: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Send reset link'),
+                    : Text(AppL10n.of(context).authSendReset),
               ),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => context.go('/login'),
-                child: const Text('Back to login'),
+                child: Text(AppL10n.of(context).authBackLogin),
               ),
             ],
           ],

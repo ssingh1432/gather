@@ -1,3 +1,4 @@
+import '../../core/l10n/app_l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -36,7 +37,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final password = _password.text.trim();
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email and password are required.')),
+        SnackBar(content: Text(AppL10n.of(context).authRequired)),
       );
       return;
     }
@@ -89,7 +90,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         : '/signup?redirect=${Uri.encodeComponent(widget.redirect!)}';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
+      appBar: AppBar(title: Text(AppL10n.of(context).authLogin)),
       body: ResponsiveCenter(
         maxWidth: 420,
         child: SingleChildScrollView(
@@ -114,7 +115,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const FaIcon(FontAwesomeIcons.google, size: 18),
-                label: const Text('Continue with Google'),
+                label: Text(AppL10n.of(context).authContinueGoogle),
                 style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
               ),
               const SizedBox(height: 16),
@@ -123,7 +124,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const Expanded(child: Divider()),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('or', style: Theme.of(context).textTheme.bodySmall),
+                    child: Text(AppL10n.of(context).authOr, style: Theme.of(context).textTheme.bodySmall),
                   ),
                   const Expanded(child: Divider()),
                 ],
@@ -131,8 +132,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _email,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
+                decoration: InputDecoration(
+                  labelText: AppL10n.of(context).authEmail,
                   prefixIcon: Icon(Icons.email_outlined),
                   border: OutlineInputBorder(),
                 ),
@@ -143,7 +144,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 controller: _password,
                 obscureText: _obscurePassword,
                 decoration: InputDecoration(
-                  labelText: 'Password',
+                  labelText: AppL10n.of(context).authPassword,
                   prefixIcon: const Icon(Icons.lock_outline),
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
@@ -166,13 +167,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           value: _rememberMe,
                           onChanged: (v) => setState(() => _rememberMe = v ?? true),
                         ),
-                        const Text('Remember me'),
+                        Text(AppL10n.of(context).authRemember),
                       ],
                     ),
                   ),
                   TextButton(
                     onPressed: () => context.push('/forgot'),
-                    child: const Text('Forgot password?'),
+                    child: Text(AppL10n.of(context).authForgot),
                   ),
                 ],
               ),
@@ -186,12 +187,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         width: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Login'),
+                    : Text(AppL10n.of(context).authLogin),
               ),
               const SizedBox(height: 8),
               TextButton(
                 onPressed: () => context.push(signupLocation),
-                child: const Text("Don't have an account? Sign up"),
+                child: Text(AppL10n.of(context).authNoAccount),
               ),
             ],
           ),
