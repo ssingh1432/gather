@@ -27,6 +27,7 @@ import '../../shared/widgets/notification_bell.dart';
 import '../pages/page_visitor_post_home_card.dart';
 import '../pages/page_owner_post_home_card.dart';
 import '../../shared/providers/app_providers.dart';
+import '../../shared/services/performance_service.dart';
 import '../../shared/services/remote_config_service.dart';
 
 class HomeFeedScreen extends ConsumerStatefulWidget {
@@ -174,12 +175,14 @@ class _S extends ConsumerState<HomeFeedScreen> {
       _anonPage = 0;
       _cachedAsOf = null;
     });
+    final loadTimer = Stopwatch()..start();
     try {
       final posts = await _fetchInitial();
       _posts = posts;
       if (posts.isNotEmpty) _cursor = FeedCursor.fromLastPost(posts.last);
       _hasMore = posts.length == _pageSize;
       await _refreshStates(posts.map((e) => e.id).toList());
+      PerformanceService.instance.report('feed_load', loadTimer.elapsed, route: '/');
       _scheduleNoInteractionSignal(posts.length);
       _prefetchMedia(posts);
       unawaited(FeedOfflineCache.save(posts));

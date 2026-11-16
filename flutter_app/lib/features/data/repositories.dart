@@ -3118,6 +3118,16 @@ class AdminRepository {
     return (data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  Future<Map<String, dynamic>> performanceAnalytics({int days = 14}) async {
+    final data = await _c.rpc('admin_performance_analytics', params: {'p_days': days});
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<Map<String, dynamic>> revenueReadiness({int days = 30}) async {
+    final data = await _c.rpc('admin_revenue_readiness', params: {'p_days': days});
+    return Map<String, dynamic>.from(data as Map);
+  }
+
   Future<Map<String, dynamic>> crashAnalytics({int days = 14}) async {
     final data = await _c.rpc('admin_crash_analytics', params: {'p_days': days});
     return Map<String, dynamic>.from(data as Map);

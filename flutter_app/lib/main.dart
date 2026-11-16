@@ -19,6 +19,7 @@ import 'core/theme/app_theme.dart';
 import 'shared/services/analytics_service.dart';
 import 'shared/services/beta_error_logging_service.dart';
 import 'shared/services/device_service.dart';
+import 'shared/services/performance_service.dart';
 import 'shared/services/mfa_service.dart';
 import 'shared/services/push_notification_service.dart';
 import 'shared/services/remember_me_service.dart';
@@ -26,6 +27,7 @@ import 'shared/services/remote_config_service.dart';
 import 'shared/services/ads_bootstrap.dart';
 
 Future<void> main() async {
+  final startup = Stopwatch()..start();
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
     FlutterError.onError = (details) {
@@ -111,7 +113,11 @@ Future<void> main() async {
       debugPrint("⚠️ Supabase URL or Anon Key is missing in .env");
     }
 
+    PerformanceService.instance.report('app_start', startup.elapsed);
     runApp(const ProviderScope(child: GatherApp()));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PerformanceService.instance.report('first_frame', startup.elapsed);
+    });
   }, (error, stack) {
     BetaErrorLoggingService.instance.record(error, stack, context: 'runZonedGuarded');
   });
