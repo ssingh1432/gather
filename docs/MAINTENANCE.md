@@ -23,4 +23,4 @@ Supabase managed backups plus the heartbeat in `backup_log`. A restore drill sho
 1. Contain (disable feature flag/revoke key/suspend account). 2. Preserve logs (`security_events`, `admin_audit_log`). 3. Fix via migration/PR. 4. Record outcome. For personal-data breaches, assess notification obligations under Nepal's Privacy Act 2075 with legal counsel.
 
 ## Data retention
-Account deletion: grace period then purge by cron. Define and publish retention for security logs, login attempts, evidence, and legal records (**Gap** — policy values not codified in repo).
+Account deletion: grace period then purge by cron. Define and publish retention for security logs, login attempts, evidence, and legal records — draft in `DATA_RETENTION.md`, awaiting approval.

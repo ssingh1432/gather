@@ -14,6 +14,9 @@
 `SUPABASE_ACCESS_TOKEN`, `VPS_SSH_KEY`, `VPS_HOST`, `VPS_USERNAME`, `VPS_PORT`; optional Android signing: `RELEASE_KEYSTORE_BASE64`, `RELEASE_KEYSTORE_PASSWORD`.
 If `SUPABASE_ACCESS_TOKEN` is missing, `migrate` fails and the deploy is blocked (intentional gate).
 
+## Android build
+The Android job pins Flutter 3.47.9: Flutter 3.50's Gradle plugin needs AGP 9, this project uses AGP 8.9.1. Migrate to AGP 9 (Gradle + Kotlin plugin changes) before removing the pin.
+
 ## Client configuration
 `flutter_app/.env` (from `.env.example`): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `GOOGLE_WEB_CLIENT_ID`. Never commit `.env`.
 
@@ -22,7 +25,7 @@ If `SUPABASE_ACCESS_TOKEN` is missing, `migrate` fails and the deploy is blocked
 2. Watch `migrate` job: confirm new migrations applied (check Supabase migration history).
 3. Watch `deploy`; load the site in a private window and verify the new `flutter_bootstrap.js?v=<sha>`.
 4. Smoke test: sign in, post, comment, DM, open admin dashboard.
-5. Edge Functions are deployed separately (`supabase functions deploy <name>`) — they are **not** part of CI.
+5. Edge Functions: run the manual **Deploy Edge Functions** workflow (it refuses to deploy if live `verify_jwt` differs from `supabase_functions/jwt-config.json`).
 
 ## Pending external setup (Google Sign-In)
 Google Cloud OAuth clients (Web/Android/iOS), Supabase Google provider config, real `GOOGLE_WEB_CLIENT_ID`, iOS `REVERSED_CLIENT_ID` in Info.plist, Windows/Linux protocol handler for `io.eiquoab.gather://`.

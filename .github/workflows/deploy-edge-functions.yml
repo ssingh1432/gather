@@ -1,0 +1,62 @@
+name: Deploy Edge Functions
+
+# Manual only. Edge Functions are not deployed by the main CI pipeline because
+# a wrong verify_jwt setting silently breaks webhooks/payments. This workflow
+# first compares the LIVE verify_jwt flag of each function with
+# supabase_functions/jwt-config.json and refuses to deploy on any mismatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      function:
+        description: "Function name, or 'all'"
+        required: true
+        default: "all"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: xttxiwjllumskuhzxngx
+      FUNCTION: ${{ inputs.function }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify live verify_jwt matches repo config
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.request
+          ref, tok = os.environ["SUPABASE_PROJECT_REF"], os.environ["SUPABASE_ACCESS_TOKEN"]
+          cfg = json.load(open("supabase_functions/jwt-config.json"))
+          want = list(cfg) if os.environ["FUNCTION"] == "all" else [os.environ["FUNCTION"]]
+          unknown = [f for f in want if f not in cfg]
+          if unknown: sys.exit(f"Not in jwt-config.json: {unknown}")
+          req = urllib.request.Request(
+              f"https://api.supabase.com/v1/projects/{ref}/functions",
+              headers={"Authorization": f"Bearer {tok}", "User-Agent": "gather-ci/1.0"})
+          live = {f["slug"]: f.get("verify_jwt") for f in json.load(urllib.request.urlopen(req, timeout=60))}
+          bad = [f"{f}: live verify_jwt={live[f]} but config={cfg[f]}" for f in want if f in live and live[f] != cfg[f]]
+          for f in want:
+              if f not in live: print(f"::notice::{f} is not deployed yet (first deploy)")
+          if bad:
+              for b in bad: print(f"::error::{b}")
+              sys.exit("verify_jwt mismatch - fix supabase_functions/jwt-config.json or the dashboard, then re-run")
+          PY
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy
+        run: |
+          mkdir -p supabase/functions
+          cp -r supabase_functions/*/ supabase/functions/
+          if [ "$FUNCTION" = "all" ]; then NAMES=$(python3 -c "import json;print(' '.join(json.load(open('supabase_functions/jwt-config.json'))))"); else NAMES="$FUNCTION"; fi
+          for n in $NAMES; do
+            VERIFY=$(python3 -c "import json,sys;print(json.load(open('supabase_functions/jwt-config.json'))['$n'])")
+            FLAG=""; [ "$VERIFY" = "False" ] && FLAG="--no-verify-jwt"
+            echo "Deploying $n $FLAG"
+            supabase functions deploy "$n" --project-ref "$SUPABASE_PROJECT_REF" --use-api $FLAG
+          done

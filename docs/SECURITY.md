@@ -39,7 +39,7 @@ Scope: what is implemented in the repository today. Items marked **Gap** or **Ve
 1. **PAT hygiene:** GitHub tokens have been shared in plaintext. Rotate after every session; prefer short-lived fine-grained tokens.
 2. **Migration drift:** direct `execute_sql` changes diverge live DB from repo. Use `apply_migration` or the CI step.
 3. ~~CI migrate step no-ops without `SUPABASE_ACCESS_TOKEN`~~ — now fails the job (the secret is configured).
-4. `flutter analyze` runs with `--no-fatal-warnings`; warnings never fail CI.
+4. Analyzer warnings are ratcheted: CI fails if the count exceeds `flutter_app/analysis_warning_baseline.txt`.
 5. HTTPS/HSTS/CSP headers depend on the VPS Nginx config, not the repo — **Verify**.
 6. No automated RLS regression suite beyond the few SQL tests in `database/tests/`.
 
