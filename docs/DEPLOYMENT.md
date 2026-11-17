@@ -18,7 +18,7 @@ If `SUPABASE_ACCESS_TOKEN` is missing, `migrate` fails and the deploy is blocked
 The Android job pins Flutter 3.47.9: Flutter 3.50's Gradle plugin needs AGP 9, this project uses AGP 8.9.1. Migrate to AGP 9 (Gradle + Kotlin plugin changes) before removing the pin.
 
 ## Client configuration
-`flutter_app/.env` (from `.env.example`): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `GOOGLE_WEB_CLIENT_ID`. Never commit `.env`.
+`flutter_app/.env` (from `.env.example`): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `GOOGLE_WEB_CLIENT_ID`. The `.env` files are committed and bundled into the app (CI builds the web release from them), so they must contain ONLY the public anon key and URL — never a service-role key or any other secret.
 
 ## Release steps
 1. Merge PR to main after CI is green.

@@ -54,6 +54,8 @@ Scope: what is implemented in the repository today. Items marked **Gap** or **Ve
 | `auth_allow_anonymous_sign_ins` (policies without `TO authenticated`) | Advisory. Low risk while anonymous sign-ins are disabled; tighten policies with explicit `TO authenticated` over time |
 | `auth_leaked_password_protection` disabled | **Open — dashboard setting** (Auth > Providers > Email; may require Pro plan) |
 
+**Open item — webhook secret:** the `notification-dispatch` database-webhook trigger on `public.notifications` stores a service-role JWT and a short, guessable shared secret (`x-webhook-secret`) in its definition. Replace the shared secret with a long random value (update both the webhook header and the Edge Function secret). The service-role JWT in the trigger can only be changed by rotating the project JWT secret/keys; keep it out of repo snapshots (the baseline generator documents this).
+
 ## 9. Penetration-test checklist (manual)
 - Anonymous access: call each table/RPC as `anon`; expect denial except intended public reads.
 - Cross-user access: user A reading/updating user B's rows (profile, DMs, devices, drafts, exports).

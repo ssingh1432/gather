@@ -13,7 +13,7 @@
 ## Known quirks
 - Duplicate numeric prefixes exist (e.g. 104, 105, 108, 109, 113, 114, 117, 120). Order within a prefix is alphabetical.
 - Gaps (e.g. 018, 118) — confirm whether intentionally unused.
-- Base schema `001_initial_schema.sql` is **not present** in `database/migrations/` (history starts at 002). To build a fresh environment, generate a baseline from production (`supabase db dump --schema public`) and add it before 002 in a separate bootstrap path — do not add it to the CI-applied folder.
+- Base schema `001_initial_schema.sql` is **not present** (history starts at 002). `database/baseline/base_tables_snapshot.sql` is a current-state snapshot of the 22 base tables (+ enums) that no migration creates, generated from production by `database/baseline/generate_base_snapshot.sql`. It is a reference/bootstrap aid, not a replayable 001: it already contains everything added by 002-126, and helper functions/storage buckets are not included. Review any regenerated output for secrets (webhook triggers embed a service-role JWT).
 
 ## Fresh environment
 Apply the baseline, then all migrations in order, create storage buckets/policies (included in migrations), deploy Edge Functions, set secrets, run `database/tests/`.
