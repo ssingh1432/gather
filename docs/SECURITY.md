@@ -38,12 +38,23 @@ Scope: what is implemented in the repository today. Items marked **Gap** or **Ve
 ## 7. Known risks / open items
 1. **PAT hygiene:** GitHub tokens have been shared in plaintext. Rotate after every session; prefer short-lived fine-grained tokens.
 2. **Migration drift:** direct `execute_sql` changes diverge live DB from repo. Use `apply_migration` or the CI step.
-3. **CI migrate step no-ops** if `SUPABASE_ACCESS_TOKEN` is missing (warning only) — deploy can then ship a client ahead of its schema.
+3. ~~CI migrate step no-ops without `SUPABASE_ACCESS_TOKEN`~~ — now fails the job (the secret is configured).
 4. `flutter analyze` runs with `--no-fatal-warnings`; warnings never fail CI.
 5. HTTPS/HSTS/CSP headers depend on the VPS Nginx config, not the repo — **Verify**.
 6. No automated RLS regression suite beyond the few SQL tests in `database/tests/`.
 
-## 8. Penetration-test checklist (manual)
+## 8. Supabase advisor findings (security, 2026-11-17)
+| Finding | Status |
+|---|---|
+| `function_search_path_mutable` (7 functions) | Fixed in migration 127 |
+| `log_security_event` callable by anon with arbitrary data | Constrained in migration 127 (anon may only log `password_reset_requested`; event-type format and 4 KB metadata cap) |
+| `rls_enabled_no_policy`: `allowed_beta_emails`, `auth_login_attempts`, `page_post_view_events`, `repo_migrations` | Intentional deny-all (access only via SECURITY DEFINER functions/service role) |
+| `anon_security_definer_function_executable` (20) | Mostly intentional (login lockout/attempt, RLS helper predicates, `trending_hashtags`). Re-review each before revoking: RLS policies evaluate helpers as the calling role |
+| `authenticated_security_definer_function_executable` (172) | By design (RPC API); each function must do its own authorization check |
+| `auth_allow_anonymous_sign_ins` (policies without `TO authenticated`) | Advisory. Low risk while anonymous sign-ins are disabled; tighten policies with explicit `TO authenticated` over time |
+| `auth_leaked_password_protection` disabled | **Open — dashboard setting** (Auth > Providers > Email; may require Pro plan) |
+
+## 9. Penetration-test checklist (manual)
 - Anonymous access: call each table/RPC as `anon`; expect denial except intended public reads.
 - Cross-user access: user A reading/updating user B's rows (profile, DMs, devices, drafts, exports).
 - Privilege escalation: non-admin calling `set_user_role`, `ban_user`, `grant_moderator_permission`.

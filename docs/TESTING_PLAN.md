@@ -31,4 +31,4 @@
 Security: see SECURITY.md pen-test checklist. Privacy: verify consent record on signup, export contents, deletion purge. Legal: complaint -> action -> appeal flow end to end, audit entries present. Performance: EXPLAIN key feed queries at 100k+ rows; verify indexes.
 
 ## Status
-Plan only — no new automated tests were added in this step because the sandbox has no Flutter SDK or Postgres to execute them; unexecuted tests should not be committed.
+Added: migration lint in CI (`scripts/lint_migrations.py`). Automated DB/Flutter tests: plan only — no new automated tests were added in this step because the sandbox has no Flutter SDK or Postgres to execute them; unexecuted tests should not be committed.

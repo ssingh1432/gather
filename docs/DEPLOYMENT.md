@@ -12,7 +12,7 @@
 
 ### Required GitHub secrets
 `SUPABASE_ACCESS_TOKEN`, `VPS_SSH_KEY`, `VPS_HOST`, `VPS_USERNAME`, `VPS_PORT`; optional Android signing: `RELEASE_KEYSTORE_BASE64`, `RELEASE_KEYSTORE_PASSWORD`.
-If `SUPABASE_ACCESS_TOKEN` is missing, `migrate` only warns and the deploy still proceeds — confirm the secret is set.
+If `SUPABASE_ACCESS_TOKEN` is missing, `migrate` fails and the deploy is blocked (intentional gate).
 
 ## Client configuration
 `flutter_app/.env` (from `.env.example`): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `GOOGLE_WEB_CLIENT_ID`. Never commit `.env`.

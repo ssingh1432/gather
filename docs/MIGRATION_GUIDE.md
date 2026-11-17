@@ -13,10 +13,13 @@
 ## Known quirks
 - Duplicate numeric prefixes exist (e.g. 104, 105, 108, 109, 113, 114, 117, 120). Order within a prefix is alphabetical.
 - Gaps (e.g. 018, 118) — confirm whether intentionally unused.
-- Base schema `001_initial_schema.sql` is referenced by README but is **not present** in `database/migrations/` — locate it or regenerate a baseline before creating a fresh environment.
+- Base schema `001_initial_schema.sql` is **not present** in `database/migrations/` (history starts at 002). To build a fresh environment, generate a baseline from production (`supabase db dump --schema public`) and add it before 002 in a separate bootstrap path — do not add it to the CI-applied folder.
 
 ## Fresh environment
 Apply the baseline, then all migrations in order, create storage buckets/policies (included in migrations), deploy Edge Functions, set secrets, run `database/tests/`.
 
-## Drift check
-Compare `supabase_migrations.schema_migrations` with the files list; use `supabase db diff` against staging to detect untracked changes.
+## Tracking & drift
+CI tracks applied files (with checksums) in `public.repo_migrations`; migrations applied through the Supabase MCP `apply_migration` tool are tracked separately in `supabase_migrations.schema_migrations`. Compare both against the files list, and use `supabase db diff` against staging to detect untracked changes. `scripts/apply_migrations.py` refuses to run if `repo_migrations` is empty.
+
+## Lint
+`scripts/lint_migrations.py` runs in CI: new migrations (number > 126) must have a unique prefix, valid name, and — if they create a table — enable RLS and include a GRANT. Legacy duplicates are reported as notices only; never rename applied files.
