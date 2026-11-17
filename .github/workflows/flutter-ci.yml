@@ -20,6 +20,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Lint SQL migrations
+        working-directory: .
+        run: python3 scripts/lint_migrations.py
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -32,8 +36,24 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze Dart code
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Analyze Dart code (errors fatal, warnings ratcheted)
+        run: |
+          set +e
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee /tmp/analyze.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          WARN=$(grep -cE '^ *warning • ' /tmp/analyze.log || true)
+          echo "::notice title=Analyzer warnings::count=$WARN"
+          if [ "$STATUS" -ne 0 ]; then exit "$STATUS"; fi
+          # analysis_warning_baseline.txt holds the accepted warning count.
+          # New warnings fail CI; lower the number whenever warnings are fixed.
+          if [ -f analysis_warning_baseline.txt ]; then
+            BASE=$(tr -d '[:space:]' < analysis_warning_baseline.txt)
+            if [ "$WARN" -gt "$BASE" ]; then
+              echo "::error title=New analyzer warnings::warnings rose from $BASE to $WARN"
+              exit 1
+            fi
+          fi
 
       - name: Run Flutter tests
         run: |
@@ -64,9 +84,14 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Set up Flutter
+      # Flutter 3.50 (stable since ~2026-11-11) ships a Gradle plugin that needs
+      # AGP 9; this project is on AGP 8.9.1, which fails with a NoSuchMethodError
+      # on ApplicationExtension.getDefaultConfig(). Pin the last Flutter that
+      # works until the Android build is migrated to AGP 9.
+      - name: Set up Flutter (pinned for Android)
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.47.9"
           channel: stable
           cache: true
 
@@ -164,8 +189,8 @@ jobs:
       - name: Apply pending migrations
         run: |
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
-            echo "::warning title=Migrations NOT applied::Add the SUPABASE_ACCESS_TOKEN repository secret so CI can apply database/migrations before deploying."
-            exit 0
+            echo "::error title=Migrations NOT applied::SUPABASE_ACCESS_TOKEN secret is missing; refusing to deploy a client that may be ahead of the database schema."
+            exit 1
           fi
           python3 scripts/apply_migrations.py
 

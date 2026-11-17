@@ -20,7 +20,7 @@
 
 ## Supabase setup
 1. Create a Supabase project.
-2. Run migration: `database/migrations/001_initial_schema.sql`.
+2. Apply `database/migrations/*.sql` in order (CI does this via `scripts/apply_migrations.py`). Note: the `001` baseline is not in the repo; see `docs/MIGRATION_GUIDE.md` for creating a fresh environment.
 3. Create one public Storage bucket named `post-media`.
 4. Apply the SQL policies below exactly.
 
@@ -55,6 +55,6 @@ using (bucket_id = 'post-media');
 ## Remaining production tasks
 - CI pipeline for format/analyze/test on every PR. See `.github/workflows/flutter-ci.yml`.
 - Staging release gate/checklist before inviting testers. See `docs/STAGING_RELEASE_CHECKLIST.md`.
-- Full integration/e2e tests against seeded Supabase test data.
+- Full integration/e2e tests against seeded Supabase test data (see `docs/TESTING_PLAN.md`).
 - Rate limiting/abuse protection and advanced moderation tooling.
 - Push notifications and analytics hardening.
