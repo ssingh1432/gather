@@ -86,6 +86,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Diagnose toolchain versions
+        run: |
+          echo "::notice title=flutter::$(flutter --version 2>&1 | head -3 | tr '\n' '|')"
+          echo "::notice title=flutter-gradle-plugin::$(grep -rhoE "com.android.tools.build:gradle[^\"' ]*|agp[A-Za-z]*Version[^\n]{0,40}" "$(dirname $(dirname $(which flutter)))/packages/flutter_tools/gradle" 2>/dev/null | sort -u | head -8 | tr '\n' '|')"
+          echo "::notice title=agp-settings::$(grep -n 'com.android\|kotlin.android' android/settings.gradle.kts | tr '\n' '|')"
+
       - name: Cache Gradle build state
         uses: actions/cache@v4
         with:
