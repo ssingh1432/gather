@@ -15,11 +15,10 @@
 3. PR → merge → CI applies to production. Verify: `select filename from repo_migrations order by applied_at desc limit 5;`
 4. Re-run Supabase security advisors.
 
-## Pending: migration 127 (page_roles RLS)
-Before merging, check production: `select relrowsecurity from pg_class where oid = 'public.page_roles'::regclass;`
-- `false` → the table was exposed; 127 fixes it. Check `page_roles` rows for unexpected role grants before and after.
-- `true` → someone enabled it by hand; 127 is a no-op that closes the repo/live drift.
-On staging, confirm page team management, page switching and role-based page features still work with RLS on.
+## Pending: migrations 127 and 128
+- **127** (page_roles RLS): live check on 2026-11-18 showed RLS already on, so this is a no-op that closes repo/live drift.
+- **128** (advisor hardening): pins `search_path` on 7 functions, revokes anon EXECUTE on 5 helpers, restricts what logged-out callers can write via `log_security_event`, documents deny-all tables. After applying, verify: password-reset request still logs; search → trending hashtags loads; admin screens load; run the security advisors again.
+Both are idempotent. Merging to main applies them through CI.
 
 ## Client compatibility
 Keep RPC signatures backward compatible (add parameters with defaults) so older app builds keep working; deprecate in a later migration.

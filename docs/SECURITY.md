@@ -26,7 +26,7 @@ Untrusted client, public Supabase anon key, user-generated content (text, media,
 ## Known gaps (do not hide these from auditors)
 1. **No malware / CSAM scanner** — hooks exist, nothing calls a scanner. Required before wide launch.
 2. **Media URLs are not access-controlled per post visibility** (DATABASE.md §9).
-3. **page_roles RLS** — policies and grants existed but no migration enabled RLS; fixed by migration 127. Confirm live state first (see MIGRATION_GUIDE.md).
+3. **page_roles RLS** — no migration enabled RLS, but the live table already has it on (checked 2026-11-18, 2 policies), so there is no live exposure. Migration 127 only removes the repo/live drift.
 4. **Security headers** (CSP, HSTS, X-Frame-Options, Referrer-Policy) — verify in the Nginx config; not managed in this repo.
 5. **CSRF**: API uses bearer JWTs, not cookies, so classic CSRF does not apply; confirm no cookie-auth endpoints exist.
 6. **Dependency/secret scanning** is not in CI yet (see Recommended CI additions).
@@ -45,3 +45,13 @@ Untrusted client, public Supabase anon key, user-generated content (text, media,
 
 ## Recommended CI additions
 `gitleaks` secret scan, `flutter pub outdated`/OSV dependency scan, `scripts/lint_migrations.py` (added), Supabase `get_advisors` (security) review after each migration batch.
+
+## Supabase advisor run — 2026-11-18 (security)
+| Finding | Count | Status |
+|---|---|---|
+| `function_search_path_mutable` | 7 | Fixed in migration 128 (not yet applied live) |
+| `anon_security_definer_function_executable` | 20 | 5 helpers revoked from anon in 128; `check_login_lockout`, `record_login_attempt`, `log_security_event` stay (pre-login, now allow-listed); the rest are used by anon/PUBLIC RLS policies — revoking would turn empty results into permission errors. Moving policy helpers into a non-exposed schema is the clean long-term fix |
+| `authenticated_security_definer_function_executable` | 172 | Expected: these are the RPC API. Each must authorize inside the function |
+| `rls_enabled_no_policy` | 4 | `auth_login_attempts`, `repo_migrations`, `allowed_beta_emails` are deny-all by design (documented in 128). **`page_post_view_events` still needs a decision** — if clients should insert views, it needs a policy |
+| `auth_allow_anonymous_sign_ins` | 128 | Policies reach anonymous sign-in users. Disable anonymous sign-ins in Auth settings if not used |
+| `auth_leaked_password_protection` | 1 | Dashboard toggle (Auth → Passwords), plan-dependent. Turn on |
