@@ -30,15 +30,7 @@ subprojects {
 // cascade.
 subprojects {
     afterEvaluate {
-        // Newer Android plugin subprojects (e.g. shared_preferences_android) expose the
-        // new DSL only; calling the legacy BaseExtension API on them throws a
-        // LinkageError (NoSuchMethodError) and failed the whole build. Only
-        // receive_sharing_intent needs the override, so never let it break others.
-        try {
-            extensions.findByType(com.android.build.gradle.BaseExtension::class.java)?.compileSdkVersion(36)
-        } catch (e: Throwable) {
-            logger.info("compileSdk override skipped for ${project.name}: ${e.message}")
-        }
+        extensions.findByType(com.android.build.gradle.BaseExtension::class.java)?.compileSdkVersion(36)
     }
 }
 subprojects {
