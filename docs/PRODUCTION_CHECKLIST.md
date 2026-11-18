@@ -1,9 +1,10 @@
 # Production Launch Checklist
 
 ## Blockers
-- [ ] Migrations 127 and 128 reviewed and applied (127 is drift-only; 128 hardening) and advisors re-run
-- [ ] Auth: leaked-password protection ON; anonymous sign-ins OFF unless needed; decide policy for `page_post_view_events`
-- [ ] Malware/CSAM scan hook wired to a real scanner, and a child-abuse reporting path defined
+- [x] Migrations 127–132 applied live and advisors re-run (2026-11-18)
+- [ ] Auth dashboard: leaked-password protection ON; anonymous sign-ins OFF unless needed
+- [ ] Install `deploy/nginx-security-headers.conf` on the VPS; CSP Report-Only → enforce after a clean week
+- [ ] Connect a real malware/CSAM scanner to the hook (MEDIA_SCANNING.md) and confirm the child-abuse reporting channel with counsel
 - [ ] Legal review of Terms, Privacy Policy, retention schedule, grievance officer, Nepal registration obligations
 - [ ] Security headers on Nginx; HTTPS verified (SSL Labs A)
 - [ ] All secrets rotated; no PAT/token still valid from development sessions

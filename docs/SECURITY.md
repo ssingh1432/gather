@@ -24,10 +24,10 @@ Untrusted client, public Supabase anon key, user-generated content (text, media,
 | Transport | HTTPS via Nginx on eiquoab.xyz and Supabase | deployment |
 
 ## Known gaps (do not hide these from auditors)
-1. **No malware / CSAM scanner** — hooks exist, nothing calls a scanner. Required before wide launch.
+1. **No malware / CSAM scanner connected** — quarantine hook + staff review shipped (migration 131, see MEDIA_SCANNING.md); a real scanner worker is still needed before wide launch.
 2. **Media URLs are not access-controlled per post visibility** (DATABASE.md §9).
 3. **page_roles RLS** — no migration enabled RLS, but the live table already has it on (checked 2026-11-18, 2 policies), so there is no live exposure. Migration 127 only removes the repo/live drift.
-4. **Security headers** (CSP, HSTS, X-Frame-Options, Referrer-Policy) — verify in the Nginx config; not managed in this repo.
+4. **Security headers** — ready-to-use config in `deploy/nginx-security-headers.conf` (CSP starts Report-Only). Must be installed on the VPS and verified; not yet confirmed live.
 5. **CSRF**: API uses bearer JWTs, not cookies, so classic CSRF does not apply; confirm no cookie-auth endpoints exist.
 6. **Dependency/secret scanning** is not in CI yet (see Recommended CI additions).
 7. Duplicate numeric migration prefixes (104–120) rely on alphabetical order; avoid adding more.
@@ -46,12 +46,20 @@ Untrusted client, public Supabase anon key, user-generated content (text, media,
 ## Recommended CI additions
 `gitleaks` secret scan, `flutter pub outdated`/OSV dependency scan, `scripts/lint_migrations.py` (added), Supabase `get_advisors` (security) review after each migration batch.
 
-## Supabase advisor run — 2026-11-18 (security)
-| Finding | Count | Status |
-|---|---|---|
-| `function_search_path_mutable` | 7 | Fixed in migration 128 (not yet applied live) |
-| `anon_security_definer_function_executable` | 20 | 5 helpers revoked from anon in 128; `check_login_lockout`, `record_login_attempt`, `log_security_event` stay (pre-login, now allow-listed); the rest are used by anon/PUBLIC RLS policies — revoking would turn empty results into permission errors. Moving policy helpers into a non-exposed schema is the clean long-term fix |
-| `authenticated_security_definer_function_executable` | 172 | Expected: these are the RPC API. Each must authorize inside the function |
-| `rls_enabled_no_policy` | 4 | `auth_login_attempts`, `repo_migrations`, `allowed_beta_emails` are deny-all by design (documented in 128). **`page_post_view_events` still needs a decision** — if clients should insert views, it needs a policy |
-| `auth_allow_anonymous_sign_ins` | 128 | Policies reach anonymous sign-in users. Disable anonymous sign-ins in Auth settings if not used |
-| `auth_leaked_password_protection` | 1 | Dashboard toggle (Auth → Passwords), plan-dependent. Turn on |
+## Supabase advisor runs — 2026-11-18
+Fixed and **applied live** the same day (migrations 128–132):
+| Finding | Before → after |
+|---|---|
+| `function_search_path_mutable` | 7 → 0 |
+| `anon_security_definer_function_executable` | 20 → 15. Remaining: pre-login (`check_login_lockout`, `record_login_attempt`, `log_security_event` — now allow-listed to `password_reset_requested` for logged-out callers) and helpers used by anon/PUBLIC RLS policies (revoking them would turn empty results into permission errors; long-term fix is moving helpers to a non-exposed schema) |
+| Anonymous read leaks | `post_downloads`, `story_views`, `stories` policies were readable by signed-out users → now authenticated only; downloads scoped to visible posts, story views to viewer/author/staff (129) |
+| Legal data requests | were readable/editable by every moderator → admins only (132) |
+| Storage MIME | `community-media` and `data-exports` had no allowlist → added. `community-chat-media` still allows any type (private bucket, 15 MB); restrict once chat file types are decided |
+| `rls_enabled_no_policy` (4 tables) | deny-all by design, now documented via table comments |
+| `authenticated_security_definer_function_executable` | ~178: expected (the RPC API); each function must authorize internally |
+
+**Still open — Auth dashboard settings (cannot be changed from SQL):**
+1. Enable leaked-password protection (Auth → Passwords).
+2. Disable anonymous sign-ins if unused (clears 128 `auth_allow_anonymous_sign_ins` warnings).
+
+Re-run `database/tests/audit_rls_coverage.sql` after each migration batch. Known remaining items it reports: public lookup tables with open SELECT (fine), `poll_votes`, `event_rsvps`, `page_review_helpful_votes` readable by any signed-in user regardless of post visibility (low severity, scope them to visible posts when convenient).

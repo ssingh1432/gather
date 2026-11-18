@@ -24,12 +24,12 @@ Engineering checklist, **not legal advice**. Have a Nepali lawyer confirm the cu
 | Legal / police data requests with audit trail | `legal_data_requests`, admin legal dashboard | test; define who may approve |
 | Grievance officer contact and response SLA published | — | **needs owner + wording** |
 | Local representative / registration with authorities if required for social platforms | — | **needs legal confirmation** |
-| Copyright notice workflow (DMCA-style) | generic report category `copyright` | **gap: no dedicated counter-notice flow** |
+| Copyright notice workflow (DMCA-style) | migration 130, COPYRIGHT_WORKFLOW.md | backend done; **Flutter screens and policy text pending** |
 | Pluggable frameworks | `legal_frameworks` table | ok |
 | Audit logging | `admin_audit_log`, `security_events`, `moderation_actions` | ok |
 ## Findings to action before launch
-1. Dedicated copyright notice/counter-notice flow.
+1. Flutter UI for the copyright flow (backend live) and statutory time limits / repeat-infringer policy.
 2. Published retention schedule and processor list.
 3. Grievance officer details + SLA on the site and in-app.
 4. Confirm registration/representation obligations for Nepal.
-5. Malware/CSAM scanning plus a reporting path to authorities for child-abuse material.
+5. Connect a scanner to the quarantine hook (migration 131) and define the child-abuse reporting path.

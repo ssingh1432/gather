@@ -27,6 +27,9 @@ Severity can add more than one strike. Reinstating does not clear strikes.
 - Check for mass-report abuse (many reports from new accounts); the system dampens it, but use judgment.
 - Notifications to the user go out automatically (moderation alert, report update).
 
+## Copyright and flagged media
+Copyright notices and counter-notices are resolved by staff via the RPCs in COPYRIGHT_WORKFLOW.md. Media flagged by the scanner is quarantined (post hidden) — review it and confirm or mark a false positive (MEDIA_SCANNING.md). Never forward child-abuse material; escalate to an admin.
+
 ## Appeals
 Users appeal a specific action (`submit_appeal`). The reviewer must be a different moderator than the one who acted when possible. Outcomes: uphold, reduce, reverse (reinstate). Record the reason; the user is notified.
 

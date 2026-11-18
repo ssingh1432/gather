@@ -7,6 +7,7 @@
 | Model / widget tests | flutter_test | `flutter_app/test/*`, `test/features` | yes |
 | **DB↔client contract tests** | flutter_test reading `../database/migrations` | `flutter_app/test/contracts` | yes |
 | Migration static lint | Python | `scripts/lint_migrations.py` (+ `test_lint_migrations.py`) | yes |
+| Live RLS/privilege audit | `database/tests/audit_rls_coverage.sql` | after every migration batch |
 | DB behaviour tests (RLS, RPC authorization) | SQL plans run as test users on **staging** | `database/tests/` | manual per release |
 | End-to-end / integration | `integration_test` (not yet written) | — | planned |
 | Load / stress | k6 or pgbench on staging | PERFORMANCE_LOAD_TEST_PLAN.md | before launch |

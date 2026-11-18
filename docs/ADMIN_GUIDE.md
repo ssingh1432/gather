@@ -27,8 +27,11 @@ Posts tab: hide/remove, view **edit history** and restore text to a prior versio
 
 ## Legal & data requests (Nepal)
 Frameworks are data: ETA 2063, Privacy Act 2075, Social Media Directive, Other. To add a future law: `insert into legal_frameworks (code, name, description)`.
-Complaint lifecycle starts at `submitted`; record resolution notes and assignee. Data requests start at `received`. Keep evidence and timestamps; do not delete complaint rows.
+**Legal/police data requests are admin-only** (moderators can handle complaints but cannot see data requests). Complaint lifecycle starts at `submitted`; record resolution notes and assignee. Data requests start at `received`. Keep evidence and timestamps; do not delete complaint rows.
 Account deletion: user request → `pending_deletion` → 14-day grace → automatic purge. Data export: signed link valid 7 days.
+
+## Copyright notices
+Use `admin_resolve_copyright_notice` (review / remove / reject) and `admin_resolve_counter_notice` (restore or keep removed). Flow and states: COPYRIGHT_WORKFLOW.md. Flagged media from a scanner: `admin_review_media_scan` (MEDIA_SCANNING.md).
 
 ## Analytics
 Platform Analytics tab: DAU/MAU, activity series, retention cohorts, engagement, moderation analytics, uploads, crash analytics, performance, revenue readiness.
