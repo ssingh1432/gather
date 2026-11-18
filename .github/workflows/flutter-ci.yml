@@ -43,6 +43,19 @@ jobs:
             exit 1
           }
 
+  lint-migrations:
+    name: Lint SQL migrations
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run migration safety lint
+        run: python3 scripts/lint_migrations.py
+
+      - name: Run lint unit tests
+        run: python3 -m unittest scripts/test_lint_migrations.py -v
+
   build-android-apk:
     name: Build Android APK
     needs: analyze-and-test
@@ -150,7 +163,7 @@ jobs:
 
   migrate:
     name: Apply Supabase migrations
-    needs: analyze-and-test
+    needs: [analyze-and-test, lint-migrations]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10

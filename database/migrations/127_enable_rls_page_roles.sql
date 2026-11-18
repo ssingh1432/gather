@@ -1,0 +1,13 @@
+-- 127: enable RLS on public.page_roles (found by scripts/lint_migrations.py).
+--
+-- 072_pages_core_schema.sql created page_roles, its policies
+-- (page_roles_select / page_roles_manage) and
+-- `grant select, insert, update, delete ... to authenticated`, but no
+-- migration in the repo ever ran ENABLE ROW LEVEL SECURITY. Policies have no
+-- effect while RLS is off, so if the live table was not toggled by hand in
+-- the dashboard, every signed-in user could read AND modify page role rows
+-- (privilege escalation on Professional Pages).
+--
+-- Idempotent: harmless if RLS is already on. Verify on staging first:
+--   select relrowsecurity from pg_class where oid = 'public.page_roles'::regclass;
+alter table public.page_roles enable row level security;
