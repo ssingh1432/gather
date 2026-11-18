@@ -318,3 +318,9 @@ noted inline above.
 | `users.profile_theme` | One of default, ocean, forest, sunset, rose, midnight. |
 | Storage bucket `verification-docs` | Private ID documents; owner and staff read only. |
 
+
+## Migrations 127–132 (added 2026-11-18)
+- **copyright_notices / copyright_counter_notices** (130): RLS select for claimant, accused author, staff. RPCs: `submit_copyright_notice`, `withdraw_copyright_notice`, `admin_resolve_copyright_notice`, `submit_counter_notice`, `admin_resolve_counter_notice`.
+- **media_scan_events** (131): staff-readable scan log. RPCs: `set_media_scan_result` (service role only), `admin_review_media_scan`.
+- Policy changes: `post_downloads_select`, `story_views_select`, `stories_select` → authenticated only (129); `legal_data_requests` admin-only (132).
+- `log_security_event`: logged-out callers may only write `password_reset_requested`; event type ≤ 64 chars, metadata ≤ 4 KB (128).
