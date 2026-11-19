@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/supabase_client.dart';
-import '../../core/theme/app_theme.dart';
 import '../models/models.dart';
 import '../services/media/web_safe_pick.dart';
 import '../services/media_upload_service.dart';

@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/supabase_client.dart';
 import '../../shared/models/models.dart';
-import '../../shared/providers/app_providers.dart';
 import '../../shared/utils/time_ago.dart';
 import '../../shared/widgets/reusables.dart';
 import 'page_comments_ux.dart';

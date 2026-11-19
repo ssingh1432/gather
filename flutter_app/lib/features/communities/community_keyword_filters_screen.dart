@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../data/repositories.dart';
-import '../../core/theme/app_theme.dart';
 import 'community_theme.dart';
 
 /// Community-scoped keyword filters (migration 057) — layered on top of

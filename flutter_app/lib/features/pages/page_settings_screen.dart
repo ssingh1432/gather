@@ -438,7 +438,7 @@ class _PageSettingsScreenState extends State<PageSettingsScreen> {
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         final shouldPop = await _confirmDiscardIfDirty();
-        if (shouldPop && mounted) Navigator.of(context).pop();
+        if (shouldPop && context.mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
         appBar: AppBar(title: const Text('Page settings', style: TextStyle(fontWeight: FontWeight.w700))),

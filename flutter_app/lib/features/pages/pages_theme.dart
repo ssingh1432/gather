@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_theme.dart';
 import 'page_media_gallery.dart';
 
 export '../../core/theme/app_theme.dart';
