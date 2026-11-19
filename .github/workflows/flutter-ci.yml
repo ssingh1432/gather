@@ -33,7 +33,13 @@ jobs:
         run: flutter pub get
 
       - name: Analyze Dart code
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        run: |
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee /tmp/analyze.log
+          # Surface a summary as annotations (job logs need extra permissions to read back).
+          total=$(grep -cE '^\s+(info|warning|error) •' /tmp/analyze.log || true)
+          echo "::notice title=analyze-summary::issues=$total errors=$(grep -cE '^\s+error •' /tmp/analyze.log || true) warnings=$(grep -cE '^\s+warning •' /tmp/analyze.log || true)"
+          echo "::notice title=analyze-by-rule::$(grep -oE '• [a-z_]+$' /tmp/analyze.log | sort | uniq -c | sort -rn | head -25 | tr '\n' '|')"
+          echo "::notice title=analyze-warnings::$(grep -E '^\s+warning •' /tmp/analyze.log | sed -E 's/^\s+warning • //' | head -40 | tr '\n' '|' | cut -c1-3800)"
 
       - name: Run Flutter tests
         run: |
