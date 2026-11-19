@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/supabase_client.dart';
 import '../../shared/services/media_upload_service.dart';
 import '../data/repositories.dart';
+import 'admin_copyright_screen.dart';
 
 /// Admin-only dashboard for Phase 4 Nepal legal compliance: review
 /// grievances/complaints, resolve appeals, approve identity verification,
@@ -90,6 +91,13 @@ class _AdminLegalDashboardScreenState extends State<AdminLegalDashboardScreen> w
     return Scaffold(
       appBar: AppBar(
         title: const Text('Legal Dashboard'),
+        actions: [
+          IconButton(
+            tooltip: 'Copyright notices',
+            icon: const Icon(Icons.copyright_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminCopyrightScreen())),
+          ),
+        ],
         bottom: TabBar(controller: _tabs, isScrollable: true, tabs: [
           Tab(text: 'Complaints (${_complaints.length})'),
           Tab(text: 'Appeals (${_appeals.length})'),

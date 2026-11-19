@@ -39,7 +39,7 @@ jobs:
           total=$(grep -cE '^\s+(info|warning|error) •' /tmp/analyze.log || true)
           echo "::notice title=analyze-summary::issues=$total errors=$(grep -cE '^\s+error •' /tmp/analyze.log || true) warnings=$(grep -cE '^\s+warning •' /tmp/analyze.log || true)"
           echo "::notice title=analyze-by-rule::$(grep -oE '• [a-z_]+$' /tmp/analyze.log | sort | uniq -c | sort -rn | head -25 | tr '\n' '|')"
-          echo "::notice title=analyze-fixable::$(grep -E '(unused_import|unnecessary_import|curly_braces_in_flow|use_build_context_synchronously|prefer_null_aware|prefer_conditional|avoid_relative_lib)$' /tmp/analyze.log | sed -E 's/^\s+info • //' | sed -E 's/ • / /g' | head -30 | tr '\n' '|' | cut -c1-3900)"
+          echo "::notice title=analyze-fixable::$(grep -E '(unused_import|unnecessary_import|curly_braces_in_flow_control_structures|use_build_context_synchronously|prefer_null_aware_operators|prefer_conditional_assignment|avoid_relative_lib_imports)$' /tmp/analyze.log | sed -E 's/^\s+info • //' | sed -E 's/ • / /g' | head -30 | tr '\n' '|' | cut -c1-3900)"
           echo "::notice title=analyze-deprecated::$(grep 'deprecated_member_use$' /tmp/analyze.log | sed -E "s/^\s+info • //; s/ • lib\/.*//" | sort | uniq -c | sort -rn | head -12 | tr '\n' '|' | cut -c1-3900)"
           echo "::notice title=analyze-warnings::$(grep -E '^\s+warning •' /tmp/analyze.log | sed -E 's/^\s+warning • //' | head -40 | tr '\n' '|' | cut -c1-3800)"
 

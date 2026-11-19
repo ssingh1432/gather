@@ -43,7 +43,10 @@ import '../features/home/home_feed_screen.dart';
 import '../features/home/post_detail_screen.dart';
 import '../features/home/post_replies_screen.dart';
 import '../features/legal/admin_legal_dashboard_screen.dart';
+import '../features/legal/admin_copyright_screen.dart';
 import '../features/legal/file_complaint_screen.dart';
+import '../features/legal/file_copyright_notice_screen.dart';
+import '../features/legal/my_copyright_screen.dart';
 import '../features/legal/my_legal_screen.dart';
 import '../features/media/media_viewer_screen.dart';
 import '../features/moderation/my_moderation_screen.dart';
@@ -273,6 +276,12 @@ final appRouter = GoRouter(
     ),
     GoRoute(path: '/my-legal', builder: (_, __) => const MyLegalScreen()),
     GoRoute(path: '/admin/legal', builder: (_, __) => const AdminLegalDashboardScreen()),
+    GoRoute(path: '/copyright', builder: (_, __) => const MyCopyrightScreen()),
+    GoRoute(
+      path: '/copyright/new',
+      builder: (_, s) => FileCopyrightNoticeScreen(postId: s.uri.queryParameters['postId']),
+    ),
+    GoRoute(path: '/admin/copyright', builder: (_, __) => const AdminCopyrightScreen()),
   ],
 );
 
@@ -394,6 +403,9 @@ const _protectedRoutes = {
   '/file-complaint',
   '/my-legal',
   '/admin/legal',
+  '/copyright',
+  '/copyright/new',
+  '/admin/copyright',
 };
 
 String _loginLocation({required String redirect}) => '/login?redirect=${Uri.encodeComponent(redirect)}';
