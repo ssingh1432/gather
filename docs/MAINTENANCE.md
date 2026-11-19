@@ -9,7 +9,9 @@
 | On Flutter/Supabase upgrade | Run full tests on all platforms; check deprecated plugin APIs; re-test Web and Android builds |
 
 ## Data retention (to confirm with counsel)
-Account deletion: 14-day grace, then purge. Login attempts: pruned after 1 day. Data exports: link valid 7 days. Moderation evidence and audit logs: keep per legal retention decision (not yet formally set — decide and document).
+Account deletion: 14-day grace, then purge. Login attempts: pruned after 1 day. Data exports: link valid 7 days.
+**Automatic (cron `prune-operational-logs`, daily 03:30 UTC, migration 134):** `beta_error_logs` > 60 days, `analytics_events` > 400 days. Disable with `select cron.unschedule('prune-operational-logs');`; change periods with a new migration.
+**Never pruned automatically (legal decision pending):** `security_events`, `admin_audit_log`, `moderation_actions`, `moderation_evidence`, `legal_*`, `copyright_*`, `media_scan_events`, consent records.
 
 ## Backups
 Supabase managed backups + the backup heartbeat cron (reports status in admin). Confirm PITR/retention on the plan in use. Test restores.

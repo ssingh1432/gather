@@ -24,7 +24,13 @@
 | 130 | copyright notice + counter-notice workflow (COPYRIGHT_WORKFLOW.md) |
 | 131 | media scan quarantine hook (MEDIA_SCANNING.md) |
 | 132 | legal data requests admin-only; `data-exports` MIME allowlist |
+| 133 | performance: 159 policies use `(select auth.uid())`, 137 FK indexes, duplicate constraint dropped |
+| 134 | retention: daily prune of `beta_error_logs` (60 d) and `analytics_events` (400 d) |
 They were applied through the Supabase tool, so `supabase_migrations` has them but `repo_migrations` does not. All are idempotent: when CI runs on merge it re-applies them harmlessly and records them.
 
 ## Client compatibility
 Keep RPC signatures backward compatible (add parameters with defaults) so older app builds keep working; deprecate in a later migration.
+
+## Known risk: the repo cannot rebuild the database
+Migrations start at `002` and assume tables such as `users` already existed (the original baseline was created before migrations were tracked and never committed). Consequences: no fresh staging project, no disaster-recovery rebuild from git, and no CI that applies migrations to a throwaway Postgres.
+**Fix (do once, ~1 hour):** with the Supabase CLI run `supabase db dump --schema public,storage --linked -f database/baseline/000_baseline_schema.sql` (plus `--data-only` for config tables such as `legal_frameworks`, `permissions`, `app_config`), commit it, and make the migration runner and a new CI job apply `000_baseline` followed by `002…` on a local `supabase start`. Then `database/tests/audit_rls_coverage.sql` and the RLS plans can run in CI. Until then use Supabase **branching** or a project restored from a production backup for staging.

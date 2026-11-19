@@ -243,11 +243,9 @@ class _DmChatScreenState extends State<DmChatScreen> {
     }
     setState(() => _sending = true);
     try {
-      if (_key == null) {
-        // Recipient has no key yet (hasn't opened Messages): send unencrypted
-        // — the header shows this state — rather than blocking the chat.
-        _key = await _e2ee.keyFor(userId: _uid ?? '', conversationId: widget.conversationId, otherUserId: widget.otherUserId);
-      }
+      // Recipient has no key yet (hasn't opened Messages): send unencrypted
+      // — the header shows this state — rather than blocking the chat.
+      _key ??= await _e2ee.keyFor(userId: _uid ?? '', conversationId: widget.conversationId, otherUserId: widget.otherUserId);
       final key = _key;
       if (key != null && _keyState == DmKeyState.ready) {
         final c = await _e2ee.encrypt(key: key, conversationId: widget.conversationId, plaintext: text);

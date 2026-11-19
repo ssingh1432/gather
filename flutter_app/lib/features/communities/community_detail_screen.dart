@@ -384,7 +384,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                                         redirectToLogin(context, redirect: '/community?id=${widget.communityId}', message: 'Please log in or create an account to like posts.');
                                         return;
                                       }
-                                      if (liked.contains(p.id) || p.isLiked) await repo.unlikePost(p.id, uid); else await repo.likePost(p.id, uid);
+                                      if (liked.contains(p.id) || p.isLiked) { await repo.unlikePost(p.id, uid); } else { await repo.likePost(p.id, uid); }
                                       await _refreshStates(_posts.map((e) => e.id).toList());
                                       if (mounted) setState(() {});
                                     },
@@ -402,7 +402,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                                         redirectToLogin(context, redirect: '/community?id=${widget.communityId}', message: 'Please log in or create an account to save posts.');
                                         return;
                                       }
-                                      if (bookmarked.contains(p.id) || p.isBookmarked) await repo.unbookmarkPost(p.id, uid); else await repo.bookmarkPost(p.id, uid);
+                                      if (bookmarked.contains(p.id) || p.isBookmarked) { await repo.unbookmarkPost(p.id, uid); } else { await repo.bookmarkPost(p.id, uid); }
                                       await _refreshStates(_posts.map((e) => e.id).toList());
                                       if (mounted) setState(() {});
                                     },

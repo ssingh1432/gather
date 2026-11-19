@@ -25,10 +25,18 @@ What was actually run, against what, and what it found. "Not run" items are list
 - Analyzer: 147 infos → removed 14 unused/unnecessary imports and fixed 1 unsafe `BuildContext` use across an async gap. Remaining ~133 are one deprecation (`flutter/material.dart` → `material_ui`), tracked in MAINTENANCE.md.
 - Build: Android APK was broken on Flutter 3.50 (AGP 9 mismatch) since Phase 14/15; fixed by pinning the APK job to 3.47.x (verified with a version matrix).
 
+## 4b. Follow-up work completed
+- Copyright notice UI built and CI-verified (analyze + 25 new tests) — see COPYRIGHT_WORKFLOW.md.
+- Migration 134: automatic retention for `beta_error_logs` / `analytics_events` (cron, verified scheduled; first run 03:30 UTC).
+- 7 remaining analyzer style infos fixed.
+- k6 load-test scripts (`scripts/loadtest/`) for smoke/baseline/load/stress/spike/soak with the plan's thresholds and a production guard.
+- Found: the repo cannot rebuild the database from scratch (no baseline). This is why automated RLS tests in CI aren't possible yet. Fix documented in MIGRATION_GUIDE.md.
+- Deliberately deferred: `material_ui` migration — it requires Flutter 3.50, which needs the AGP 9 Android migration first; do both together.
+
 ## 5. NOT run (needs staging, devices or people)
 | Item | Why not | Where to continue |
 |---|---|---|
-| Load / stress / soak testing | Must not hit production; no staging project | PERFORMANCE_LOAD_TEST_PLAN.md |
+| Load / stress / soak testing | Scripts written; must not hit production and there is no staging project (and none can be built from the repo, see 4b) | `scripts/loadtest/README.md` |
 | Penetration test (active) | Needs staging + test accounts; only the database layer was probed | SECURITY_AUDIT_AND_PENTEST_CHECKLIST.md |
 | Accessibility testing | Needs TalkBack/VoiceOver/NVDA and a human | ACCESSIBILITY_TEST_CHECKLIST.md |
 | Privacy + legal compliance audit | Needs a Nepali lawyer for the legal part | PRIVACY_AND_LEGAL_AUDIT.md |
