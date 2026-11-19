@@ -10,7 +10,7 @@
 | Live RLS/privilege audit | `database/tests/audit_rls_coverage.sql` | after every migration batch |
 | DB behaviour tests (RLS, RPC authorization) | SQL plans run as test users on **staging** | `database/tests/` | manual per release |
 | End-to-end / integration | `integration_test` (not yet written) | — | planned |
-| Load / stress | k6 or pgbench on staging | PERFORMANCE_LOAD_TEST_PLAN.md | before launch |
+| Load / stress / spike / soak | k6 scripts in `scripts/loadtest/` (staging only) | PERFORMANCE_LOAD_TEST_PLAN.md | before launch (scripts ready, not yet run) |
 
 ## What the new tests protect
 - Password policy, feelings helpers, profile themes, responsive breakpoints.
@@ -23,7 +23,7 @@
 - A new table/RPC gets a `database/tests` plan covering: owner allowed, other user denied, anon denied, admin/moderator path.
 
 ## Known gaps
-- No automated RLS tests in CI (needs a disposable Postgres with Supabase roles; recommended next: `supabase start` + pgTAP in a CI job).
+- No automated RLS tests in CI. **Blocked by the missing baseline schema** (MIGRATION_GUIDE.md → "Known risk"): migrations can't build a fresh database. Commit a baseline dump first, then add a `supabase start` + pgTAP CI job. Until then run `database/tests/audit_rls_coverage.sql` against the live project after each batch.
 - No integration/E2E tests for login, post, report, appeal flows.
 - Edge functions have no tests (Deno test for SSRF guard and webhook signature verification recommended).
 - Coverage is not measured; add `flutter test --coverage` and a floor.

@@ -12,8 +12,14 @@ Lifecycle: `submitted → under_review → content_removed | rejected`; after re
 
 Tables: `copyright_notices`, `copyright_counter_notices` (SELECT only for claimant, accused author, staff; all writes via RPC). Every step is written to `security_events`.
 
+## App screens (built)
+- **File a notice:** `FileCopyrightNoticeScreen` — route `/copyright/new[?postId=…]`. Client-side validation mirrors the DB constraints (`CopyrightFormValidator`).
+- **My notices:** `MyCopyrightScreen` — route `/copyright`, Settings → Copyright notices. Claimant can withdraw; accused author can file a counter-notice after removal.
+- **Staff queue:** `AdminCopyrightScreen` — route `/admin/copyright`, copyright icon in the Legal Dashboard. Start review / remove / reject; restore or keep removed on counter-notice.
+- Tests: `test/features/legal/` (validator, error mapping, form widget).
+- Not wired yet: a "Report copyright" entry in the post overflow menu (open `/copyright/new?postId=<id>`).
+
 ## Not built yet
-- Flutter screens (submit notice, my notices, counter-notice form, staff queue). The RPCs are ready; UI needs a Flutter build environment.
 - Notifications to the author on removal (add to `notification-dispatch`).
 - Time limits (statutory windows) and repeat-infringer policy. Have counsel confirm what applies in Nepal, and publish the policy text.
 - Rights holders without an account must email the designated contact; add the address to the Copyright Policy page.

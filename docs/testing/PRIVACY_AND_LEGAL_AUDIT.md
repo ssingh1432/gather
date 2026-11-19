@@ -11,7 +11,7 @@ Engineering checklist, **not legal advice**. Have a Nepali lawyer confirm the cu
 | Data export (JSON, signed 7-day link) | `data-export` | test |
 | Account deletion, 14-day grace, purge | mig. 015/019 | test purge on staging |
 | Privacy controls: profile visibility, online/last seen, search visibility, block, mute, restrict | mig. 009, 024 | test each |
-| Data retention schedule documented | MAINTENANCE.md (draft) | **needs legal decision** |
+| Data retention schedule documented | MAINTENANCE.md; automatic pruning of debug/analytics logs live (mig. 134) | audit/legal records retention **needs legal decision** |
 | Data minimisation / third-party processors listed (Supabase, Resend, FCM, eSewa, Google, AdMob) | — | **add to policy** |
 | Cross-border transfer disclosure (servers outside Nepal) | — | **needs legal review** |
 | Children / age gate and Child Safety policy | Phase 5/7 | verify wording and age rules |
@@ -24,7 +24,7 @@ Engineering checklist, **not legal advice**. Have a Nepali lawyer confirm the cu
 | Legal / police data requests with audit trail | `legal_data_requests`, admin legal dashboard | test; define who may approve |
 | Grievance officer contact and response SLA published | — | **needs owner + wording** |
 | Local representative / registration with authorities if required for social platforms | — | **needs legal confirmation** |
-| Copyright notice workflow (DMCA-style) | migration 130, COPYRIGHT_WORKFLOW.md | backend done; **Flutter screens and policy text pending** |
+| Copyright notice workflow (DMCA-style) | migration 130, COPYRIGHT_WORKFLOW.md | backend + app screens done; **policy text, designated contact email and statutory time limits pending (counsel)** |
 | Pluggable frameworks | `legal_frameworks` table | ok |
 | Audit logging | `admin_audit_log`, `security_events`, `moderation_actions` | ok |
 ## Findings to action before launch

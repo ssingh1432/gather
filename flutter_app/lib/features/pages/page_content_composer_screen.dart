@@ -116,7 +116,7 @@ class _PageContentComposerScreenState extends State<PageContentComposerScreen> {
   }
 
   String _mimeType(PlatformFile file) {
-    final supplied = file.extension == null ? null : file.extension!.toLowerCase();
+    final supplied = file.extension?.toLowerCase();
     final ext = supplied ?? file.name.split('.').last.toLowerCase();
     const types = <String, String>{
       'jpg': 'image/jpeg',

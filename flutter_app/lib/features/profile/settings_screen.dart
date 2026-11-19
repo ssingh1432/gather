@@ -7,6 +7,7 @@ import '../../core/responsive.dart';
 import '../../shared/utils/external_link.dart';
 import '../data/repositories.dart';
 import '../legal/my_legal_screen.dart';
+import '../legal/my_copyright_screen.dart';
 import '../moderation/my_moderation_screen.dart';
 import '../privacy/data_privacy_screen.dart';
 import '../privacy/mute_list_screen.dart';
@@ -322,6 +323,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: Text(AppL10n.of(context).setGrievancesSub),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyLegalScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.copyright_outlined),
+              title: const Text('Copyright notices'),
+              subtitle: const Text('Report infringement or respond to a takedown'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyCopyrightScreen())),
             ),
             ListTile(
               leading: const Icon(Icons.shield_outlined),
