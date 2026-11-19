@@ -2,7 +2,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/supabase_client.dart';
-import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/reusables.dart' show ProfileAvatar;
 import '../data/repositories.dart';
 import 'page_post_media_repository.dart';

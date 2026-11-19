@@ -23,3 +23,6 @@ Supabase managed backups + the backup heartbeat cron (reports status in admin). 
 | Push not arriving | webhook secret mismatch, FCM service account, device token stale |
 | Blank images in feed | non-image URL given to image widget |
 | Auth emails missing | Send-Email hook secret, Resend domain, `AUTH_EMAIL_FROM` |
+
+## Known issue: `package:flutter/material.dart` deprecation (Flutter 3.47+)
+Analyzer (Flutter 3.50) reports ~133 `deprecated_member_use` infos: Material moved to `package:material_ui`. `flutter/material.dart` still works, nothing breaks today. Plan it as its own migration (mechanical import swap + dependency add), done on a branch with a full `flutter test` and Web/Android smoke run. CI prints the analyzer summary (`analyze-summary`, `analyze-by-rule`) as annotations on every run, so progress is visible.

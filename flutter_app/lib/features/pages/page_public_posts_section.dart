@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../data/repositories.dart';
 import '../../shared/models/models.dart';
-import '../../shared/widgets/reusables.dart';
 import 'page_owner_post_home_card.dart';
 import 'page_visitor_post_card.dart';
 import 'page_visitor_post_repository.dart';
