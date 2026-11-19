@@ -23,3 +23,6 @@ Supabase managed backups + the backup heartbeat cron (reports status in admin). 
 | Push not arriving | webhook secret mismatch, FCM service account, device token stale |
 | Blank images in feed | non-image URL given to image widget |
 | Auth emails missing | Send-Email hook secret, Resend domain, `AUTH_EMAIL_FROM` |
+
+## Known issue: Flutter 3.50 + Android
+CI's APK job is pinned to Flutter 3.47.x. Flutter 3.50 (stable since 2026-11-09) fails the Android build with `NoSuchMethodError ApplicationExtension.getDefaultConfig()` because its Gradle plugin targets AGP 9 while `android/settings.gradle.kts` uses AGP 8.9.1 (Flutter 3.41 also fails differently, so do not pin lower). Web, analyze and tests run on current stable and pass. To unpin: migrate `android/` to AGP 9 + Gradle 9 (built-in Kotlin) on a branch and verify with a manual `workflow_dispatch` run.
