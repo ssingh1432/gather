@@ -26,3 +26,5 @@ Supabase managed backups + the backup heartbeat cron (reports status in admin). 
 
 ## Known issue: `package:flutter/material.dart` deprecation (Flutter 3.47+)
 Analyzer (Flutter 3.50) reports ~133 `deprecated_member_use` infos: Material moved to `package:material_ui`. `flutter/material.dart` still works, nothing breaks today. Plan it as its own migration (mechanical import swap + dependency add), done on a branch with a full `flutter test` and Web/Android smoke run. CI prints the analyzer summary (`analyze-summary`, `analyze-by-rule`) as annotations on every run, so progress is visible.
+## Known issue: Flutter 3.50 + Android
+CI's APK job is pinned to Flutter 3.47.x. Flutter 3.50 (stable since 2026-11-09) fails the Android build with `NoSuchMethodError ApplicationExtension.getDefaultConfig()` because its Gradle plugin targets AGP 9 while `android/settings.gradle.kts` uses AGP 8.9.1 (Flutter 3.41 also fails differently, so do not pin lower). Web, analyze and tests run on current stable and pass. To unpin: migrate `android/` to AGP 9 + Gradle 9 (built-in Kotlin) on a branch and verify with a manual `workflow_dispatch` run.
